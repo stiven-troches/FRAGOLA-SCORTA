@@ -1,0 +1,2 @@
+// Configuración pública del proyecto recibido. Nunca uses service_role ni secret.
+window.__FRAGOLA_CLOUD={url:'https://nnjcbjqoplypmbegmzfl.supabase.co',anonKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uamNianFvcGx5cG1iZWdtemZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NDE0MjMsImV4cCI6MjEwOTAxNzQyM30.TlOkOLjtGzfLaZdSlPf33tOkj3cOKSL_BiEhYok1KFY'};

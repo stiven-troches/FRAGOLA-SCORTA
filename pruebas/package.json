@@ -1,0 +1,13 @@
+{
+  "name": "fragola-prenota-pruebas",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de FRAGOLA PRENOTA: base de datos (PostgreSQL real vía PGlite) y sintaxis de la app",
+  "scripts": {
+    "test": "node check-syntax.mjs && node test-sql.mjs",
+    "servidor": "node server.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.13"
+  }
+}

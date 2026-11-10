@@ -1,0 +1,15 @@
+{
+  "name": "fragola-prenota",
+  "version": "7.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node pruebas/server.mjs",
+    "test": "node pruebas/check-syntax.mjs && node pruebas/test-sync.mjs && node pruebas/test-server.mjs && node pruebas/test-sql.mjs",
+    "test:ui": "node pruebas/test-ui.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": { "@electric-sql/pglite": "0.5.13" },
+  "devDependencies": { "@playwright/test": "1.56.1" }
+}
