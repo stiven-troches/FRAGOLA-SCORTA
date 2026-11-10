@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      SCORTA_ADMIN_PASSWORD: ${SCORTA_ADMIN_PASSWORD:?Define una contraseña de al menos 16 caracteres}
+    volumes:
+      - inventory:/data
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Define el dominio}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+volumes:
+  inventory:
+  certificates:
+
