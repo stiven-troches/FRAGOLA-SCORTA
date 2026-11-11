@@ -3,3 +3,5 @@ dist/
 data/
 .env
 *.sqlite*
+test-results/
+playwright-report/
