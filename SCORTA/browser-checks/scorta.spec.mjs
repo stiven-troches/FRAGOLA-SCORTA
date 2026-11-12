@@ -4,6 +4,9 @@ import {resolve} from 'node:path';
 
 const password='SCORTA-QA-Password-12345';
 const origin='http://127.0.0.1:19420';
+async function ensureMenu(page){const summary=page.locator('.mobile-navigation > summary');if(await summary.isVisible()&&!(await page.locator('.mobile-navigation').getAttribute('open')!==null))await summary.click()}
+async function navigate(page,name){await ensureMenu(page);await page.getByRole('navigation').getByRole('button',{name,exact:false}).click()}
+
 async function login(page,username='admin',secret=password){
  await page.goto('/');
  await page.getByLabel('Usuario',{exact:true}).fill(username);
@@ -14,7 +17,7 @@ async function login(page,username='admin',secret=password){
 }
 async function state(page){const r=await page.request.get('/api/state');expect(r.ok()).toBeTruthy();return r.json()}
 async function change(page,kind,form,extra={}){const before=await state(page);const r=await page.request.post('/api/change',{headers:{Origin:origin},data:{kind,form,revision:before.revision,requestId:crypto.randomUUID(),...extra}});expect(r.ok(),await r.text()).toBeTruthy();return r.json()}
-async function seed(page,name,extra={}){const s=await change(page,'producto',{nombre:name,referencia:name.replaceAll(' ','-'),precio_venta:45000,precio_compra:25000,stock:3,stock_minimo:1,categoria:'Cascos',marca:'QA Moto',...extra});await page.getByRole('button',{name:'Actualizar datos',exact:true}).click();return s.prods.find(p=>p.nombre===name)}
+async function seed(page,name,extra={}){const s=await change(page,'producto',{nombre:name,referencia:name.replaceAll(' ','-'),precio_venta:45000,precio_compra:25000,stock:3,stock_minimo:1,categoria:'Cascos',marca:'QA Moto',...extra});await page.getByText('Opciones',{exact:true}).click();await page.getByRole('button',{name:'Actualizar datos',exact:true}).click();return s.prods.find(p=>p.nombre===name)}
 async function noPageOverflow(page){const size=await page.evaluate(()=>({document:document.documentElement.scrollWidth,viewport:innerWidth}));expect(size.document).toBeLessThanOrEqual(size.viewport+1)}
 async function capture(page,name,info){mkdirSync(resolve('docs/capturas'),{recursive:true});await page.screenshot({path:resolve(`docs/capturas/${name}-${info.project.name}.png`),fullPage:!name.startsWith('venta'),scale:'css'})}
 
@@ -22,7 +25,7 @@ test('acceso, producto nuevo y cierre de sesión',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await page.getByLabel('Usuario',{exact:true}).fill('admin');await page.getByLabel('Contraseña',{exact:true}).fill('incorrecta');await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Usuario o contraseña incorrectos');
  await page.getByLabel('Contraseña',{exact:true}).fill(password);await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.locator('.connection-bar')).toContainText('Datos actualizados');
- await page.getByRole('navigation').getByRole('button',{name:'Inventario'}).click();
+ await navigate(page,'Inventario');
  await page.getByRole('button',{name:/Nuevo producto/i}).click();const dialog=page.getByRole('dialog');
  const name=`Guantes creación ${info.project.name}`;
  await dialog.getByLabel('Nombre *',{exact:true}).fill(name);await dialog.getByLabel(/Precio de venta/).fill('60000');await dialog.getByLabel('Existencias iniciales',{exact:true}).fill('5');
@@ -33,12 +36,12 @@ test('acceso, producto nuevo y cierre de sesión',async({page},info)=>{
 
 test('inventario filtra, explica búsquedas vacías y abre ficha e historial',async({page},info)=>{
  await login(page);const name=`Casco búsqueda ${info.project.name}`;await seed(page,name,{codigo_barras:'770123'+info.project.name,stock:1});await seed(page,`Bombillo ${info.project.name}`,{categoria:'Luces',marca:'Otra marca',stock:0});
- await page.getByRole('navigation').getByRole('button',{name:'Inventario'}).click();
+ await navigate(page,'Inventario');
  const search=page.getByRole('searchbox',{name:'Buscar productos',exact:true});await search.fill('770123'+info.project.name);await expect(page.getByRole('button',{name:`Ver ${name}`,exact:true})).toBeVisible();
  await search.fill('esto-no-existe-qa');await expect(page.getByText('No encontramos coincidencias',{exact:true})).toBeVisible();
- await search.fill('busqueda');await page.getByRole('combobox',{name:'Categoría',exact:true}).selectOption('Cascos');await page.getByRole('combobox',{name:'Disponibilidad',exact:true}).selectOption('bajo');await expect(page.getByRole('button',{name:`Ver ${name}`,exact:true})).toBeVisible();
+ await search.fill('busqueda');await page.locator('.filter-panel > summary').click();await page.getByRole('combobox',{name:'Categoría',exact:true}).selectOption('Cascos');await page.getByRole('combobox',{name:'Existencias',exact:true}).selectOption('bajo');await expect(page.getByRole('button',{name:`Ver ${name}`,exact:true})).toBeVisible();
  await noPageOverflow(page);await capture(page,'inventario',info);
- await page.getByRole('button',{name:`Ver ${name}`,exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog).toContainText(name);await expect(dialog).toContainText(/apertura/i);await noPageOverflow(page);
+ await page.getByRole('button',{name:`Ver ${name}`,exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog).toContainText(name);await dialog.getByText('Historial de movimientos',{exact:true}).click();await expect(dialog).toContainText(/apertura/i);await noPageOverflow(page);
  await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
 });
 
@@ -58,13 +61,13 @@ test('venta conserva datos ante exceso y respuesta perdida; reintento no duplica
 test('operador ve sus acciones permitidas y puede iniciar venta',async({page},info)=>{
  await login(page);const user='operador_'+info.project.name;const response=await page.request.post('/api/users',{headers:{Origin:origin},data:{username:user,password,role:'operador'}});expect(response.ok()).toBeTruthy();
  await page.getByRole('button',{name:'Cerrar sesión',exact:true}).click();await login(page,user);
- await expect(page.getByRole('navigation').getByRole('button',{name:'Compras'})).toHaveCount(0);await expect(page.getByRole('navigation').getByRole('button',{name:'Usuarios'})).toHaveCount(0);
- await page.getByRole('navigation').getByRole('button',{name:'Inventario'}).click();await expect(page.getByRole('button',{name:/Nuevo producto/i})).toHaveCount(0);await expect(page.getByRole('button',{name:/Ajustar existencias de/})).toHaveCount(0);
- await page.getByRole('navigation').getByRole('button',{name:'Ventas',exact:false}).click();await expect(page.getByRole('button',{name:'Anular',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Nueva venta',exact:true}).click();await expect(page.getByRole('searchbox',{name:'Buscar producto',exact:true})).toBeVisible();await noPageOverflow(page);
+ await ensureMenu(page);await expect(page.getByRole('navigation').getByRole('button',{name:'Compras'})).toHaveCount(0);await expect(page.getByRole('navigation').getByRole('button',{name:'Usuarios'})).toHaveCount(0);
+ await navigate(page,'Inventario');await expect(page.getByRole('button',{name:/Nuevo producto/i})).toHaveCount(0);await expect(page.getByRole('button',{name:/Ajustar existencias de/})).toHaveCount(0);
+ await navigate(page,'Ventas');await expect(page.getByRole('button',{name:'Anular',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Nueva venta',exact:true}).click();await expect(page.getByRole('searchbox',{name:'Buscar producto',exact:true})).toBeVisible();await noPageOverflow(page);
 });
 
 test('taller registra repuesto y avanza hasta entrega conservando existencias',async({page},info)=>{
- await login(page);const name=`Repuesto taller ${info.project.name}`;const p=await seed(page,name);await page.getByRole('navigation').getByRole('button',{name:'Servicios'}).click();await page.getByRole('button',{name:'Nuevo servicio',exact:true}).click();const dialog=page.getByRole('dialog');const plate=info.project.name==='movil'?'MOV12A':'ESC12A';
+ await login(page);const name=`Repuesto taller ${info.project.name}`;const p=await seed(page,name);await navigate(page,'Taller');await page.getByRole('button',{name:'Nuevo servicio',exact:true}).click();const dialog=page.getByRole('dialog');const plate=info.project.name==='movil'?'MOV12A':'ESC12A';
  await dialog.getByLabel('Placa *',{exact:true}).fill(plate);await dialog.getByLabel('Descripción del Trabajo *',{exact:true}).fill('Instalación de accesorio de prueba');await dialog.getByLabel('Costo Mano de Obra ($)',{exact:true}).fill('20000');
  await dialog.getByRole('searchbox',{name:'Buscar repuesto',exact:true}).fill(name);await dialog.getByRole('button').filter({has:page.getByText(name,{exact:true})}).click();await dialog.getByRole('button',{name:'Agregar a la lista',exact:true}).click();await dialog.getByRole('button',{name:'Guardar servicio',exact:true}).click();await expect(dialog).not.toBeVisible();
  const card=page.locator('.service-card').filter({hasText:plate});await expect(card).toBeVisible();page.on('dialog',d=>d.accept());

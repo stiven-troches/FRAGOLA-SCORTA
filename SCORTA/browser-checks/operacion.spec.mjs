@@ -13,6 +13,7 @@ async function login(page) {
   await expect(page.locator('.connection-bar')).toContainText('Datos actualizados');
 }
 async function go(page, name) {
+  const menu=page.locator('.mobile-navigation');const summary=menu.locator(':scope > summary');if(await summary.isVisible()&&await menu.getAttribute('open')===null)await summary.click();
   await page.getByRole('navigation').getByRole('button', {name, exact: false}).click();
 }
 async function product(page, name, stock, price, {reference, barcode, emptyOptionals = false} = {}) {
@@ -88,20 +89,21 @@ test('jornada real de almacén: compras, ventas, merma, taller y reversiones', a
   await expect(page.getByRole('dialog').locator('.operation-total')).toContainText(/610[.,]000/);
   await save(page, 'Guardar venta');expected.Casco = 12;expected.Guantes = 18;expected.Aceite = 36;
   let s = await check();expect(s.ventas.find(v => v.cliente === `Cliente jornada ${info.project.name}`).total).toBe(610000);
-  await go(page, 'Servicios');await page.getByRole('button', {name: 'Nuevo servicio', exact: true}).click();
+  await go(page, 'Taller');await page.getByRole('button', {name: 'Nuevo servicio', exact: true}).click();
   const serviceDialog = page.getByRole('dialog');const plate = info.project.name === 'movil' ? 'OPM12A' : 'OPE12A';
   await serviceDialog.getByLabel('Placa *', {exact: true}).fill(plate);
   await serviceDialog.getByLabel('Descripción del Trabajo *', {exact: true}).fill('Cambio de aceite ficticio');
   await serviceDialog.getByLabel('Costo Mano de Obra ($)', {exact: true}).fill('25000');
   await add(page, names.Aceite, 2, 35000, 'repuesto');await save(page, 'Guardar servicio');expected.Aceite = 34;await check();
   await go(page, 'Inventario');
-  await page.getByRole('button', {name: `Ajustar existencias de ${names.Guantes}`, exact: true}).click();
+  await page.getByRole('button', {name: `Ver ${names.Guantes}`, exact: true}).click();
+  await page.getByRole('dialog').getByRole('button', {name: `Ajustar existencias de ${names.Guantes}`, exact: true}).click();
   const adjustment = page.getByRole('dialog');await adjustment.getByLabel('Cantidad contada *', {exact: true}).fill('15');
   await adjustment.getByLabel('Motivo *', {exact: true}).fill('Merma de tres pares confirmada por conteo');await save(page, 'Guardar ajuste');expected.Guantes = 15;await check();
   await go(page, 'Ventas');const saleRow = page.locator('tr').filter({hasText: `Cliente jornada ${info.project.name}`});
   await reverse(page, saleRow, 'Devolución', 'Devolución ficticia de una unidad', `${names.Casco} · disponibles para devolver: 2`);expected.Casco = 13;await check();
   await reverse(page, saleRow, 'Anular', 'Anulación ficticia del resto');expected.Casco = 15;expected.Guantes = 17;expected.Aceite = 36;await check();
-  await go(page, 'Servicios');const serviceCard = page.locator('.service-card').filter({hasText: plate});
+  await go(page, 'Taller');const serviceCard = page.locator('.service-card').filter({hasText: plate});
   await reverse(page, serviceCard, 'Anular', 'Servicio de prueba cancelado');expected.Aceite = 38;await check();
   await go(page, 'Compras');const purchaseRow = page.locator('tr').filter({hasText: `Proveedor jornada ${info.project.name}`});
   await reverse(page, purchaseRow, 'Anular', 'Compra de prueba devuelta');expected.Casco = 10;expected.Aceite = 30;s = await check();
@@ -120,14 +122,15 @@ test('altas ambiguas se rechazan y la merma conserva la ficha histórica', async
   await dialog.getByRole('button', {name: 'Guardar producto', exact: true}).click();await expect(dialog.getByRole('alert')).toContainText(/código de barras/);
   await dialog.getByRole('button', {name: 'Cancelar', exact: true}).click();await expect(dialog).not.toBeVisible();
   expect((await state(page)).prods.filter(p => p.nombre === `Visor duplicado ${info.project.name}`)).toHaveLength(0);
-  await page.getByRole('button', {name: `Ajustar existencias de ${name}`, exact: true}).click();dialog = page.getByRole('dialog');
+  await page.getByRole('button', {name: `Ver ${name}`, exact: true}).click();
+  await page.getByRole('dialog').getByRole('button', {name: `Ajustar existencias de ${name}`, exact: true}).click();dialog = page.getByRole('dialog');
   await dialog.getByLabel('Cantidad contada *', {exact: true}).fill('0');await dialog.getByLabel('Motivo *', {exact: true}).fill('Dos visores dañados: salida por merma');
   await save(page, 'Guardar ajuste');
-  await expect(page.getByRole('button', {name: `Retirar ${name}`, exact: true})).toBeDisabled();
   await page.getByRole('button', {name: `Ver ${name}`, exact: true}).click();dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('Dos visores dañados');
+  await dialog.getByText('Más acciones',{exact:true}).click();await expect(dialog.getByRole('button', {name: `Retirar ${name}`, exact: true})).toBeDisabled();
+  await dialog.getByText('Historial de movimientos',{exact:true}).click();await expect(dialog).toContainText('Dos visores dañados');
   await dialog.getByRole('button', {name: 'Cerrar', exact: true}).click();
-  await go(page, 'Servicios');await page.getByRole('button', {name: 'Nuevo servicio', exact: true}).click();
+  await go(page, 'Taller');await page.getByRole('button', {name: 'Nuevo servicio', exact: true}).click();
   dialog = page.getByRole('dialog');const plate = info.project.name === 'movil' ? 'GRA12M' : 'GRA12E';
   await dialog.getByLabel('Placa *', {exact: true}).fill(plate);
   await dialog.getByLabel('Descripción del Trabajo *', {exact: true}).fill('Inspección gratuita de prueba');

@@ -47,6 +47,8 @@ La relación siguiente describe la implementación verificada en esta entrega. L
 
 ## Evidencia de validación
 
+La [revisión de claridad](REVISION-CLARIDAD.md) simplifica la vista diaria: un buscador, filtros plegables con etiquetas activas y cuatro columnas. Edición, ajustes y retiro quedan en la ficha. La navegación móvil se recoge en Menú y las herramientas ocasionales en Opciones. Se comprobaron **32/32 pruebas de servidor y 30/30 recorridos de interfaz**, más las [capturas de escritorio](capturas/inventario-claro-escritorio.png) y [móvil](capturas/inventario-claro-movil.png).
+
 La [prueba operativa posterior del almacén](PRUEBA-OPERACION.md), realizada el 12 de noviembre de 2026, amplía la validación a **32/32 pruebas de servidor y 24/24 recorridos de interfaz**, con compilación aprobada. Incluye una jornada de compras, ventas, taller, mermas, devoluciones y anulaciones con conteo independiente, además de tres correcciones de inventario documentadas en el informe.
 
 Verificación local realizada el 11 de noviembre de 2026, con Node.js 24 y Chromium 156:
