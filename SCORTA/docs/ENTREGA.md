@@ -47,6 +47,8 @@ La relación siguiente describe la implementación verificada en esta entrega. L
 
 ## Evidencia de validación
 
+La [prueba operativa posterior del almacén](PRUEBA-OPERACION.md), realizada el 12 de noviembre de 2026, amplía la validación a **32/32 pruebas de servidor y 24/24 recorridos de interfaz**, con compilación aprobada. Incluye una jornada de compras, ventas, taller, mermas, devoluciones y anulaciones con conteo independiente, además de tres correcciones de inventario documentadas en el informe.
+
 Verificación local realizada el 11 de noviembre de 2026, con Node.js 24 y Chromium 156:
 
 | Comando | Resultado |

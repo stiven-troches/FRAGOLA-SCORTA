@@ -16,6 +16,8 @@ El acceso utiliza una pantalla de inicio de sesión y una cookie HttpOnly con Sa
 
 ## Inventario y operaciones
 
+Las referencias y los códigos de barras no vacíos deben ser únicos, tanto al crear o editar un producto como al importar CSV. La comprobación ignora mayúsculas y espacios al principio o al final. Esto evita que una búsqueda o un lector seleccione un artículo equivocado. Los identificadores pueden dejarse vacíos si el producto todavía no los tiene.
+
 La importación CSV acepta hasta 1000 filas, con encabezados `nombre,precio_venta,precio_compra,stock,stock_minimo,categoria,referencia,marca,modelo,compatibilidad,codigo_barras`. Nombre y precio de venta son obligatorios. Usa valores numéricos sin separador de miles; las cantidades deben ser enteras. Una referencia o nombre duplicado rechaza toda la importación. El código de barras se puede escribir o introducir mediante un lector que actúe como teclado; no hay cámara integrada.
 
 Las compras aumentan existencias. Ventas y servicios las descuentan al guardar. Una devolución parcial de venta devuelve las cantidades seleccionadas; la anulación revierte las cantidades que todavía no se hayan devuelto. Una compra no puede anularse si faltan existencias para revertirla. Los productos con historial no se pueden retirar. Las anulaciones y devoluciones registran motivo y usuario. No se registran movimientos de dinero ni se emiten notas crédito electrónicas.
