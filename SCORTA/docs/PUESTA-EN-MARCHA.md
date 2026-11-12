@@ -4,9 +4,17 @@ Actualizado: 12 de noviembre de 2026 (America/Bogota).
 
 La aplicación tiene una versión probada localmente. Para comenzar con datos del almacén todavía hay que cerrar las condiciones siguientes; la existencia de código, guiones o documentación no equivale a ejecutarlas en la instalación real.
 
+## Modalidad confirmada
+
+El usuario confirmó acceso desde **varios equipos y también desde fuera del almacén**. Se prepara una instalación central por internet: los equipos consultan la misma aplicación y el mismo inventario mediante una dirección HTTPS, cada persona con su cuenta. La instancia del servidor debe conservar su almacenamiento y tener respaldo fuera de ese servidor.
+
+Esta modalidad requiere conexión a internet para consultar y registrar operaciones; no añade trabajo sin conexión ni bases independientes por computador. La prueba de dos operadores y el acceso desde la red del almacén y desde una red externa forman parte de la aceptación definitiva.
+
+**Falta confirmar:** proveedor o servidor de alojamiento, dominio o dirección definitiva y destino externo de los respaldos. No se ha contratado ni desplegado infraestructura.
+
 | Condición | Qué falta | Responsable | Evidencia esperada |
 | --- | --- | --- | --- |
-| Forma de acceso | Elegir dónde y desde qué equipos se utilizará; confirmar recursos de alojamiento y dirección. | Usuario e infraestructura | Modalidad y recursos definidos; sin valores de ejemplo utilizados como configuración definitiva. |
+| Forma de acceso | Modalidad elegida: varios equipos y acceso externo. Falta confirmar alojamiento y dirección HTTPS definitiva. | Usuario e infraestructura | Modalidad y recursos definidos; sin valores de ejemplo utilizados como configuración definitiva. |
 | Instalación operativa | Preparar la infraestructura elegida, HTTPS y persistencia; probar un reinicio. | Infraestructura | Dirección definitiva accesible y datos conservados tras reinicio. HTTPS también corresponde a un equipo único o a una red local. |
 | Personas y permisos | Definir quién administra y quién registra operaciones; crear y comprobar cuentas. | Responsable del almacén y seguridad | Personas designadas pueden trabajar con sus permisos; salida y cambio de contraseña verificados. |
 | Uso claro y equipos válidos | Completar venta, recepción y devolución con el usuario, celular y lector que realmente se usarán. | Diseño, QA y personal del almacén | Recorridos comprensibles y sin incidencias que impidan operar; los cambios necesarios quedan corregidos. |

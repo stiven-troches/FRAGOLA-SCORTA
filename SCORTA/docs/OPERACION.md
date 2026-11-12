@@ -2,6 +2,10 @@
 
 Estos procedimientos están preparados para revisión; no se ha configurado ni desplegado un servidor externo.
 
+## Modalidad de esta instalación
+
+El usuario eligió varios equipos y acceso desde fuera del almacén. La preparación debe seguir la opción de **servidor central por internet**, con una aplicación y base persistente compartidas, dirección HTTPS y cuentas individuales. Se deben probar conexiones desde la red del almacén y desde una red externa y el acceso simultáneo de dos operadores. Siguen pendientes el proveedor/servidor, el dominio y el destino de respaldo externo; no se ha realizado un despliegue.
+
 ## Elegir la instalación antes de usar datos reales
 
 | Acceso necesario | Preparación de infraestructura pendiente |
