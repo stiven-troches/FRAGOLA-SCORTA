@@ -1,46 +1,32 @@
-# FRAGOLA PRENOTA · 7.1
+# FRAGOLA SCORTA
 
-Aplicación de reservas para barberías, spas y salones. Incluye demostración local y conexión a Supabase para uso compartido.
+Aplicación de inventario, compras, ventas y taller para almacenes de accesorios y repuestos de moto.
 
-## Iniciar
+El proyecto de SCORTA está en **[`SCORTA/`](SCORTA/)**. Ejecuta los comandos desde esa carpeta; los archivos de PRENOTA que permanecen en la raíz pertenecen a otro proyecto.
 
-Instala Node.js 22 o superior. En esta carpeta ejecuta:
+## Iniciar una copia local
 
-```powershell
+Con Node.js 24:
+
+```sh
+cd SCORTA
 npm ci
+npm run build
 npm start
 ```
 
-Abre http://127.0.0.1:8765. El servidor es de desarrollo y escucha solo en tu equipo.
+Abre `http://localhost:3000`. La copia local sin cuentas permite probar como administrador únicamente desde el propio equipo. Para uso compartido configura usuarios y HTTPS como explica [la guía de SCORTA](SCORTA/LEEME.md).
 
-## Configuración
+## Desarrollo y validación
 
-`config.js` conserva la URL y la clave pública de Supabase que estaban en el archivo recibido. No se ha verificado la titularidad ni el estado de ese proyecto. Confirma que es tuyo antes de introducir datos reales. La configuración ya no está mezclada con el código de la app.
-
-Para probar sin servidor, copia `config.example.js` como `config.js`: sus campos vacíos activan la demostración local. Los datos locales solo existen en ese navegador; no sirven para recibir reservas desde otros dispositivos.
-
-Para producción, escribe en `config.js` la URL y la clave pública de tu proyecto. Nunca uses claves `service_role` o `secret`.
-
-## Verificar y publicar
-
-```powershell
+```sh
+cd SCORTA
 npm test
+npm run build
 npx playwright install chromium
 npm run test:ui
-npm run build
 ```
 
-Publica **solo el contenido de `dist/`**. Incluye `index.html` y `config.js`; no necesita un servidor Node en producción. En GitHub Pages, selecciona **GitHub Actions** como origen: `.github/workflows/pages.yml` verifica y publica los cambios de `main`.
+Los datos locales se guardan en `SCORTA/data/`; no deben añadirse al repositorio.
 
-Consulta [GUIA-INSTALACION.md](GUIA-INSTALACION.md) para configurar Supabase y [docs/REVISION.md](docs/REVISION.md) para los cambios y pendientes.
-
-## Estructura
-
-- `index.html`: interfaz y lógica de la aplicación.
-- `config.js` y `config.example.js`: configuración pública y ejemplo local.
-- `supabase/`: esquema inicial y parche de permisos para instalaciones anteriores.
-- `pruebas/`: pruebas de SQL, sincronización, HTTP e interfaz.
-- `scripts/build.mjs`: prepara los archivos publicables.
-- `docs/`: revisión actual, capturas e informes históricos.
-
-Los informes v6.4 y v7 son antecedentes entregados con el proyecto; sus resultados no sustituyen las verificaciones de esta revisión.
+Consulta la [entrega y sus capturas](SCORTA/docs/ENTREGA.md), el [plan de experiencia de uso](SCORTA/docs/PLAN-PRODUCTO.md) y la [guía de instalación y respaldo](SCORTA/LEEME.md). SCORTA no incluye caja, contabilidad ni facturación electrónica.
