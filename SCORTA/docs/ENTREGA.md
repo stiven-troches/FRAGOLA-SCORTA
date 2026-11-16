@@ -4,6 +4,12 @@ Esta iteración modifica la aplicación de inventario de `SCORTA/`, basada en la
 
 La relación siguiente describe la implementación verificada en esta entrega. Las pruebas se ejecutaron con datos temporales, sin modificar una instalación del almacén.
 
+## Actualización: demo ficticia preparada
+
+El 16 de noviembre de 2026 (UTC) se verificaron **44/44 pruebas de Node**, la compilación de producción y `npm run build:demo`. La demo reutiliza la interfaz y el motor de SCORTA con 24 productos ficticios; IndexedDB conserva las operaciones en el navegador actual y permite reiniciar la semilla. Las cuentas y el respaldo SQLite siguen perteneciendo a la aplicación de producción. Guía en [DEMO.md](DEMO.md).
+
+Los recorridos de navegador de la demo están escritos pero no se ejecutaron en esta revisión. La publicación de un enlace navegable, la aceptación con el cliente y la instalación real siguen pendientes; compilar la demo no implica que esté alojada.
+
 ## Cambios implementados
 
 | Área | Comportamiento incorporado |

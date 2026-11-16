@@ -1,6 +1,8 @@
 # Pendientes asignados de SCORTA
 
-Actualizado: 12 de noviembre de 2026 (America/Bogota).
+Actualizado: 16 de noviembre de 2026 (UTC).
+
+La demo con 24 productos ficticios está implementada y compilada; su publicación como enlace navegable sigue pendiente. La guía está en [DEMO.md](DEMO.md). Esta actualización guarda la fuente en GitHub y no implica un despliegue.
 
 Cada pendiente tiene un responsable principal, una condición para empezar y una evidencia de cierre. «Preparación» significa que puede avanzarse con la información disponible; las pruebas con el usuario, sus equipos o la instalación definitiva siguen abiertas hasta ejecutarse allí. La tabla no implica que todos los agentes estén trabajando simultáneamente.
 
@@ -55,7 +57,7 @@ Estas propuestas no forman parte de las condiciones ya acordadas para iniciar el
 
 ## Trabajo terminado y evidencia
 
-La aplicación incluye compras, ventas, inventario, ajustes, devoluciones, taller, historial, sesiones, permisos y respaldo completo. El diseño simplificó filtros, listado y navegación móvil. La última comprobación registrada aprobó **32 pruebas de servidor y 30 recorridos de interfaz**, además de la compilación. No se repiten esas comprobaciones sin cambios, fallos o dudas nuevas.
+La aplicación incluye compras, ventas, inventario, ajustes, devoluciones, taller, historial, sesiones, permisos y respaldo completo. El diseño simplificó filtros, listado y navegación móvil. La comprobación actual aprobó **44 pruebas de Node y ambas compilaciones**. Los 30 recorridos de interfaz aprobados corresponden a la revisión anterior; los recorridos de navegador de la nueva demo todavía no se ejecutaron. Detalle en [QA.md](QA.md).
 
 La simulación operativa concilió entradas, salidas, devoluciones y anulaciones; corrigió tres fallos. El despliegue externo, las cuentas definitivas, el inventario real y la aceptación conjunta siguen sin completarse.
 

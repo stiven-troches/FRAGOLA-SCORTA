@@ -170,8 +170,9 @@ export default function App(){
   return <SessionGate>{props=><InventoryApp {...props}/>}</SessionGate>;
 }
 
-function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessionActive=true}) {
+export function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessionActive=true,onDemoExport}) {
   const isAdmin=session?.role==='admin';
+  const isDemo=session?.mode==='demo';
   const [navOpen,setNavOpen]=useState(()=>window.matchMedia('(min-width:761px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:761px)');const update=()=>setNavOpen(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update)},[]);
   const [view,setView]=useState('dashboard');
@@ -197,7 +198,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
   const resetModal=()=>{openedRevision.current=null;setModal(null);setItems([]);setTempItem({});setDetail(null);setDirty(false);setPending(null);setToast(null)};
   const closeModal=()=>{if(busyRef.current)return;if(pending){notify('Hay una operación sin confirmar. Reintenta para comprobar su resultado antes de cerrar.','error');return;}if(dirty&&!window.confirm('Tienes cambios sin guardar. ¿Quieres descartarlos?'))return;resetModal()};
   const hydrate=s=>{setLastSync(new Date());setLoadError('');setProds(s.prods);setCompras(s.compras);setVentas(s.ventas);setServs(s.servs);setMovimientos(s.movimientos);setAudit(s.auditoria||[]);setRevision(s.revision);setReady(true)};
-  const reload=async()=>{if(!sessionActiveRef.current)return null;const generation=++reloadGeneration.current;try{const r=await fetch('/api/state');if(r.status===401)window.dispatchEvent(new Event('scorta:unauthorized'));if(!r.ok)throw Error(r.status===401?'La sesión ha terminado. Vuelve a entrar.':'No se pudo actualizar la información');const data=await r.json();if(generation===reloadGeneration.current&&sessionActiveRef.current)hydrate(data);return data}catch(e){if(generation===reloadGeneration.current)setLoadError(e.message);return null}};
+  const reload=async()=>{if(!sessionActiveRef.current)return null;const generation=++reloadGeneration.current;try{const r=await fetch('/api/state');if(r.status===401)window.dispatchEvent(new Event('scorta:unauthorized'));if(!r.ok){const failure=isDemo?await r.json():null;throw Error(failure?.error||(r.status===401?'La sesión ha terminado. Vuelve a entrar.':'No se pudo actualizar la información'))}const data=await r.json();if(generation===reloadGeneration.current&&sessionActiveRef.current)hydrate(data);return data}catch(e){if(generation===reloadGeneration.current)setLoadError(e.message);return null}};
   useEffect(()=>{if(!sessionActive)return;reload();const t=setInterval(()=>{if(!busyRef.current&&sessionActiveRef.current)reload()},15000);return()=>clearInterval(t)},[sessionActive]);
   useEffect(()=>{if(modal){openedRevision.current=revision;setDirty(false);setToast(null)}},[modal]);
   useEffect(()=>{const warn=e=>{if(dirty||pending){e.preventDefault();e.returnValue=''}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty,pending]);
@@ -213,7 +214,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
       const r=await fetch('/api/change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const data=await r.json();definitive=true;
       if(r.status===401){setPending(payload);notify('Tu sesión terminó. Vuelve a entrar con tu cuenta para confirmar la operación pendiente.','error');window.dispatchEvent(new Event('scorta:unauthorized'));return}
-      if(r.status>=500){setPending(payload);notify('El servidor no pudo confirmar el resultado. Reintenta la operación sin cambiar los datos.','error');return}
+      if(r.status>=500){setPending(payload);notify(isDemo?(data.error||'No se pudo guardar en este navegador. Reintenta la operación sin cambiar los datos.'):'El servidor no pudo confirmar el resultado. Reintenta la operación sin cambiar los datos.','error');return}
       if(!r.ok){setPending(null);const fresh=await reload();if(fresh)openedRevision.current=fresh.revision;throw Error(data.error||'No se pudo guardar')}
       hydrate(data);resetModal();notify('Guardado correctamente');
     }catch(e){if(!definitive){setPending(payload);notify('No pudimos confirmar si se guardó. Tus datos están conservados. Usa «Reintentar operación» para comprobar el resultado sin duplicarla.','error')}else notify(e.message,'error')}
@@ -286,7 +287,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
     movementFilters.type&&{key:'type',label:`Tipo: ${movementFilters.type}`,remove:()=>setMovementFilters(f=>({...f,type:''}))},
     movementFilters.user&&{key:'user',label:`Usuario: ${movementFilters.user}`,remove:()=>setMovementFilters(f=>({...f,user:''}))}
   ].filter(Boolean);
-  const pageOptions=<SecondaryOptions>{view==='inventario'&&isAdmin&&<button type="button" onClick={()=>{setImportRows([]);setModal('importar')}}>Importar productos CSV</button>}<button type="button" disabled={busy} onClick={reload}>Actualizar datos</button>{isAdmin&&<a href="/api/backup/full">Descargar respaldo completo</a>}</SecondaryOptions>;
+  const pageOptions=<SecondaryOptions>{view==='inventario'&&isAdmin&&<button type="button" onClick={()=>{setImportRows([]);setModal('importar')}}>Importar productos CSV</button>}<button type="button" disabled={busy} onClick={reload}>Actualizar datos</button>{isAdmin&&(isDemo?<button type="button" onClick={onDemoExport}>Exportar datos de prueba</button>:<a href="/api/backup/full">Descargar respaldo completo</a>)}</SecondaryOptions>;
   const documentFilterBar=<><div className="catalog-tools"><label className="search-field">Buscar<input type="search" aria-label="Buscar documento" placeholder="Nombre o número de documento" value={documentFilters.query} onChange={e=>setDocumentFilters(f=>({...f,query:e.target.value}))}/></label><FilterPanel count={documentCriteria.length}><label>Desde<input type="date" value={documentFilters.from} onChange={e=>setDocumentFilters(f=>({...f,from:e.target.value}))}/></label><label>Hasta<input type="date" value={documentFilters.to} onChange={e=>setDocumentFilters(f=>({...f,to:e.target.value}))}/></label></FilterPanel></div><ActiveFilters items={documentCriteria} onReset={()=>setDocumentFilters(f=>({...f,from:'',to:''}))}/></>;
 
 
@@ -317,7 +318,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
         <details className="mobile-navigation" open={navOpen} onToggle={e=>setNavOpen(e.currentTarget.open)}><summary>Menú · {({dashboard:'Inicio',inventario:'Inventario',compras:'Compras',ventas:'Ventas',servicios:'Taller',movimientos:'Movimientos',usuarios:'Usuarios'})[view]}</summary>
         <nav aria-label="Secciones" style={{padding:"12px 0",flex:1}}>
           {[{id:"dashboard",i:"📊",l:"Inicio"},{id:"inventario",i:"📦",l:"Inventario"},
-            ...(isAdmin?[{id:"compras",i:"🛒",l:"Compras"}]:[]),{id:"ventas",i:"💰",l:"Ventas"},{id:"servicios",i:"🔧",l:"Taller"},{id:"movimientos",i:"↔",l:"Movimientos"},...(session?.role==='admin'?[{id:"usuarios",i:"👥",l:"Usuarios"}]:[])]
+            ...(isAdmin?[{id:"compras",i:"🛒",l:"Compras"}]:[]),{id:"ventas",i:"💰",l:"Ventas"},{id:"servicios",i:"🔧",l:"Taller"},{id:"movimientos",i:"↔",l:"Movimientos"},...(isAdmin&&!isDemo?[{id:"usuarios",i:"👥",l:"Usuarios"}]:[])]
             .map(n=>(
               <button type="button" key={n.id} aria-current={view===n.id?'page':undefined} onClick={()=>{setView(n.id);if(window.matchMedia('(max-width:760px)').matches)setNavOpen(false);setDocumentFilters({query:'',from:'',to:''});setToast(null)}} style={{...navSt(n.id),width:'100%',borderTop:0,borderBottom:0,borderRight:0,textAlign:'left'}}>
                 <span style={{fontSize:18}}>{n.i}</span><span>{n.l}</span>
@@ -326,7 +327,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
         </nav></details>
         <div style={{padding:16,color:"rgba(255,255,255,0.3)",fontSize:11,borderTop:"1px solid rgba(255,255,255,0.08)"}}>
           <strong>{session?.username}</strong><p>{isAdmin?'Administrador':'Operador'} · COP</p>
-          {session?.mode==='local'?<small>Modo de prueba local</small>:<div className="session-actions"><button type="button" onClick={()=>{if(pending){notify('Confirma la operación pendiente antes de cambiar la contraseña.','error');return}if(busy){notify('Espera a que termine el guardado antes de cambiar la contraseña.','error');return}if(modal||dirty){notify('Guarda los cambios o cierra el formulario antes de cambiar la contraseña.','error');return}onPasswordChange()}}>Cambiar contraseña</button><button type="button" onClick={()=>{if(busyRef.current){notify('Espera a que termine el guardado antes de salir.','error');return}if(pending){notify('Confirma la operación pendiente antes de salir.','error');return}if(dirty&&!confirm('¿Descartar los cambios y cerrar sesión?'))return;onLogout()}}>Cerrar sesión</button></div>}
+          {session?.mode==='local'||isDemo?<small>{isDemo?'Inventario ficticio · COP':'Modo de prueba local'}</small>:<div className="session-actions"><button type="button" onClick={()=>{if(pending){notify('Confirma la operación pendiente antes de cambiar la contraseña.','error');return}if(busy){notify('Espera a que termine el guardado antes de cambiar la contraseña.','error');return}if(modal||dirty){notify('Guarda los cambios o cierra el formulario antes de cambiar la contraseña.','error');return}onPasswordChange()}}>Cambiar contraseña</button><button type="button" onClick={()=>{if(busyRef.current){notify('Espera a que termine el guardado antes de salir.','error');return}if(pending){notify('Confirma la operación pendiente antes de salir.','error');return}if(dirty&&!confirm('¿Descartar los cambios y cerrar sesión?'))return;onLogout()}}>Cerrar sesión</button></div>}
         </div>
       </aside>
 
@@ -334,7 +335,7 @@ function InventoryApp({session,onLogout,onPasswordChange,onWorkStateChange,sessi
       <main className="app-main" aria-busy={busy} style={{flex:1,padding:28,overflowY:"auto",minWidth:0}}>
 
         <div className={`connection-bar ${loadError?'is-offline':''} ${pending?'is-pending':''}`} role="status">
-          <span>{busy?'Guardando operación…':pending?'Operación pendiente de confirmación':loadError?'Sin conexión · mostrando la última copia disponible':lastSync?'Datos actualizados a las '+lastSync.toLocaleTimeString('es-CO'):'Conectando…'}</span>
+          <span>{busy?'Guardando operación…':pending?'Operación pendiente de confirmación':loadError?(isDemo?'No se pudieron leer los cambios de este navegador':'Sin conexión · mostrando la última copia disponible'):lastSync?'Datos actualizados a las '+lastSync.toLocaleTimeString('es-CO'):(isDemo?'Abriendo inventario de prueba…':'Conectando…')}</span>
 
         </div>
         {!ready&&<p role="alert">{loadError||'Cargando tu almacén…'}</p>}

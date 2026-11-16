@@ -17,6 +17,19 @@ npm start
 
 Abre `http://localhost:3000`. La copia local sin cuentas permite probar como administrador únicamente desde el propio equipo. Para uso compartido configura usuarios y HTTPS como explica [la guía de SCORTA](SCORTA/LEEME.md).
 
+## Demo con inventario ficticio
+
+La demo incluye 24 productos y operaciones de ejemplo para vender, recibir mercancía, agregar productos y registrar ajustes. Sus datos se guardan en el navegador actual y se pueden reiniciar; no son compartidos entre equipos.
+
+```sh
+cd SCORTA
+npm ci
+npm run build:demo
+npm run preview:demo
+```
+
+Abre `http://127.0.0.1:4173`. La compilación estática queda en `SCORTA/dist-demo/`. Véase [la guía de la demo](SCORTA/docs/DEMO.md). El enlace alojado todavía está pendiente de publicación.
+
 ## Desarrollo y validación
 
 ```sh

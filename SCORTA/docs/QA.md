@@ -2,6 +2,14 @@
 
 La batería utiliza bases de datos temporales y cuentas de prueba; no consulta ni modifica una instalación real del almacén.
 
+## Motor compartido y demo: 16 de noviembre de 2026 (UTC)
+
+`npm test`: **44/44 pruebas aprobadas**, sin fallos ni omisiones, con Node.js 24.22.1. `npm run build` y `npm run build:demo`: compilación correcta.
+
+Las 12 pruebas nuevas cubren independencia del motor y sus entradas, rollback, paridad entre SQLite y el motor de la demo durante una jornada, consultas sin Buffer de Node, semilla con 24 productos y saldos conciliados, altas/compras/ventas/ajustes, idempotencia, competencia por la última unidad, persistencia y reinicio, y API local sin solicitudes a un backend. IndexedDB se verifica con `fake-indexeddb` en Node; no equivale a una ejecución en un navegador real.
+
+Se incluyen cinco escenarios de navegador en escritorio y móvil en `browser-demo-checks/`, reproducibles con `npm run test:demo:ui`. **No se ejecutaron en esta revisión**: la infraestructura de navegador requerida para la demo alojada no estaba disponible. Los resultados de Chromium de las secciones anteriores corresponden a la versión anterior de la interfaz. La publicación de la demo y su aceptación con el usuario siguen pendientes.
+
 ## Revisión de claridad del 12 de noviembre de 2026
 
 `npm test`: **32/32 pruebas aprobadas**. `CHROMIUM_PATH=/usr/bin/chromium npm run test:ui`: **compilación correcta y 30/30 recorridos aprobados**, 15 escenarios por tamaño (1440 × 1000 y 390 × 844).

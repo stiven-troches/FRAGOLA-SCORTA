@@ -9,14 +9,14 @@ function page(rows, state, query) {
   let offset = 0;
   if (query.get('cursor')) {
     let cursor;
-    try { cursor = JSON.parse(Buffer.from(query.get('cursor'), 'base64url').toString()); }
+    try { cursor = JSON.parse(atob(query.get('cursor').replaceAll('-', '+').replaceAll('_', '/'))); }
     catch { fail('Página inválida; vuelve al inicio del listado'); }
     if (!cursor || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0 || !Number.isSafeInteger(cursor.revision)) fail('Página inválida');
     if (cursor.revision !== state.revision) fail('El listado cambió. Actualiza para consultar las existencias vigentes.', 409);
     offset = cursor.offset;
   }
   return {items: rows.slice(offset, offset + limit), total: rows.length, revision: state.revision,
-    next_cursor: offset + limit < rows.length ? Buffer.from(JSON.stringify({offset: offset + limit, revision: state.revision})).toString('base64url') : null};
+    next_cursor: offset + limit < rows.length ? btoa(JSON.stringify({offset: offset + limit, revision: state.revision})).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '') : null};
 }
 
 export function consultarProductos(state, input = {}) {
