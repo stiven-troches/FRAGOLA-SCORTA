@@ -8,7 +8,7 @@ La relación siguiente describe la implementación verificada en esta entrega. L
 
 El 16 de noviembre de 2026 (UTC) se verificaron **44/44 pruebas de Node**, la compilación de producción y `npm run build:demo`. La demo reutiliza la interfaz y el motor de SCORTA con 24 productos ficticios; IndexedDB conserva las operaciones en el navegador actual y permite reiniciar la semilla. Las cuentas y el respaldo SQLite siguen perteneciendo a la aplicación de producción. Guía en [DEMO.md](DEMO.md).
 
-Los recorridos de navegador de la demo están escritos pero no se ejecutaron en esta revisión. La publicación de un enlace navegable, la aceptación con el cliente y la instalación real siguen pendientes; compilar la demo no implica que esté alojada.
+Los recorridos de navegador de la demo están escritos pero no se ejecutaron en esta revisión. La demo se publicó el 17 de noviembre de 2026 (UTC) en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado y despliegue confirmado. La revisión visual de la demo alojada, la aceptación con el cliente y la instalación real siguen pendientes.
 
 ## Cambios implementados
 

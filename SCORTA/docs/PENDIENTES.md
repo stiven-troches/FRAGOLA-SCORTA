@@ -1,8 +1,8 @@
 # Pendientes asignados de SCORTA
 
-Actualizado: 16 de noviembre de 2026 (UTC).
+Actualizado: 17 de noviembre de 2026 (UTC).
 
-La demo con 24 productos ficticios está implementada y compilada; su publicación como enlace navegable sigue pendiente. La guía está en [DEMO.md](DEMO.md). Esta actualización guarda la fuente en GitHub y no implica un despliegue.
+La demo con 24 productos ficticios está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado y despliegue confirmado. La guía está en [DEMO.md](DEMO.md). La revisión visual de la demo alojada y la prueba conjunta con el usuario siguen pendientes. Esta demostración no es la instalación de producción del almacén.
 
 Cada pendiente tiene un responsable principal, una condición para empezar y una evidencia de cierre. «Preparación» significa que puede avanzarse con la información disponible; las pruebas con el usuario, sus equipos o la instalación definitiva siguen abiertas hasta ejecutarse allí. La tabla no implica que todos los agentes estén trabajando simultáneamente.
 

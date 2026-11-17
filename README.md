@@ -28,7 +28,7 @@ npm run build:demo
 npm run preview:demo
 ```
 
-Abre `http://127.0.0.1:4173`. La compilación estática queda en `SCORTA/dist-demo/`. Véase [la guía de la demo](SCORTA/docs/DEMO.md). El enlace alojado todavía está pendiente de publicación.
+Abre `http://127.0.0.1:4173`. La compilación estática queda en `SCORTA/dist-demo/`. Véase [la guía de la demo](SCORTA/docs/DEMO.md). La demo está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site) con acceso privado desde la cuenta propietaria.
 
 ## Desarrollo y validación
 
