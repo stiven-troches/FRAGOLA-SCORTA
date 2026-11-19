@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "start": "node server.mjs",
+    "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test",
     "test:ui": "npm run build && playwright test",
     "build:demo": "vite build --mode demo && node scripts/finalize-demo.mjs",

@@ -1,64 +1,85 @@
-# SCORTA — inventario, ventas y taller
+# SCORTA — empresas, inventario, ventas y taller
 
-## Probar en este computador
+La aplicación está en esta carpeta. Requiere Node.js 24. La interfaz nueva utiliza `/api/v2/` y separa propietario, administradores y vendedores de cada empresa.
 
-Instala Node.js 24. Ejecuta `npm ci`, `npm run build` y `npm start`, o abre `INICIAR.cmd`. Entra a http://localhost:3000. La copia local sin usuarios permite acceso de administrador en el propio equipo: úsala solo para pruebas. Los datos están en `data/motoshop.sqlite`.
+## Demostración
 
-## Preparar acceso por internet
+La demo publicada utiliza datos ficticios guardados en el navegador. Sus botones permiten probar los tres perfiles. Las contraseñas visibles en «Datos de prueba» pertenecen exclusivamente a esa demostración. No son credenciales de una instalación real.
 
-Se requiere un servidor Linux con Docker Compose y un dominio apuntando a su IP. Esta versión aún no está desplegada ni se ha validado en una instalación real.
-
-1. Copia `.env.example` a `.env`; define `DOMAIN` y `SCORTA_ADMIN_PASSWORD`, con al menos 16 caracteres. Conserva esta contraseña de forma segura; el usuario inicial es `admin`.
-2. Ejecuta `docker compose up -d --build` y abre el dominio con HTTPS. Caddy necesita acceso a los puertos 80 y 443 para emitir el certificado. Mantén el volumen `inventory`; no ejecutes `docker compose down -v` porque elimina los datos.
-3. En Usuarios, crea cuentas de administrador u operador. El operador puede registrar ventas y servicios y avanzar estados; el administrador gestiona el resto. Se registra el usuario de operaciones nuevas. Usa «Cerrar sesión» para cambiar de usuario.
-
-El acceso utiliza una pantalla de inicio de sesión y una cookie HttpOnly con SameSite Strict; en producción la cookie exige HTTPS. La sesión dura hasta ocho horas y se cierra al reiniciar el servidor. Puedes cambiar tu contraseña indicando la actual; el cambio cierra todas tus sesiones y exige volver a entrar. La contraseña inicial solo crea la primera cuenta: cambiar la variable después no modifica esa cuenta. Todavía no hay recuperación de contraseña ni desactivación de usuarios. No publiques el archivo `.env`. El acceso local sin cuentas solo se permite en desarrollo y desde el propio equipo.
-
-## Inventario y operaciones
-
-Las referencias y los códigos de barras no vacíos deben ser únicos, tanto al crear o editar un producto como al importar CSV. La comprobación ignora mayúsculas y espacios al principio o al final. Esto evita que una búsqueda o un lector seleccione un artículo equivocado. Los identificadores pueden dejarse vacíos si el producto todavía no los tiene.
-
-La importación CSV acepta hasta 1000 filas, con encabezados `nombre,precio_venta,precio_compra,stock,stock_minimo,categoria,referencia,marca,modelo,compatibilidad,codigo_barras`. Nombre y precio de venta son obligatorios. Usa valores numéricos sin separador de miles; las cantidades deben ser enteras. Una referencia o nombre duplicado rechaza toda la importación. El código de barras se puede escribir o introducir mediante un lector que actúe como teclado; no hay cámara integrada.
-
-Las compras aumentan existencias. Ventas y servicios las descuentan al guardar. Una devolución parcial de venta devuelve las cantidades seleccionadas; la anulación revierte las cantidades que todavía no se hayan devuelto. Una compra no puede anularse si faltan existencias para revertirla. Los productos con historial no se pueden retirar. Las anulaciones y devoluciones registran motivo y usuario. No se registran movimientos de dinero ni se emiten notas crédito electrónicas.
-
-La fecha de entrega se registra al pasar un servicio a entregado. Los servicios entregados antes de esta actualización no tienen esa fecha y no se contabilizan en el indicador mensual. Los importes de ventas descuentan devoluciones del documento original dentro del mes original, no representan recaudo de caja ni contabilidad.
-
-## Respaldo
-
-El administrador puede **descargar el respaldo completo SQLite**. Incluye inventario, compras, ventas, servicios, auditoría, cuentas de usuario y claves de reintento. Se obtiene una copia consistente mediante la API de respaldo de SQLite, incluso con la aplicación abierta. Los archivos contienen datos privados y hashes de contraseñas: guárdalos con acceso restringido y una copia fuera del servidor.
-
-Para automatizarlo en una instalación Node:
+Para compilar y abrir una copia de la demo:
 
 ```sh
-DATA_DIR=/srv/scorta/data node /srv/scorta/backup.mjs /srv/scorta/backups --keep 30
+npm ci
+npm run build:demo
+npm run preview:demo
 ```
 
-El comando conserva las últimas 30 copias generadas por él; no elimina archivos manuales y no aplica retención si falla el nuevo respaldo. Con una ejecución diaria, esto equivale aproximadamente a 30 días. Consulta [operación y recuperación](docs/OPERACION.md) para cron, Docker y el ensayo de restauración.
+Abrir `http://127.0.0.1:4173`. El enlace al comprobante de la demo solo funciona en el navegador donde existen sus datos; una instalación real sirve sus comprobantes desde el servidor.
 
-Para recuperar, **detén SCORTA** y ejecuta:
+## Instalación Node
+
+Instalar dependencias y compilar:
 
 ```sh
-DATA_DIR=/srv/scorta/data node /srv/scorta/restore.mjs /ruta/respaldo.sqlite --offline
+npm ci
+npm run build
 ```
 
-La recuperación valida integridad y estructura antes de reemplazar la base, conserva una copia anterior `.bak` y rechaza la presencia de WAL/SHM. `--offline` confirma que has detenido el servicio; no detiene procesos por ti. Nunca borres un WAL para forzar la recuperación. Después inicia SCORTA y verifica acceso, existencias e historial.
+Copiar `.env.example` a `.env` y completar `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER`, `SCORTA_OWNER_NAME`, `SCORTA_OWNER_PASSWORD` y opcionalmente `SCORTA_OWNER_CONTACT`. `npm start` carga ese archivo privado; también se pueden configurar las variables en el entorno del proceso. La contraseña debe tener entre 16 y 200 caracteres. No escribirla en comandos compartidos, código ni GitHub. `SCORTA_PUBLIC_URL` debe contener el origen HTTPS definitivo en producción. `DATA_DIR` indica el directorio persistente.
 
-Los respaldos antiguos JSON siguen admitidos con el mismo comando y son **parciales**: recuperan datos del negocio, no cuentas ni identificadores de reintento. Si ya existen usuarios, se conservan; las claves de reintento antiguas se eliminan para no confundir operaciones previas con la información recuperada. En una base nueva se deberán configurar las cuentas otra vez. Para recuperación completa utiliza SQLite.
+Después ejecutar `npm start`. Desde el ingreso, utilizar la empresa y usuario configurados. La credencial inicial solo crea al propietario en una base nueva: cambiar la variable no reemplaza su contraseña existente. «Mi perfil» permite cambiarla indicando la actual.
 
-## Validación y límites
+## Instalación con Docker y HTTPS
 
-Desde la carpeta `SCORTA`, ejecuta:
+1. Copiar `.env.example` a `.env`, completar `DOMAIN` y la contraseña privada del propietario; agregar un contacto real de soporte. No publicar `.env`.
+2. Apuntar el dominio al servidor y permitir los puertos 80 y 443.
+3. Ejecutar `docker compose up -d --build`. Caddy emite el certificado HTTPS.
+4. Comprobar persistencia, cuentas y recuperación antes de usar datos reales. Conservar el volumen `inventory`; `docker compose down -v` borraría la información.
+
+## Propietario y empresas
+
+El propietario crea empresas, define contacto/correo/WhatsApp/logo, vigencia y mensualidad, y crea las cuentas de sus administradores y vendedores. Las URLs `/c/codigo-de-empresa` preseleccionan la empresa en el ingreso y no conceden acceso por sí mismas. Solo el propietario administra cuentas y roles.
+
+La vigencia incluye todo el día final en Colombia. El servidor impide operar antes del inicio, después del vencimiento y durante una suspensión manual. Registrar un pago permite confirmar la nueva fecha: una renovación anticipada conserva los días pagados y una vencida propone comenzar hoy. La suspensión manual se mantiene hasta retirarla expresamente.
+
+El propietario puede acceder como soporte dejando motivo; los cambios se identifican con su identidad y «Soporte» en el historial del cliente. No se revelan contraseñas. Restablecer o cambiar una contraseña revoca las sesiones anteriores.
+
+## Vendedor y administrador de empresa
+
+El vendedor abre Nueva venta y puede consultar Inventario, agregar productos al carrito y consultar sus propias ventas. No accede a costos, compras ni ventas ajenas. El administrador gestiona todos los módulos de su empresa, sin crear usuarios o cambiar roles.
+
+Nueva venta admite productos, solo mano de obra o ambos. La mano de obra registra placa, trabajo, mecánico e importe editable. Cliente y teléfono son campos distintos; de la moto solo se registra la placa. El carrito conserva los datos al navegar y las existencias se descuentan únicamente al guardar. La venta y el trabajo de taller se vinculan para evitar un cobro duplicado. Los historiales por cliente y placa descuentan devoluciones y excluyen anulaciones.
+
+Los medios de pago son efectivo, transferencia y tarjeta; se registra el método, sin procesar pagos bancarios. El comprobante se puede imprimir o guardar en PDF. El envío opcional abre WhatsApp con el número y el enlace; el vendedor confirma el envío. Omitirlo o cancelarlo no revierte la venta. Los enlaces reales del comprobante son opacos y vencen. No es facturación electrónica DIAN.
+
+Las fotos de producto y logos permiten archivos PNG/JPEG/WebP/GIF hasta 500 KB. Los vendedores solo consultan las fotos. Los filtros permanecen plegados para mantener la pantalla simple.
+
+## Datos existentes y respaldo
+
+La base de plataforma se almacena en `DATA_DIR`, separada de la base anterior `motoshop.sqlite`. La preparación de la plataforma conserva la base anterior y copia sus datos comerciales a «Almacén principal». Las cuentas anteriores deben recrearse o restablecerse desde el propietario; no se convierte su contraseña a texto ni se mezclan algoritmos de contraseñas.
+
+Para respaldar la base de plataforma completa:
+
+```sh
+node platform-backup.mjs save /ruta/data/platform.sqlite /ruta/respaldos
+```
+
+Para restaurar, detener primero el servidor y ejecutar:
+
+```sh
+node platform-backup.mjs restore /ruta/respaldo.sqlite /ruta/data/platform.sqlite --offline
+```
+
+La restauración conserva una copia anterior y elimina las sesiones del respaldo. El comando se niega a restaurar mientras la instancia esté abierta. Consultar [la guía de plataforma](docs/PLATFORM-API.md). Los comandos antiguos `backup.mjs` y `restore.mjs` siguen correspondiendo a la base anterior: no deben usarse para afirmar un respaldo de todas las nuevas empresas. Programar una copia externa y ensayar la restauración en una instalación aislada antes del uso real.
+
+## Validación
 
 ```sh
 npm test
 npm run build
-npx playwright install chromium
-npm run test:ui
+npm run build:demo
 ```
 
-Si tienes Chromium instalado en el sistema, puedes utilizar `CHROMIUM_PATH=/usr/bin/chromium npm run test:ui` en lugar de descargar otro navegador. Las pruebas de interfaz arrancan un servidor y una base temporales; no utilizan el inventario del almacén.
+Las pruebas usan datos temporales. La revisión visual y en dispositivos físicos se documenta por separado; una compilación correcta no la sustituye. Los antiguos recorridos de interfaz bajo `browser-checks/` corresponden a la interfaz anterior y no acreditan la nueva plataforma. Ver [QA-PLATAFORMA.md](docs/QA-PLATAFORMA.md).
 
-`npm test` comprueba inventario, importación atómica, reintentos, devoluciones, sesiones, permisos, consultas y primera cuenta administradora. Las pruebas de respaldo verifican copia con WAL abierto, restauración aislada, preservación de cuentas y claves de reintento, rechazo de recuperación con base abierta y retención. Las pruebas de interfaz recorren ventas, inventario, taller y acceso en escritorio y en una pantalla de 390 px. Consulta los resultados y capturas en [la entrega](docs/ENTREGA.md).
-
-Falta validar el proceso completo con el equipo del almacén, celulares físicos, lectores de pantalla y la infraestructura definitiva. Los borradores y reintentos no sobreviven a una recarga o cierre de la página. El flujo actual no incluye facturación electrónica, caja ni integración DIAN.
+El despliegue definitivo, dominio, HTTPS, copia externa, inventario inicial conciliado y piloto con el personal continúan en [PENDIENTES.md](docs/PENDIENTES.md). Los borradores no se recuperan automáticamente después de cerrar o recargar la página.

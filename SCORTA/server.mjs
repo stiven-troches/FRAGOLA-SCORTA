@@ -8,6 +8,7 @@ import {timingSafeEqual,createHash,scryptSync,randomBytes} from 'node:crypto';
 import {createAuth} from './auth.mjs';
 import {createFullBackup} from './backup.mjs';
 import {consultarProductos, consultarMovimientos} from './consultas.mjs';
+import {openPlatformStore,createPlatformHandler} from './platform-server.mjs';
 const root=dirname(fileURLToPath(import.meta.url));
 export function openStore(file){
  mkdirSync(dirname(file),{recursive:true});const db=new DatabaseSync(file);db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS app (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, role TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)');
@@ -41,9 +42,13 @@ export function openStore(file){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const store=openStore(resolve(process.env.DATA_DIR||resolve(root,'data'),'motoshop.sqlite'));
+ const platformFile=resolve(process.env.DATA_DIR||resolve(root,'data'),'platform.sqlite');
+ const platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||existsSync(platformFile);
+ const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:store.read()}):null;
+ const handlePlatform=createPlatformHandler({store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL});
  const bootstrap=process.env.SCORTA_ADMIN_PASSWORD;
  if(!store.listUsers().length&&bootstrap){store.addUser(process.env.SCORTA_ADMIN_USER||'admin',bootstrap,'admin')}
- if(process.env.NODE_ENV==='production'&&!store.listUsers().length)throw Error('Configura SCORTA_ADMIN_PASSWORD con al menos 16 caracteres para crear el primer administrador');
+ if(process.env.NODE_ENV==='production'&&!platformStore&&!store.listUsers().length)throw Error('Configura SCORTA_ADMIN_PASSWORD con al menos 16 caracteres para crear el primer administrador');
  const production=process.env.NODE_ENV==='production';
  const auth=createAuth({store,production,allowLocal:!production});
  const server=createServer(async(req,res)=>{
@@ -51,6 +56,8 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'");
  try{
  const url=new URL(req.url,'http://localhost'),path=url.pathname;
+ if(await handlePlatform(req,res))return;
+ if(platformStore&&path.startsWith('/api/')){res.writeHead(403,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({error:'Usa el acceso de empresa de SCORTA',code:'PLATFORM_REQUIRED'}));}
  if(path.startsWith('/api/')){
  const actor=await auth.handle(req,res);if(!actor)return;
  res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -67,12 +74,13 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1000000)throw Error('Solicitud demasiado grande')};let payload;try{payload=JSON.parse(body)}catch{throw Error('Datos inválidos: envía un objeto JSON')}if(!payload||Array.isArray(payload)||typeof payload!=='object')throw Error('Datos inválidos: envía un objeto JSON');if(path==='/api/users'){if(actor.role!=='admin')throw Object.assign(Error('Acceso restringido'),{status:403});store.addUser(payload.username,payload.password,payload.role);return res.end(JSON.stringify(store.listUsers()))}if(actor.role!=='admin'&&!['venta','servicio','estado'].includes(payload.kind))throw Object.assign(Error('No tienes permiso para esta operación'),{status:403});return res.end(JSON.stringify(store.change(payload,actor.username)));
  }res.statusCode=404;return res.end('{}');}
  if(req.method!=='GET'){res.statusCode=405;return res.end()}
- const file=resolve(root,'dist','.'+(path==='/'?'/index.html':decodeURIComponent(path)));
+ const spa=path==='/'||/^\/c\/[^/]+\/?$/.test(path)||/^\/receipt\/[A-Za-z0-9_-]{43}$/.test(path);
+ const file=resolve(root,'dist','.'+(spa?'/index.html':decodeURIComponent(path)));
  if(!file.startsWith(resolve(root,'dist')+'/')&&!file.startsWith(resolve(root,'dist')+'\\'))throw Error('Ruta inválida');
  if(!existsSync(file)){res.statusCode=404;return res.end('No encontrado')}
  res.setHeader('Content-Type',({'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css'}[extname(file)]||'application/octet-stream'));res.end(readFileSync(file));
  }catch(e){res.statusCode=e.status||400;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({error:e.message}))}
- });server.on('close',()=>{auth.close();store.close()});server.listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>console.log('SCORTA listo en http://localhost:'+(process.env.PORT||3000)));
+ });server.on('close',()=>{auth.close();store.close();platformStore?.close()});for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>server.close(()=>process.exit(0)));server.listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>console.log('SCORTA listo en http://localhost:'+(process.env.PORT||3000)));
 }
 
 
