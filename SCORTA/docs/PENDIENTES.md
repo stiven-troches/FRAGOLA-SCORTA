@@ -154,3 +154,5 @@ Ejecución autorizada por el propietario. Responsable de implementación e integ
 | Inventario: mínimo en amarillo y agotados en rojo | Implementado. Cero tiene prioridad sobre el mínimo. Se conservan cantidades y «Agotado» para identificar el estado sin depender del color. |
 
 Validación: 87/87 pruebas aprobadas, incluidas las SSR de existencias cero, iguales al mínimo, por debajo y por encima del mínimo. Compilaciones de aplicación y demo aprobadas; git diff --check sin errores. No se declara QA visual: el entorno no dispone del control de navegador requerido por Sites.
+
+Demo actualizada y publicación confirmada el 19 de noviembre de 2026, 12:42 (Colombia): https://fragola-scorta-demo.safeturnip2.chatgpt.site. Fuente de aplicación: `ca386cb52214fdc683f9dc3a579ce243dcd6e7e5`. Fuente de Site: `87453a3921298fe0b7b218ef4ca9170ec05c024a`. Despliegue: `appgdep_6aff34ea8a8081919f1e6cb5389996cc`, resultado `succeeded`. Se conserva acceso privado del propietario.
