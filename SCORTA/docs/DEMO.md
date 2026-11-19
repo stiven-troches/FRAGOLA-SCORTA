@@ -60,3 +60,7 @@ npm run build:demo
 La demo tiene pruebas Node con el motor compartido, IndexedDB simulado, persistencia, concurrencia, aislamiento, sesiones, reinicio y exportación sin secretos. La ejecución final aprobó **86/86 pruebas** y ambas compilaciones. Los comandos y límites se registran en [QA-REVISION2.md](QA-REVISION2.md). La entrega previa está documentada en [QA-PLATAFORMA.md](QA-PLATAFORMA.md).
 
 No se ha ejecutado una revisión visual de esta interfaz en la sesión actual: el entorno administrado de Sites no dispone de la herramienta de navegador requerida. Los antiguos comandos y escenarios en `browser-demo-checks/` corresponden a la demo anterior. Quedan pendientes la revisión conjunta de la nueva demo, los recorridos de navegador y la comprobación con celulares y equipos físicos.
+
+## Revisión 4
+
+Logo oficial original con transparencia. El carrito comparte cantidades e importe entre Inventario, Taller y Nueva venta y recupera su copia ficticia al reabrir el demo. Espera «Venta pendiente guardada» antes de cerrar. Guion y límites: [REVISION4-CARRITO.md](REVISION4-CARRITO.md).

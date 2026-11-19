@@ -125,7 +125,7 @@ La coordinación integra resultados, conserva el estado de esta lista y publica 
 | ID | Propuesta | Responsable de evaluación | Estado |
 | --- | --- | --- | --- |
 | F01 | Conexión de recuperación automática por correo | Coordinación y seguridad/backend | Flujo de interfaz aprobado en R07. Verificación y envío real aplazados. El restablecimiento por propietario ya existe en A13. |
-| F02 | Conservar borradores al recargar o cerrar | Frontend y backend | Por priorizar; definir recuperación y reintentos antes de implementarlo. |
+| F02 | Conservar borradores al recargar o cerrar | Frontend y backend | Implementado en revisión 4: copia privada por usuario y empresa, autosave, control de conflictos y cobro idempotente. |
 | F04 | Consultas paginadas en el listado general | Backend y frontend | Por priorizar según el volumen real. |
 | F05 | Lectura de códigos por cámara | Frontend y QA; seguridad para permisos | Por priorizar si el lector físico no cubre la necesidad. |
 
@@ -160,3 +160,19 @@ Demo actualizada y publicación confirmada el 19 de noviembre de 2026, 12:42 (Co
 ### Incorporación del logo original
 
 Archivo recibido y extraído correctamente de `SCORTA.7z`. Incorporado en las cuatro ubicaciones compartidas por Brand: login, propietario, administrador y vendedor. Se verifica integridad del PNG original y su inclusión en las compilaciones de aplicación y demo. La recepción del archivo resuelve el bloqueo de marca descrito históricamente en la revisión 2. Revisión visual de la interfaz pendiente.
+
+## Revisión 4 · carrito persistente y logo transparente
+
+Aprobada por el propietario. Implementación e integración: Coordinación (frontend/backend). No se activan conexiones externas.
+
+| Ajuste | Estado |
+| --- | --- |
+| Recuperar la venta al recargar o volver a entrar | Implementado. Productos, servicios, servicio sin agregar y datos del cliente guardados por usuario/empresa. En uso real se almacenan en SQLite del servidor; en el demo ficticio en IndexedDB. El navegador real solo conserva la sesión. |
+| Cantidad y total visibles al navegar | Implementado: resumen sticky con productos, servicios, total y acceso a Nueva venta. |
+| Confirmaciones | Implementado: vaciar venta y retirar productos/servicios; se conservan las confirmaciones existentes de eliminación y anulación. |
+| Errores corregibles | Implementado: errores de cantidad/existencias/precio junto al producto y errores de teléfono, placa y campos del servicio. El carrito se conserva tras un rechazo. |
+| Adaptación móvil | CSS ajustado: resumen compacto, formularios legibles, botones de al menos 44 px y logo proporcional sin fondo. Revisión visual/dispositivos pendiente. |
+| Prueba completa juntos | Guion listo en REVISION4-CARRITO.md. Pendiente de realizar con el propietario; las pruebas automáticas no la sustituyen. |
+| Logo transparente original | PNG RGBA 1122×1402 recibido en ZIP; sustituido íntegro sin redibujar, cambiar colores ni tipografía. Es raster con transparencia, no SVG. |
+
+Las últimas ediciones se guardan tras 400 ms de pausa. «Venta pendiente guardada» confirma la persistencia. Al ocultar/cerrar la página se intenta completar el guardado; sin conexión se avisa y se debe reintentar antes de cerrar. Los borradores no reservan existencias. Dos pestañas no se sobrescriben: ante un conflicto hay que cargar expresamente la versión guardada. El cobro guarda primero su identificador de reintento; venta y limpieza de borrador se confirman juntas.

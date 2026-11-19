@@ -70,7 +70,7 @@ El ingreso incluye **¿Olvidaste tu contraseña?**. Es una vista previa del fluj
 
 **Términos y privacidad** muestra borradores y una simulación de aceptación para persona autorizada. No es una firma, no guarda aceptación contractual y no fuerza un bloqueo legal real del primer login. El contenido final, su revisión jurídica y la aceptación central con versión/fecha/persona quedan pendientes de la fase interna posterior.
 
-La paleta de interfaz es blanca, negra y amarilla. El logo oficial original, extraído de SCORTA.7z, está incorporado sin alterar sus bytes como `src/assets/fragola-scorta-logo.png`. Brand.jsx solo ajusta tamaño proporcional mediante CSS en login y paneles. Procedencia y huella del archivo: [LEEME-LOGO.md](src/assets/LEEME-LOGO.md).
+La paleta de interfaz es blanca, negra y amarilla. El logo oficial original con transparencia, recibido en el último ZIP, está incorporado sin alterar sus bytes como `src/assets/fragola-scorta-logo.png`. Brand.jsx solo ajusta tamaño proporcional mediante CSS en login y paneles. Procedencia y huella del archivo: [LEEME-LOGO.md](src/assets/LEEME-LOGO.md).
 
 ## Datos existentes y respaldo
 
@@ -101,3 +101,5 @@ npm run build:demo
 La comprobación final de revisión 2 aprobó **86/86 pruebas** y las compilaciones de aplicación y demo. Las pruebas usan datos temporales. La revisión visual y en dispositivos físicos se documenta por separado; una compilación correcta no la sustituye. Los antiguos recorridos de interfaz bajo `browser-checks/` corresponden a la interfaz anterior y no acreditan la nueva plataforma. Ver [QA-REVISION2.md](docs/QA-REVISION2.md) para esta revisión y [QA-PLATAFORMA.md](docs/QA-PLATAFORMA.md) para la entrega anterior.
 
 El despliegue definitivo, dominio, HTTPS, copia externa, inventario inicial conciliado y piloto con el personal continúan en [PENDIENTES.md](docs/PENDIENTES.md). Los borradores no se recuperan automáticamente después de cerrar o recargar la página.
+
+La venta pendiente se guarda automáticamente por usuario y empresa en el servidor; el demo usa su base ficticia local. Espera «Venta pendiente guardada» antes de cerrar. Si se informa un error o conflicto, reintenta o carga expresamente la versión guardada. El carrito no reserva existencias. Guion de recuperación, cobro y revisión móvil: [REVISION4-CARRITO.md](docs/REVISION4-CARRITO.md).

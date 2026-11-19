@@ -1,8 +1,7 @@
 # Logo oficial FRAGOLA SCORTA
 
-Archivo original `SCORTA.png`, extraído de `SCORTA.7z` recibido del propietario el 19 de noviembre de 2026. Se incorpora con el nombre `fragola-scorta-logo.png`, sin modificar sus bytes, diseño, tipografía, colores ni fondo.
+PNG RGBA original de 1122 × 1402 píxeles recibido en el ZIP `a3a590aa-c570-4080-ad97-6f8de90e4959.zip` el 19 de noviembre de 2026. Sustituye el archivo anterior con fondo. Incluye transparencia; es un PNG, no un archivo vectorial SVG.
 
-- Dimensiones originales: 298 × 273 píxeles (PNG RGBA).
-- SHA-256: `b0e45037ee11636b691f833efd6806fd236a1e58e7079b2b4b7e12b8a8e5a029`.
-- El componente Brand muestra el mismo original en login, cabecera del propietario y barras laterales de administrador y vendedor.
-- CSS solo ajusta tamaño proporcional y ubicación. No se usa una imagen generada como sustituto.
+Se conserva íntegro: mismo diseño, tipografía, colores y canal alfa. CSS ajusta únicamente tamaño proporcional y ubicación en login, propietario, administrador y vendedor. No se elimina fondo ni se redibuja la imagen.
+
+SHA-256: `92ae7c9e238bc03528506dd2225c8af75b66ae10022afe0c4790d5d60bb46c2d`.

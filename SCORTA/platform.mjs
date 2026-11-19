@@ -1,3 +1,4 @@
+import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 
 const encoder = new TextEncoder();
@@ -114,9 +115,9 @@ function envelope(state, actor, now, baseUrl) {
     const own=new Set(business.ventas.map(s=>s.id));
     business.servs=business.servs.filter(s=>s.userId===actor.id||own.has(s.venta_id)||!s.userId&&s.usuario===actor.username);
     business.movimientos=[];business.auditoria=(business.auditoria||[]).filter(a=>a.userId===actor.id);
-    return {session,revision:business.revision,state:removeCosts(business)};
+    return {session,revision:business.revision,draftVersion:readDraft(state,actor).version,state:removeCosts(business)};
   }
-  return {session,revision:business.revision,state:business};
+  return {session,revision:business.revision,draftVersion:readDraft(state,actor).version,state:business};
 }
 function uniqueUser(state,companyId,username,exceptId) {if(state.users.some(u=>u.companyId===companyId&&norm(u.username)===norm(username)&&u.id!==exceptId))fail('Ese usuario ya existe en esta empresa');}
 function companyForm(state,form,old,now) {
@@ -154,7 +155,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='company.delete'){
     if(form.confirmation!==company.name)fail('Escribe el nombre exacto de la empresa para confirmar la eliminación');
     const ids=new Set(state.users.filter(u=>u.companyId===company.id).map(u=>u.id));
-    state.companies=state.companies.filter(c=>c.id!==company.id);state.users=state.users.filter(u=>!ids.has(u.id));delete state.businesses[company.id];state.payments=state.payments.filter(p=>p.companyId!==company.id);
+    state.companies=state.companies.filter(c=>c.id!==company.id);state.users=state.users.filter(u=>!ids.has(u.id));delete state.businesses[company.id];for(const key of Object.keys(state.saleDrafts||{}))if(JSON.parse(key)[0]===company.id)delete state.saleDrafts[key];state.payments=state.payments.filter(p=>p.companyId!==company.id);
     for(const [key,s]of Object.entries(state.sessions))if(ids.has(s.userId)||s.support?.companyId===company.id)delete state.sessions[key];
     for(const [key,r]of Object.entries(state.receipts))if(r.companyId===company.id)delete state.receipts[key];
   }else if(a.type==='company.renew'){
@@ -196,6 +197,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
     const oldMovements=new Set(original.movimientos.map(m=>m.id));for(const m of next.movimientos)if(!oldMovements.has(m.id)){m.userId=actor.id;m.motivo=m.motivo||actor.support?.reason||'';m.supportReason=actor.support?.reason||'';}
     state.businesses[actor.companyId]=next;
   }else if(a.type==='sale.create'){
+    assertDraftSale(state,actor,a);
     if(!Array.isArray(a.items||[])||!Array.isArray(a.labor||[])||(a.items||[]).length>1000||(a.labor||[]).length>100)fail('Lista de artículos o servicios inválida');
     const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>({descripcion:text(line?.descripcion,'Trabajo realizado',3000),mecanico:text(line?.mecanico,'Mecánico'),importe:number(line?.importe,'Mano de obra')}));
     if(!items.length&&!labor.length)fail('Agrega productos o mano de obra');
@@ -210,6 +212,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
     if(labor.length)next.servs.unshift({id:id(),venta_id:sale.id,fecha,usuario:actor.label,userId:actor.id,...customer,placa,labor:structuredClone(labor),descripcion_trabajo:labor.map(l=>l.descripcion).join('; '),mecanico:labor.map(l=>l.mecanico).join(', '),costo_mano_obra:subtotal_mano_obra,subtotal_productos,subtotal_mano_obra,total:sale.total,detalles:structuredClone(sale.detalles),estado:'completado',paymentMethod:sale.paymentMethod});
     const log=next.auditoria?.[0];if(log){log.userId=actor.id;log.motivo=actor.support?.reason||'';log.despues={total:sale.total,placa,cliente:sale.cliente};}
     state.receipts[await hash(receiptToken)]={companyId:actor.companyId,saleId:sale.id,expires:stamp(now).getTime()+RECEIPT_MS};state.businesses[actor.companyId]=next;
+    finishDraftSale(state,actor,a,sale.id,stamp(now).getTime());
   }else if(a.type==='sale.receipt'){
     const b=businessContext(state,actor),sale=b.ventas.find(s=>s.id===a.id);if(!sale)fail('Venta inexistente',404);
     if(actor.role==='vendedor'&&sale.userId!==actor.id)fail('Solo puedes consultar tus propias ventas',403,'FORBIDDEN');
@@ -261,6 +264,8 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     const actor=resolveActor(state,session,now);
+    if(path==='/api/v2/draft'&&method==='GET')return response(200,readDraft(state,actor));
+    if(path==='/api/v2/draft'&&method==='POST')return response(200,writeDraft(state,actor,body,stamp(now).getTime()));
     if(method==='GET'&&(path==='/api/v2/session'||path==='/api/v2/data'))return response(200,envelope(state,actor,now,baseUrl));
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     if(method==='POST'&&path==='/api/v2/password'){
