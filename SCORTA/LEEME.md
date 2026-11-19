@@ -70,7 +70,7 @@ El ingreso incluye **¿Olvidaste tu contraseña?**. Es una vista previa del fluj
 
 **Términos y privacidad** muestra borradores y una simulación de aceptación para persona autorizada. No es una firma, no guarda aceptación contractual y no fuerza un bloqueo legal real del primer login. El contenido final, su revisión jurídica y la aceptación central con versión/fecha/persona quedan pendientes de la fase interna posterior.
 
-La paleta de interfaz es blanca, negra y amarilla. El logo oficial no se reproduce desde una imitación: falta su archivo original utilizable. Colocarlo sin alteraciones como `src/assets/fragola-scorta-logo.png` o uno de los formatos originales admitidos en [LEEME-LOGO.md](src/assets/LEEME-LOGO.md); Brand.jsx solo ajusta tamaño proporcional mediante CSS. Hasta entonces se muestra la identificación neutra SCORTA.
+La paleta de interfaz es blanca, negra y amarilla. El logo oficial original, extraído de SCORTA.7z, está incorporado sin alterar sus bytes como `src/assets/fragola-scorta-logo.png`. Brand.jsx solo ajusta tamaño proporcional mediante CSS en login y paneles. Procedencia y huella del archivo: [LEEME-LOGO.md](src/assets/LEEME-LOGO.md).
 
 ## Datos existentes y respaldo
 

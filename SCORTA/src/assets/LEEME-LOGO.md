@@ -1,7 +1,8 @@
 # Logo oficial FRAGOLA SCORTA
 
-La imagen oficial aprobada en el chat es un símbolo amarillo/dorado con las palabras FRAGOLA SCORTA y su texto original. No debe redibujarse, cambiarse la tipografía ni alterarse sus colores.
+Archivo original `SCORTA.png`, extraído de `SCORTA.7z` recibido del propietario el 19 de noviembre de 2026. Se incorpora con el nombre `fragola-scorta-logo.png`, sin modificar sus bytes, diseño, tipografía, colores ni fondo.
 
-El archivo original de ese logo no está disponible en el entorno. La única imagen recibida como archivo local es la referencia anterior del login, que no contiene el nuevo logo oficial. No se usa una recreación como sustituto.
-
-Para incorporarlo sin transformar sus bytes, colocar el original en esta carpeta con nombre `fragola-scorta-logo.png` (o .jpg/.jpeg/.webp/.svg). Brand.jsx lo carga automáticamente en la siguiente compilación. El componente solo ajusta tamaño proporcional y ubicación mediante CSS. Mientras falte el archivo, el texto neutro SCORTA identifica la aplicación y no se presenta como el logo oficial.
+- Dimensiones originales: 298 × 273 píxeles (PNG RGBA).
+- SHA-256: `b0e45037ee11636b691f833efd6806fd236a1e58e7079b2b4b7e12b8a8e5a029`.
+- El componente Brand muestra el mismo original en login, cabecera del propietario y barras laterales de administrador y vendedor.
+- CSS solo ajusta tamaño proporcional y ubicación. No se usa una imagen generada como sustituto.

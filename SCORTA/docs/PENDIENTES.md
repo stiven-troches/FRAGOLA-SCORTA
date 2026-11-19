@@ -8,7 +8,7 @@ Cada pendiente tiene un responsable principal, una condición para empezar y una
 
 ## Revisión 2: lista nueva y responsables
 
-Ejecución autorizada después de la revisión de la demo. El foco es interfaz y experiencia; las conexiones externas y la formalización legal real continúan aplazadas. Los agentes asignados ejecutaron las partes indicadas; los estados siguientes no afirman envíos, firmas ni incorporación del logo que todavía no existen.
+Ejecución autorizada después de la revisión de la demo. El foco es interfaz y experiencia; las conexiones externas y la formalización legal real continúan aplazadas. Los agentes asignados ejecutaron las partes indicadas; los estados siguientes no afirman envíos ni firmas reales. El logo original se recibió e incorporó posteriormente, como indica R10.
 
 | ID | Ajuste | Responsable | Estado y límite |
 | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Ejecución autorizada después de la revisión de la demo. El foco es interfaz y
 | R07 | Recuperar contraseña por correo, enlace de 30 minutos y un solo uso. | Coordinación y `review2_sessions` | Pantallas del flujo y campos de correo por cuenta implementados. Correo guardado queda sin verificar. Envío, verificación, token de recuperación real e invalidación por ese flujo siguen pendientes; la vista previa no cambia contraseñas. El restablecimiento administrativo existente se conserva. |
 | R08 | Vendedor con Nueva venta, Inventario y Taller. | `review2_seller` | Implementado: Inventario organiza productos por categorías/búsqueda y los agrega; Taller carga placa/trabajo/mecánico/valor; Nueva venta solo resume y cobra. Administradores conservan sus seis módulos. |
 | R09 | Carrito compartido de productos y servicios. | `review2_seller` | Implementado entre pestañas, sin descontar existencias antes de registrar. No se amplía a recuperación automática de borradores tras cerrar/recargar (F02). |
-| R10 | Incorporar logo oficial sin alterar diseño, tipografía o colores. | Coordinación | Pendiente del archivo original utilizable PNG/SVG u otro formato original admitido. Brand.jsx lo cargará desde src/assets/fragola-scorta-logo. No se ha redibujado ni simulado; actualmente solo se muestra SCORTA como identificación neutra. |
+| R10 | Incorporar logo oficial sin alterar diseño, tipografía o colores. | Coordinación | Implementado con el PNG original recibido en SCORTA.7z. Brand.jsx lo carga en login y paneles sin modificar sus bytes. Revisión visual pendiente. |
 | R11 | Paleta blanca, negra y amarilla. | `review2_seller`, `review2_owner` y coordinación | Código de interfaz actualizado; botones amarillos con texto negro y barra negra. Revisión visual/dispositivos pendiente. |
 
 Validación transversal: la ejecución final aprobó **86/86 pruebas** y ambas compilaciones. `review2_qa` mantiene pruebas de sesión, restablecimiento/restauración, permisos, tres pestañas, recordatorios calculados y borradores. Los resultados observados, sin atribuir QA visual a SSR, se registran en [QA-REVISION2.md](QA-REVISION2.md). Coordinación integra código, GitHub y publicación; la publicación de revisión 2 está confirmada.
@@ -30,7 +30,7 @@ Validación transversal: la ejecución final aprobó **86/86 pruebas** y ambas c
 
 Estado de la primera entrega multiempresa: código integrado, 72 pruebas y ambas compilaciones aprobadas y publicación confirmada. La revisión 2 posterior tiene su propia matriz R01–R11 y resultados en QA-REVISION2.md; el conteo anterior no acredita la nueva ejecución. «Código implementado» no significa aceptación visual ni instalación real. Los resultados observados se registran en [QA-PLATAFORMA.md](QA-PLATAFORMA.md), sin reutilizar como evidencia de cierre los resultados de la interfaz anterior.
 
-Toda la interfaz será en español. La referencia más reciente del login sustituye las propuestas anteriores: fondo oscuro con resplandor amarillo discreto, tarjeta central, logo SCORTA, «Tu almacén, bajo control», Empresa, Usuario, Contraseña e Ingresar. Las maquetas anteriores en inglés son referencias de estructura; deben traducirse antes de aplicarlas.
+Toda la interfaz será en español. La referencia más reciente del login sustituye las propuestas anteriores: fondo oscuro con resplandor amarillo discreto, tarjeta central, logo SCORTA, «Tu negocio, bajo control», Empresa, Usuario, Contraseña e Ingresar. Las maquetas anteriores en inglés son referencias de estructura; deben traducirse antes de aplicarlas.
 
 | ID | Ajuste y criterio de cierre | Agente responsable | Apoyo | Estado de esta entrega |
 | --- | --- | --- | --- | --- |
@@ -147,7 +147,7 @@ Ejecución autorizada por el propietario. Responsable de implementación e integ
 
 | Ajuste | Estado |
 | --- | --- |
-| Logo oficial en login, cabecera del propietario y barras laterales de administrador y vendedor | Pendiente del archivo original accesible. Las cuatro ubicaciones ya usan el componente Brand; no se recreó ni sustituyó el logo. Las imágenes visibles en la conversación no están montadas como archivos utilizables; el único adjunto local es la referencia anterior del login. |
+| Logo oficial en login, cabecera del propietario y barras laterales de administrador y vendedor | Implementado con el PNG original extraído de SCORTA.7z el 19 de noviembre de 2026. Mismos bytes, tipografía y colores; solo tamaño proporcional por pantalla. Ver src/assets/LEEME-LOGO.md. |
 | Cabecera del propietario fija al desplazar | Implementado con posición sticky; conserva el espacio de la cabecera y permite superponer los diálogos. Revisión manual del desplazamiento pendiente. |
 | Login: «Tu negocio, bajo control.» | Implementado. |
 | Taller: quitar los dos textos auxiliares indicados | Implementado; se conserva el formulario y el registro de servicios. |
@@ -156,3 +156,7 @@ Ejecución autorizada por el propietario. Responsable de implementación e integ
 Validación: 87/87 pruebas aprobadas, incluidas las SSR de existencias cero, iguales al mínimo, por debajo y por encima del mínimo. Compilaciones de aplicación y demo aprobadas; git diff --check sin errores. No se declara QA visual: el entorno no dispone del control de navegador requerido por Sites.
 
 Demo actualizada y publicación confirmada el 19 de noviembre de 2026, 12:42 (Colombia): https://fragola-scorta-demo.safeturnip2.chatgpt.site. Fuente de aplicación: `ca386cb52214fdc683f9dc3a579ce243dcd6e7e5`. Fuente de Site: `87453a3921298fe0b7b218ef4ca9170ec05c024a`. Despliegue: `appgdep_6aff34ea8a8081919f1e6cb5389996cc`, resultado `succeeded`. Se conserva acceso privado del propietario.
+
+### Incorporación del logo original
+
+Archivo recibido y extraído correctamente de `SCORTA.7z`. Incorporado en las cuatro ubicaciones compartidas por Brand: login, propietario, administrador y vendedor. Se verifica integridad del PNG original y su inclusión en las compilaciones de aplicación y demo. La recepción del archivo resuelve el bloqueo de marca descrito históricamente en la revisión 2. Revisión visual de la interfaz pendiente.

@@ -37,7 +37,7 @@ Estas contraseñas son públicas y exclusivas de la demostración. No son la con
 
 9. **Pagos y avisos:** abrir Pagos y renovaciones. El botón de registrar pago aparece una sola vez. Revisar las vistas previas de recordatorio/confirmación; no se envían mensajes automáticos reales.
 10. **Recuperación y legales:** abrir ¿Olvidaste tu contraseña? y Términos y privacidad desde el login/perfil. Los flujos indican que son vistas previas: no envían correos, no cambian contraseñas por correo y no registran firmas.
-11. **Marca:** comprobar la paleta blanca, negra y amarilla. El logo oficial sigue pendiente del archivo original; el nombre SCORTA actual es identificación neutra, no un redibujo del logo.
+11. **Marca:** comprobar la paleta blanca, negra y amarilla. El PNG oficial FRAGOLA SCORTA se muestra en el login y los paneles del propietario, administrador y vendedor, conservando el archivo original.
 
 ## Almacenamiento y límites de la demo
 
