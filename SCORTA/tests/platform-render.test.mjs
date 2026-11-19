@@ -16,7 +16,7 @@ before(async () => {
   mkdirSync(join(root, 'test-results'), {recursive: true});
   directory = mkdtempSync(join(root, 'test-results', 'qa-platform-render-'));
   const entry = join(directory, 'entry.mjs');
-  writeFileSync(entry, `export {default as OwnerWorkspace, billingMessagePreview} from ${JSON.stringify(join(root, 'src/OwnerWorkspace.jsx'))};\nexport {default as ClientWorkspace} from ${JSON.stringify(join(root, 'src/ClientWorkspace.jsx'))};\nexport {default as LegalDocuments} from ${JSON.stringify(join(root, 'src/LegalDocuments.jsx'))};\nexport {default as RecoveryDialog} from ${JSON.stringify(join(root, 'src/RecoveryDialog.jsx'))};\n`);
+  writeFileSync(entry, `export {default as OwnerWorkspace, billingMessagePreview} from ${JSON.stringify(join(root, 'src/OwnerWorkspace.jsx'))};\nexport {default as ClientWorkspace, Stock} from ${JSON.stringify(join(root, 'src/ClientWorkspace.jsx'))};\nexport {default as LegalDocuments} from ${JSON.stringify(join(root, 'src/LegalDocuments.jsx'))};\nexport {default as RecoveryDialog} from ${JSON.stringify(join(root, 'src/RecoveryDialog.jsx'))};\n`);
   const result = await build({root, logLevel: 'silent', build: {ssr: entry, write: false, minify: false}});
   const output = Array.isArray(result) ? result[0].output : result.output;
   const chunk = output.find(item => item.type === 'chunk' && item.isEntry);
@@ -110,4 +110,15 @@ test('SSR: términos muestran borradores y las casillas de aceptación empiezan 
   assert.equal(boxes.length,2);assert.ok(boxes.every(box=>!box.includes('checked')));
   assert.match(html,/<button[^>]*type="submit"[^>]*disabled=""/);
   assert.match(html,/Descargar borradores/);
+});
+
+
+test('SSR: inventario distingue agotados, mínimo alcanzado y existencias suficientes', () => {
+  for (const [stock, minimum, status] of [[0,0,'empty'],[0,5,'empty'],[1,5,'low'],[5,5,'low'],[6,5,null]]) {
+    const html=renderToStaticMarkup(React.createElement(components.Stock,{product:{stock,stock_minimo:minimum}}));
+    if(status) assert.match(html,new RegExp('cw-stock-'+status));
+    else assert.doesNotMatch(html,/cw-stock-(empty|low)/);
+    assert.match(html,stock===0?/Agotado/:new RegExp(stock+' '+(stock===1?'unidad':'unidades')));
+    if(status==='empty') assert.doesNotMatch(html,/cw-stock-low/);
+  }
 });

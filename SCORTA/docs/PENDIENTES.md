@@ -140,3 +140,17 @@ La nueva plataforma incorpora empresas, contratos, perfiles, soporte trazable, v
 La simulación operativa concilió entradas, salidas, devoluciones y anulaciones; corrigió tres fallos. El despliegue externo, las cuentas definitivas, el inventario real y la aceptación conjunta siguen sin completarse.
 
 Evidencia actual: [entrega](ENTREGA.md), [API](PLATFORM-API.md), [QA de plataforma](QA-PLATAFORMA.md) y [demo](DEMO.md). Antecedentes: [prueba operativa](PRUEBA-OPERACION.md), [revisión de claridad](REVISION-CLARIDAD.md) y [QA anterior](QA.md). [Condiciones para comenzar](PUESTA-EN-MARCHA.md).
+
+## Ajustes de revisión 3 · 19 de noviembre de 2026
+
+Ejecución autorizada por el propietario. Responsable de implementación e integración: Coordinación (frontend). No se conectan APIs nuevas en esta revisión.
+
+| Ajuste | Estado |
+| --- | --- |
+| Logo oficial en login, cabecera del propietario y barras laterales de administrador y vendedor | Pendiente del archivo original accesible. Las cuatro ubicaciones ya usan el componente Brand; no se recreó ni sustituyó el logo. Las imágenes visibles en la conversación no están montadas como archivos utilizables; el único adjunto local es la referencia anterior del login. |
+| Cabecera del propietario fija al desplazar | Implementado con posición sticky; conserva el espacio de la cabecera y permite superponer los diálogos. Revisión manual del desplazamiento pendiente. |
+| Login: «Tu negocio, bajo control.» | Implementado. |
+| Taller: quitar los dos textos auxiliares indicados | Implementado; se conserva el formulario y el registro de servicios. |
+| Inventario: mínimo en amarillo y agotados en rojo | Implementado. Cero tiene prioridad sobre el mínimo. Se conservan cantidades y «Agotado» para identificar el estado sin depender del color. |
+
+Validación: 87/87 pruebas aprobadas, incluidas las SSR de existencias cero, iguales al mínimo, por debajo y por encima del mínimo. Compilaciones de aplicación y demo aprobadas; git diff --check sin errores. No se declara QA visual: el entorno no dispone del control de navegador requerido por Sites.
