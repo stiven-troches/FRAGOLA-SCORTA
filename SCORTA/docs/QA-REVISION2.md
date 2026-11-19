@@ -34,3 +34,7 @@ La ejecución completa de integración aprobó **86/86 pruebas**, sin fallos ni 
 ## Límite de la comprobación visual
 
 El perfil de Sites administrado no dispone de Cua. No se ejecutó navegador, servidor de vista previa ni control alternativo. SSR renderiza HTML estático y no ejecuta efectos, clics, carga de archivos o medición de dispositivos. No sustituye la revisión conjunta en celular/PC ni prueba que correo/WhatsApp hayan enviado un mensaje.
+
+## Publicación de revisión 2
+
+Sites confirmó el despliegue satisfactorio de https://fragola-scorta-demo.safeturnip2.chatgpt.site el 19 de noviembre de 2026. Fuente de aplicación: `5657e5ad8cb9b260d7d261409963623457fe0e6c`; commit de publicación estática: `c5dc62f80f9673c20e10b5d5ceb283caf476c1a1`. Esto confirma publicación, no una prueba visual. El archivo original del logo sigue pendiente; los envíos reales, recuperación por correo y aceptación contractual real continúan sin integrar.

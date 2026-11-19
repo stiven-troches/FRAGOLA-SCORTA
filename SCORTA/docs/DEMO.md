@@ -4,7 +4,7 @@ Actualización: 19 de noviembre de 2026 (America/Bogota).
 
 Esta demo utiliza la interfaz nueva y el mismo motor de plataforma que el servidor. Incluye dos empresas ficticias: **Moto Norte**, con 24 productos y operaciones de ejemplo, y **Moto Sur**, con un catálogo pequeño separado. Hay productos disponibles, con pocas unidades y agotados, además de ventas y servicios de taller. Los importes están expresados en COP.
 
-La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera versión multiempresa fue publicada y confirmada. **Publicación de revisión 2 pendiente de confirmación.** La versión anterior publicada y sus pruebas históricas no constituyen una validación de esta actualización.
+La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera versión multiempresa fue publicada y confirmada. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** La versión anterior publicada y sus pruebas históricas no constituyen una validación de esta actualización.
 
 ## Abrir una copia local
 

@@ -31,7 +31,7 @@ Abre `http://127.0.0.1:4173`. La demo contiene dos empresas de ejemplo, un catá
 
 Los datos se conservan en IndexedDB del navegador actual y se pueden reiniciar. Otro equipo o navegador tiene su propia copia. Los enlaces de comprobantes de esta demo sólo funcionan donde existen esos datos; el servidor real sí permite compartir el comprobante con el cliente por su enlace.
 
-La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera entrega multiempresa fue publicada y confirmada. **Publicación de revisión 2 pendiente de confirmación.** Véase [DEMO.md](SCORTA/docs/DEMO.md).
+La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera entrega multiempresa fue publicada y confirmada. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** Véase [DEMO.md](SCORTA/docs/DEMO.md).
 
 ## Validación y entrega
 

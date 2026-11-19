@@ -2,7 +2,7 @@
 
 Actualizado: 19 de noviembre de 2026 (America/Bogota).
 
-La primera demo multiempresa está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado. Sites confirmó esa publicación el 19 de noviembre de 2026. **Publicación de revisión 2 pendiente de confirmación.** La guía está en [DEMO.md](DEMO.md). La revisión visual, la prueba conjunta y el uso real del almacén siguen pendientes; la demo guarda datos ficticios en el navegador.
+La primera demo multiempresa está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado. Sites confirmó esa publicación el 19 de noviembre de 2026. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** La guía está en [DEMO.md](DEMO.md). La revisión visual, la prueba conjunta y el uso real del almacén siguen pendientes; la demo guarda datos ficticios en el navegador.
 
 Cada pendiente tiene un responsable principal, una condición para empezar y una evidencia de cierre. «Preparación» significa que puede avanzarse con la información disponible; las pruebas con el usuario, sus equipos o la instalación definitiva siguen abiertas hasta ejecutarse allí. La tabla no implica que todos los agentes estén trabajando simultáneamente.
 
@@ -24,7 +24,7 @@ Ejecución autorizada después de la revisión de la demo. El foco es interfaz y
 | R10 | Incorporar logo oficial sin alterar diseño, tipografía o colores. | Coordinación | Pendiente del archivo original utilizable PNG/SVG u otro formato original admitido. Brand.jsx lo cargará desde src/assets/fragola-scorta-logo. No se ha redibujado ni simulado; actualmente solo se muestra SCORTA como identificación neutra. |
 | R11 | Paleta blanca, negra y amarilla. | `review2_seller`, `review2_owner` y coordinación | Código de interfaz actualizado; botones amarillos con texto negro y barra negra. Revisión visual/dispositivos pendiente. |
 
-Validación transversal: la ejecución final aprobó **86/86 pruebas** y ambas compilaciones. `review2_qa` mantiene pruebas de sesión, restablecimiento/restauración, permisos, tres pestañas, recordatorios calculados y borradores. Los resultados observados, sin atribuir QA visual a SSR, se registran en [QA-REVISION2.md](QA-REVISION2.md). Coordinación integra código, GitHub y publicación; el estado de la nueva publicación permanece pendiente de confirmación.
+Validación transversal: la ejecución final aprobó **86/86 pruebas** y ambas compilaciones. `review2_qa` mantiene pruebas de sesión, restablecimiento/restauración, permisos, tres pestañas, recordatorios calculados y borradores. Los resultados observados, sin atribuir QA visual a SSR, se registran en [QA-REVISION2.md](QA-REVISION2.md). Coordinación integra código, GitHub y publicación; la publicación de revisión 2 está confirmada.
 
 ## Ajustes acordados: interfaz, empresas y perfiles
 

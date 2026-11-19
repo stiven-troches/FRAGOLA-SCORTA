@@ -34,6 +34,6 @@ La comprobación final aprobó **86/86 pruebas**, sin fallos ni omisiones, y las
 
 Enlace privado existente: https://fragola-scorta-demo.safeturnip2.chatgpt.site.
 
-**Publicación de revisión 2 pendiente de confirmación.**
+**Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.**
 
 La revisión visual conjunta, los dispositivos reales y la puesta en marcha P05–P10 siguen abiertos: alojamiento definitivo, HTTPS, cuentas reales, respaldo externo/restauración, inventario conciliado y piloto. La demo no es un almacén compartido entre equipos; sus comprobantes solo se abren donde existen sus datos locales. La integración de envíos automáticos/correo y la formalización legal quedan para la fase posterior acordada.
