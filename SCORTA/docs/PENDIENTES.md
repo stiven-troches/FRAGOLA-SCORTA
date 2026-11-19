@@ -1,10 +1,49 @@
 # Pendientes asignados de SCORTA
 
-Actualizado: 17 de noviembre de 2026 (UTC).
+Actualizado: 19 de noviembre de 2026 (UTC).
 
 La demo con 24 productos ficticios está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado y despliegue confirmado. La guía está en [DEMO.md](DEMO.md). La revisión visual de la demo alojada y la prueba conjunta con el usuario siguen pendientes. Esta demostración no es la instalación de producción del almacén.
 
 Cada pendiente tiene un responsable principal, una condición para empezar y una evidencia de cierre. «Preparación» significa que puede avanzarse con la información disponible; las pruebas con el usuario, sus equipos o la instalación definitiva siguen abiertas hasta ejecutarse allí. La tabla no implica que todos los agentes estén trabajando simultáneamente.
+
+## Ajustes acordados: interfaz, empresas y perfiles
+
+Estado general: especificaciones y propuestas visuales acordadas; implementación pendiente. Esta actualización documenta tareas y responsables, sin iniciar desarrollo, pruebas, fusiones o despliegues. La implementación requiere la indicación de proceder del propietario. Los nombres de agentes identifican perfiles responsables planificados; no indican que estén activos o trabajando en segundo plano.
+
+Toda la interfaz será en español. La referencia más reciente del login sustituye las propuestas anteriores: fondo oscuro con resplandor rojo discreto, tarjeta central, logo SCORTA, «Tu almacén, bajo control», Empresa, Usuario, Contraseña e Ingresar. Las maquetas anteriores en inglés son referencias de estructura; deben traducirse antes de aplicarlas.
+
+| ID | Ajuste pendiente y criterio de cierre | Agente responsable | Apoyo |
+| --- | --- | --- | --- |
+| A01 | Consolidar el diseño en español, colores y estados; sustituir el login anterior por la referencia oscura aprobada. | `direccion_diseno` | `diseno_ux_ui` |
+| A02 | Implementar el login adaptable con empresa, usuario, contraseña y control para mostrar/ocultar contraseña. Diferenciar el acceso del propietario y el de los empleados de una empresa. | `frontend` | `backend`, `diseno_ux_ui` |
+| A03 | Crear el perfil «Propietario de SCORTA» para Fragola / Steven, separado de los administradores de empresa. Configurar la credencial inicial fuera del código y GitHub, almacenándola con hash; no incluir contraseñas de prueba como credenciales de producción. | `backend` | `infraestructura` |
+| A04 | Panel del propietario con tarjetas: logo, nombre, URL, estado, vencimiento y días restantes; botón «Crear nueva empresa». Los datos de contacto se consultan al abrir la tarjeta. | `frontend` | `diseno_ux_ui`, `backend` |
+| A05 | Formulario de empresa: nombre, persona de contacto directo, correo, WhatsApp con indicativo y logo opcional; acceso inicial del administrador; inicio, fin y valor mensual del contrato. Guardar y poder editar esos datos. | `frontend` | `backend`, `diseno_ux_ui` |
+| A06 | Guardar empresas y logos, generar una URL única por empresa y resolverla contra su empresa correcta. Las URLs example.com de las maquetas son ficticias; el dominio y la configuración real dependen de P06. | `backend` | `infraestructura` |
+| A07 | Detalle de empresa con editar, habilitar, inhabilitar y eliminar. La suspensión conserva datos y bloquea el acceso de sus usuarios; eliminar exige una confirmación clara sobre los datos afectados. | `backend` | `frontend` |
+| A08 | Vigencia del contrato: respetar inicio y fin, incluir todo el día final y bloquear desde el día siguiente según America/Bogota. Aplicar el control en el servidor a las sesiones y solicitudes, además de mostrar el estado. | `backend` | `frontend` |
+| A09 | «Registrar pago y renovar»: proponer un mes desde el vencimiento vigente si paga anticipadamente; si venció, permitir elegir el inicio del nuevo período, por defecto la fecha del pago. Mostrar y permitir ajustar la nueva fecha antes de confirmar. La renovación no retira un bloqueo manual. | `backend` | `frontend` |
+| A10 | Historial manual de pagos y renovaciones: fecha, importe, período anterior/nuevo y responsable. Mostrar avisos de próximo vencimiento y una pantalla de acceso suspendido que explique cómo contactar al propietario. | `backend` | `frontend`, `diseno_ux_ui` |
+| A11 | «Usuarios y permisos» dentro de cada empresa: solo el propietario crea y gestiona cuentas y asigna roles. Admitir dos o más administradores y varios vendedores, todos con usuario y contraseña individuales. | `backend` | `frontend` |
+| A12 | Permisos: administradores acceden a todos los módulos de su empresa; vendedores solo a los módulos y acciones autorizados. Los administradores de empresa no crean usuarios ni gestionan roles, empresas o contratos. Definir la lista exacta permitida al vendedor antes de cerrar esta tarea; proteger interfaz y API. | `backend` | `frontend`, coordinación |
+| A13 | «Mi perfil» al pulsar el nombre: nombre/usuario, empresa, rol y cambio de contraseña; cierre de sesión. En la tarjeta del propietario mostrar la fecha del cambio y la opción de restablecer, sin revelar contraseñas actuales. | `frontend` | `backend` |
+| A14 | «Acceder como soporte» desde el propietario, para atender una solicitud del cliente: registrar motivo e identidad del propietario. Mostrar en Movimientos fecha/hora, «Steven · Soporte», acción, motivo y valores anteriores/nuevos cuando corresponda. No atribuir las intervenciones a un empleado del cliente. | `backend` | `frontend` |
+| A15 | Separar completamente los datos de cada empresa y las facultades de propietario, administrador y vendedor; verificar el alcance de cada sesión, URL, documento, consulta y operación de soporte. | `backend` | `qa_piloto` |
+| A16 | Inicio del cliente con logo/empresa/usuario, Nueva venta, Ver inventario, Ingresar mercancía, ventas del día, productos por reponer, agotados y últimas operaciones, usando solo datos de esa empresa. Mantener importes y unidades comprensibles y una pantalla despejada. | `frontend` | `diseno_ux_ui`, `backend` |
+| A17 | Barra lateral negra permanente; al navegar cambia el contenido de la derecha. Orden exacto: Nueva venta, Taller, Inventario, Compras, Movimientos y Dashboard. «Mi perfil» se abre desde el nombre; las secciones exclusivas del propietario quedan en su propio panel. | `frontend` | `diseno_ux_ui` |
+| A18 | Adaptación a celular, tableta, PC y monitores: navegación compacta siempre disponible en pantallas pequeñas, formularios/tarjetas/tablas adaptados, controles táctiles y texto legible, sin desplazamiento horizontal global. | `frontend` | `diseno_ux_ui`, `qa_piloto` |
+| A19 | Revisar coherencia visual, claridad, navegación y formularios con el usuario; validar la versión en español y resolver los hallazgos observados. | `diseno_prueba_guiada` | `direccion_diseno`, `diseno_ux_ui` |
+| A20 | Pruebas de empresas aisladas, múltiples usuarios, permisos, vigencia, renovación anticipada/vencida, bloqueo manual, contraseñas, soporte e historial; recorridos visuales y dispositivos reales. Registrar evidencias actuales sin reutilizar resultados anteriores como aprobación del nuevo alcance. | `qa_piloto` | `backend`, `frontend` |
+| A21 | Integrar y documentar los cambios terminados, sincronizar GitHub y actualizar la demo para revisión cuando se autorice la ejecución/publicación correspondiente. La demo local ficticia no acredita funcionamiento de varias empresas en un servidor. | Coordinación (`/root`) | `demo_interfaz`, `infra_puesta_marcha` |
+
+### Decisiones que deben respetar los agentes
+
+- El propietario del software administra clientes, cuentas, roles y contratos; «administrador de empresa» se refiere exclusivamente a la operación de una empresa cliente.
+- El administrador de empresa conserva acceso a los módulos de su negocio, con la gestión de usuarios y roles reservada al propietario. La lista exacta de módulos del vendedor sigue por definir, sin asumir permisos adicionales.
+- Mantener separadas la suspensión por vencimiento y la suspensión manual. Habilitar manualmente una empresa no sustituye actualizar una vigencia vencida. Todas las fechas se interpretan con el calendario de Colombia.
+- La contraseña vigente no se muestra al propietario. Se permite restablecerla, y el acceso de soporte utiliza la identidad del propietario y deja historial visible para el cliente.
+- La interfaz de empresas/contratos es un alcance nuevo: las 44 pruebas y las compilaciones registradas previamente no lo validan. La instalación de producción y sus pendientes P05–P10 continúan abiertos.
+- Faltan decisiones de operación antes del uso real: lista exacta de permisos de vendedores, dominio/URLs definitivos y contacto del propietario que aparecerá al suspender el acceso. No bloquean registrar o revisar esta especificación.
 
 ## Entrega y validación con el usuario
 
@@ -13,7 +52,7 @@ Cada pendiente tiene un responsable principal, una condición para empezar y una
 | P01 · Sincronizar diseño y registro de tareas con GitHub | Coordinación | Completado en esta entrega. Diseño publicado y verificado en `b8f6076`; registro de asignaciones incluido en la propuesta existente. | Rama remota y propuesta de revisión actualizadas con el diseño y los documentos; comprobar el commit publicado. No incluye fusionar ni desplegar. |
 | P02 · Revisar una venta de mostrador | Diseño UX/UI; usuario y coordinación | Espera la prueba conjunta. La revisión visual de dirección ya está aprobada. | El usuario recorre búsqueda, cantidad, total y confirmación, identifica las existencias restantes y deja observaciones de claridad y comodidad. |
 | P03 · Revisar recepción, devolución y errores habituales | QA; diseño, producto y usuario | Guiones preparados; ejecución conjunta pendiente. Véanse [GUIA-PRUEBA-USUARIO.md](GUIA-PRUEBA-USUARIO.md) y [ACEPTACION-ALMACEN.md](ACEPTACION-ALMACEN.md). | Completar compra y devolución; probar stock insuficiente y referencia repetida; verificar mensajes comprensibles, conservación del formulario y cantidades. |
-| P04 · Resolver problemas de la prueba conjunta | Frontend; diseño y QA. Backend si cambia una regla de datos | Condicionado a hallazgos concretos de P02/P03. No hay una nueva corrección aprobada todavía. | Registrar el problema, aplicar la corrección, repetir el caso afectado y confirmar que el usuario entiende el resultado. |
+| P04 · Resolver problemas de la prueba conjunta | Frontend; diseño y QA. Backend si cambia una regla de datos | Condicionado a hallazgos concretos de P02/P03. El nuevo alcance acordado de interfaz y empresas se registra por separado en A01–A21. | Registrar el problema, aplicar la corrección, repetir el caso afectado y confirmar que el usuario entiende el resultado. |
 
 ## Preparación del uso real
 
@@ -37,7 +76,7 @@ Cada pendiente tiene un responsable principal, una condición para empezar y una
 | `seguridad_puesta_marcha` | Seguridad | Preparación de cuentas y permisos y validación dirigida de sesiones, primera cuenta y respaldo. |
 | Coordinación | Integración y GitHub | Sincronización del diseño, revisión de los entregables y actualización de la propuesta. |
 
-Los especialistas terminaron esta preparación; los pendientes humanos o del servidor no continúan ejecutándose en segundo plano. Frontend y backend tienen asignadas las correcciones que se identifiquen en P04; se activan cuando exista un problema concreto. La dirección de diseño interviene si esos hallazgos requieren cambiar la interacción.
+Los especialistas terminaron la preparación anterior P01–P10; los pendientes humanos o del servidor no continúan ejecutándose en segundo plano. Las nuevas asignaciones A01–A21 son responsabilidades planificadas y no activan agentes. Frontend y backend también atienden las correcciones concretas de P04 cuando se indiquen.
 
 ## Responsabilidades de coordinación y diseño
 
@@ -47,9 +86,9 @@ La coordinación integra resultados, conserva el estado de esta lista y publica 
 
 | ID | Propuesta | Responsable de evaluación | Estado |
 | --- | --- | --- | --- |
-| F01 | Recuperación de contraseña y desactivación de cuentas | Seguridad y backend | Por priorizar según la operación y el soporte disponibles. |
+| F01 | Recuperación automática de contraseña por correo | Seguridad y backend | Por priorizar. El restablecimiento por propietario y la gestión de acceso de empresas/cuentas ya forman parte de A07/A11/A13. |
 | F02 | Conservar borradores al recargar o cerrar | Frontend y backend | Por priorizar; definir recuperación y reintentos antes de implementarlo. |
-| F03 | Fotografías de productos | Diseño UX/UI, frontend y backend | Por priorizar; definir utilidad y almacenamiento. |
+| F03 | Fotografías de productos | Diseño UX/UI, frontend y backend | Por priorizar; no confundir con el logo de empresa ya incluido en A05/A06. |
 | F04 | Consultas paginadas en el listado general | Backend y frontend | Por priorizar según el volumen real. |
 | F05 | Lectura de códigos por cámara | Frontend y QA; seguridad para permisos | Por priorizar si el lector físico no cubre la necesidad. |
 
