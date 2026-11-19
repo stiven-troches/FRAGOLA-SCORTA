@@ -25,6 +25,7 @@ Resultados observados con Node.js 24:
 | `npm test` (integración final) | **72/72 aprobadas**, 0 fallos, sin omisiones; aproximadamente 6,4 segundos. Incluye las pruebas históricas, aceptación, demo, SSR, HTTP/SQLite y seguridad. |
 | `npm run build` y `npm run build:demo` | Ambas compilaciones aprobadas. |
 | `git diff --check` | Sin errores de espacios. |
+| `docker compose config --quiet` | Configuración válida con dominio y credencial temporales; no se construyeron ni desplegaron contenedores. |
 | `node tests/platform-acceptance.test.mjs` | **11/11 aprobadas**, 0 fallos, sin omisiones; aproximadamente 1,4 segundos. |
 | `node tests/platform-render.test.mjs` | **3/3 aprobadas**, 0 fallos, sin omisiones; aproximadamente 0,4 segundos. |
 
@@ -43,3 +44,7 @@ La integración final incluye 44 pruebas históricas, 11 de aceptación de plata
 ## Límite de navegador
 
 Esta sesión utiliza el perfil Sites administrado y no dispone de `cua_repl.js`. La guía de Sites exige omitir la ejecución visual en estas condiciones: no se ejecutarán navegadores, servidores de vista previa ni automatización alternativa. La compilación y las comprobaciones Node no sustituyen la revisión visual con el cliente ni las pruebas con dispositivos reales.
+
+## Publicación verificada
+
+Sites confirmó el despliegue satisfactorio de la demo multiempresa el 19 de noviembre de 2026: https://fragola-scorta-demo.safeturnip2.chatgpt.site. Fuente de aplicación en GitHub: `e586004d0c173ac017d43374ee41ccd124a3f913`; commit de la publicación estática: `9727b357c4bf2fe350d0cbabf31f9c0097358d64`. La confirmación de publicación no sustituye la revisión visual ni convierte IndexedDB en un inventario compartido entre equipos.

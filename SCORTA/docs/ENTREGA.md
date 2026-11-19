@@ -32,7 +32,7 @@ La preparación preserva `motoshop.sqlite` y copia el inventario anterior a Alma
 
 **Demo de navegador:** `platform-demo.mjs` usa el mismo motor con datos ficticios de Moto Norte y Moto Sur, almacenados en IndexedDB. Las cuentas visibles en Datos de prueba son públicas y exclusivas de la demo. No contiene la contraseña privada del propietario ni se presenta como un servidor real multiempresa.
 
-La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). **La publicación de la nueva versión multiempresa de esta entrega está pendiente de confirmación.**
+La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). **La nueva demo multiempresa fue publicada el 19 de noviembre de 2026; Sites confirmó el despliegue satisfactorio.**
 
 ## Verificación y límites
 
