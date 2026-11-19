@@ -2,7 +2,9 @@ import {aplicarCambio, estadoVacio} from './inventory.mjs';
 
 const encoder = new TextEncoder();
 const MAX_IMAGE = 700000;
-const SESSION_MS = 8 * 60 * 60 * 1000;
+// Sessions survive browser/server restarts for up to 30 days; company/user checks still apply on every request.
+export const PLATFORM_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_MS = PLATFORM_SESSION_TTL_MS;
 const RECEIPT_MS = 7 * 86400000;
 const fail = (message, status = 400, code) => {throw Object.assign(Error(message), {status, code});};
 const stamp = value => {const n = typeof value === 'function' ? value() : value ?? Date.now(); const d = new Date(n); if (!Number.isFinite(d.getTime())) fail('Fecha inválida'); return d;};
@@ -12,6 +14,7 @@ const id = () => crypto.randomUUID();
 const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const text = (v, label, max = 200) => {if (typeof v !== 'string' || !v.trim() || v.length > max) fail(`${label}: dato obligatorio o demasiado largo`); return v.trim();};
 const optionalText = (v, max = 200) => v == null ? '' : String(v).trim().slice(0,max);
+const recoveryEmail = value => {if(value==null||value==='')return '';if(typeof value!=='string'||value.length>254)fail('Correo de recuperación inválido');const email=value.trim().toLowerCase();if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo de recuperación inválido');return email;};
 const number = (v, label, integer = false) => {const n = Number(v); if (v === '' || v == null || !Number.isFinite(n) || n < 0 || n > 1e12 || integer && !Number.isSafeInteger(n)) fail(`${label}: valor inválido`); return n;};
 const date = (v, label) => {if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(Date.parse(v)) || new Date(v).toISOString().slice(0,10) !== v) fail(`${label}: fecha inválida`); return v;};
 const token = () => toBase64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
@@ -60,7 +63,7 @@ const businessAudit = (business,actor,action,details,now) => {business.auditoria
 async function makeUser(form, companyId, role, now) {
   const username=text(form.username,'Usuario',60);if(!/^[A-Za-z0-9._-]{3,60}$/.test(username))fail('Usuario: utiliza de 3 a 60 letras, números, puntos o guiones');
   if(!['owner','admin','vendedor'].includes(role))fail('Rol inválido');
-  return {id:id(),companyId,username,name:optionalText(form.name)||username,role,active:true,password:await passwordHash(form.password),passwordChangedAt:iso(now),createdAt:iso(now),version:1};
+  return {id:id(),companyId,username,name:optionalText(form.name)||username,email:recoveryEmail(form.email),emailVerified:false,role,active:true,password:await passwordHash(form.password),passwordChangedAt:iso(now),createdAt:iso(now),version:1};
 }
 export async function createPlatform({owner: config,ownerContact='',legacyState}={}) {
   if(!config)fail('Configura el propietario de SCORTA',503,'SETUP_REQUIRED');
@@ -101,7 +104,7 @@ function aggregates(business) {
 }
 function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra'].includes(key))next[key]=removeCosts(item);return next;}return value;}
 function envelope(state, actor, now, baseUrl) {
-  const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,support:actor.support||null,ownerContact:state.ownerContact};
+  const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact};
   if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
   const business=structuredClone(state.businesses[actor.companyId]||estadoVacio());
   const aggregate=aggregates(business);Object.assign(business,aggregate);
@@ -142,7 +145,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   const before=a.companyId?structuredClone(state.companies.find(c=>c.id===a.companyId)):null;
   if(a.type==='company.create'){
     company=companyForm(state,form,null,now);uniqueUser(state,company.id,form.username);
-    const user=await makeUser({username:form.username,password:form.password,name:form.adminName||form.username},company.id,'admin',now);
+    const user=await makeUser({username:form.username,password:form.password,name:form.adminName||form.username,email:form.adminEmail},company.id,'admin',now);
     state.companies.push(company);state.users.push(user);state.businesses[company.id]=estadoVacio();
   }else if(a.type==='company.update'){
     const next=companyForm(state,form,company,now);state.companies[state.companies.indexOf(company)]=next;company=next;
@@ -165,7 +168,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='user.update'||a.type==='user.reset'){
     const user=state.users.find(u=>u.id===a.userId&&u.role!=='owner');if(!user)fail('Usuario inexistente',404);
     if(a.type==='user.reset'){user.password=await passwordHash(form.password);user.passwordChangedAt=iso(now);user.version++;}
-    else{const role=form.role??user.role,active=form.active??user.active;if(!['admin','vendedor'].includes(role)||typeof active!=='boolean')fail('Rol o estado inválido');if(user.role==='admin'&&user.active&&(role!=='admin'||!active)&&!state.users.some(u=>u.id!==user.id&&u.companyId===user.companyId&&u.role==='admin'&&u.active))fail('La empresa debe conservar al menos un administrador activo');if(form.name!=null)user.name=text(form.name,'Nombre');if(role!==user.role||active!==user.active)user.version++;user.role=role;user.active=active;}
+    else{const role=form.role??user.role,active=form.active??user.active;if(!['admin','vendedor'].includes(role)||typeof active!=='boolean')fail('Rol o estado inválido');if(user.role==='admin'&&user.active&&(role!=='admin'||!active)&&!state.users.some(u=>u.id!==user.id&&u.companyId===user.companyId&&u.role==='admin'&&u.active))fail('La empresa debe conservar al menos un administrador activo');if(form.name!=null)user.name=text(form.name,'Nombre');if(Object.hasOwn(form,'email')){const email=recoveryEmail(form.email);if(email!==user.email){user.email=email;user.emailVerified=false;}}if(role!==user.role||active!==user.active)user.version++;user.role=role;user.active=active;}
   }else if(a.type==='support.start'){
     owner(actor);company=companyFor(state,a.companyId);const reason=text(form.motivo,'Motivo de soporte',500);session.support={companyId:company.id,reason,startedAt:iso(now)};
     const b=state.businesses[company.id];businessAudit(b,{...actor,label:actor.username+' · Soporte',support:session.support},'soporte_inicio',{motivo:reason},now);b.revision++;

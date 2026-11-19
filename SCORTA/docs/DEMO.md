@@ -1,10 +1,10 @@
 # Demo multiempresa de SCORTA
 
-Actualización: 19 de noviembre de 2026 (UTC).
+Actualización: 19 de noviembre de 2026 (America/Bogota).
 
 Esta demo utiliza la interfaz nueva y el mismo motor de plataforma que el servidor. Incluye dos empresas ficticias: **Moto Norte**, con 24 productos y operaciones de ejemplo, y **Moto Sur**, con un catálogo pequeño separado. Hay productos disponibles, con pocas unidades y agotados, además de ventas y servicios de taller. Los importes están expresados en COP.
 
-La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). **La nueva demo multiempresa fue publicada el 19 de noviembre de 2026; Sites confirmó el despliegue satisfactorio.** La versión anterior publicada y sus pruebas históricas no constituyen una validación de esta actualización.
+La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera versión multiempresa fue publicada y confirmada. **Publicación de revisión 2 pendiente de confirmación.** La versión anterior publicada y sus pruebas históricas no constituyen una validación de esta actualización.
 
 ## Abrir una copia local
 
@@ -27,17 +27,22 @@ Estas contraseñas son públicas y exclusivas de la demostración. No son la con
 ## Recorridos sugeridos
 
 1. **Propietario:** consultar las tarjetas, abrir una empresa, revisar contacto/contrato/usuarios, crear un vendedor o un segundo administrador y probar una renovación. La suspensión manual se mantiene después de registrar un pago.
-2. **Vendedor:** abre directamente Nueva venta. Agregar productos desde búsqueda o Inventario, cambiar de pestaña y comprobar que se conserva el carrito. Consultar sus propias ventas desde Nueva venta.
-3. **Mano de obra:** registrar placa, trabajo, mecánico e importe; completar una venta sólo de servicio y otra con repuestos. El único dato de moto es la placa y sólo los repuestos descuentan existencias.
+2. **Vendedor:** abre directamente Nueva venta, dedicada al resumen y cobro. Ir a Inventario para buscar por palabras clave o categorías y agregar productos; pasar a Taller para agregar servicios; volver a Nueva venta y comprobar que se conserva el carrito. Consultar sus propias ventas desde Nueva venta.
+3. **Mano de obra:** desde Taller registrar placa, trabajo, mecánico e importe; completar una venta sólo de servicio y otra con repuestos. El único dato de moto es la placa y sólo los repuestos descuentan existencias.
 4. **Cliente y placa:** registrar nombre/teléfono del cliente en campos separados y consultar frecuencia, cobros e historial por cliente o moto. Las anulaciones y devoluciones se reflejan en los netos.
 5. **Administrador:** consultar Taller y su venta vinculada, ingresar mercancía, crear/editar un producto con foto y ajustar existencias con motivo. Autorizar una devolución desde la venta original.
 6. **Soporte:** desde el propietario ingresar con un motivo a la empresa y realizar un ajuste. El administrador de esa empresa puede ver la atribución de Soporte en Movimientos.
 7. **Comprobante:** descargarlo o usar Imprimir/PDF. El envío por WhatsApp es opcional; abre un mensaje para que el vendedor lo confirme. Cancelar u omitir el envío no revierte la venta guardada.
-8. **Persistencia y reinicio:** recargar conserva los datos de prueba. Reiniciar demo requiere confirmación y restaura los datos ficticios iniciales. Los cambios de perfil deben resolverse después de guardar o descartar el trabajo en curso.
+8. **Persistencia y reinicio:** recargar conserva los datos de prueba y el token opaco permite retomar una sesión autorizada durante un máximo de 30 días desde el login. Reiniciar demo requiere confirmación y restaura los datos ficticios iniciales. Los cambios de perfil deben resolverse después de guardar o descartar el trabajo en curso.
+
+9. **Pagos y avisos:** abrir Pagos y renovaciones. El botón de registrar pago aparece una sola vez. Revisar las vistas previas de recordatorio/confirmación; no se envían mensajes automáticos reales.
+10. **Recuperación y legales:** abrir ¿Olvidaste tu contraseña? y Términos y privacidad desde el login/perfil. Los flujos indican que son vistas previas: no envían correos, no cambian contraseñas por correo y no registran firmas.
+11. **Marca:** comprobar la paleta blanca, negra y amarilla. El logo oficial sigue pendiente del archivo original; el nombre SCORTA actual es identificación neutra, no un redibujo del logo.
 
 ## Almacenamiento y límites de la demo
 
 - IndexedDB guarda los datos en este navegador y perfil. Otro navegador o equipo tiene otra copia: la demo no es una instalación compartida del almacén.
+- localStorage recuerda únicamente un token opaco de sesión de prueba; no guarda su contraseña. La sesión expira a los 30 días desde el login y siguen aplicándose bloqueos y vigencia. El inventario ficticio permanece separado en IndexedDB.
 - Borrar los datos del sitio elimina las pruebas realizadas. El reinicio sólo afecta a la base de esta demo y cierra las sesiones de prueba anteriores.
 - Exportar datos ficticios produce JSON sin contraseñas, hashes, sesiones ni tokens privados. No es el respaldo SQLite de producción.
 - Los comprobantes de la demo usan enlaces con fragmento (`#/receipt/...`) y se resuelven desde el almacenamiento local. **Un cliente que abra ese enlace en otro equipo no tendrá el comprobante.** El servidor real utiliza un enlace con token opaco, atendido desde su base central y con vencimiento.
@@ -52,6 +57,6 @@ npm run build
 npm run build:demo
 ```
 
-La demo tiene pruebas Node con el motor compartido, IndexedDB simulado, persistencia, concurrencia, aislamiento, sesiones, reinicio y exportación sin secretos. Los resultados finales de esta iteración se registran en [QA-PLATAFORMA.md](QA-PLATAFORMA.md).
+La demo tiene pruebas Node con el motor compartido, IndexedDB simulado, persistencia, concurrencia, aislamiento, sesiones, reinicio y exportación sin secretos. La ejecución final aprobó **86/86 pruebas** y ambas compilaciones. Los comandos y límites se registran en [QA-REVISION2.md](QA-REVISION2.md). La entrega previa está documentada en [QA-PLATAFORMA.md](QA-PLATAFORMA.md).
 
 No se ha ejecutado una revisión visual de esta interfaz en la sesión actual: el entorno administrado de Sites no dispone de la herramienta de navegador requerida. Los antiguos comandos y escenarios en `browser-demo-checks/` corresponden a la demo anterior. Quedan pendientes la revisión conjunta de la nueva demo, los recorridos de navegador y la comprobación con celulares y equipos físicos.

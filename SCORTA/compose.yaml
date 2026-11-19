@@ -6,6 +6,7 @@ services:
       SCORTA_OWNER_COMPANY: ${SCORTA_OWNER_COMPANY:-Fragola}
       SCORTA_OWNER_USER: ${SCORTA_OWNER_USER:-Steven}
       SCORTA_OWNER_NAME: ${SCORTA_OWNER_NAME:-Steven}
+      SCORTA_OWNER_EMAIL: ${SCORTA_OWNER_EMAIL:-}
       SCORTA_OWNER_PASSWORD: ${SCORTA_OWNER_PASSWORD:?Define la contraseña del propietario de al menos 16 caracteres}
       SCORTA_OWNER_CONTACT: ${SCORTA_OWNER_CONTACT:-Contacta al propietario de SCORTA para renovar tu acceso}
       SCORTA_PUBLIC_URL: https://${DOMAIN:?Define el dominio}

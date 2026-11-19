@@ -56,7 +56,7 @@ function publicExport(state) {
   return {demostracion:true,descripcion:'Datos ficticios de SCORTA guardados únicamente en este navegador.',exportedAt:new Date().toISOString(),revision:state.revision,companies:scrub(state.companies||[]),users:(state.users||[]).map(({id,companyId,username,name,role,active,createdAt})=>({id,companyId,username,name,role,active,createdAt})),businesses:scrub(state.businesses||{}),payments:scrub(state.payments||[]),audit:scrub(state.audit||[])};
 }
 
-export async function createPlatformDemoStore({indexedDBFactory=globalThis.indexedDB,name=PLATFORM_DEMO_DATABASE,onStorageError=()=>{},seedFactory=createPlatformDemoSeed,requestFactory=platformRequest,lockManager=globalThis.navigator?.locks}={}) {
+export async function createPlatformDemoStore({indexedDBFactory=globalThis.indexedDB,name=PLATFORM_DEMO_DATABASE,onStorageError=()=>{},seedFactory=createPlatformDemoSeed,requestFactory=platformRequest,lockManager=globalThis.navigator?.locks,tokenStorage}={}) {
   if(!indexedDBFactory)throw storageFailure(Error('IndexedDB no disponible'));
   const db=await new Promise((resolve,reject)=>{
     let settled=false;
@@ -67,7 +67,20 @@ export async function createPlatformDemoStore({indexedDBFactory=globalThis.index
     opening.onblocked=()=>{settled=true;reject(Object.assign(Error('Cierra las otras pestañas de esta demo y vuelve a intentar.'),{storage:true,status:503}))};
   });
   db.onversionchange=()=>db.close();
+  // Only the opaque DEMO session credential is remembered here. Production uses an HttpOnly cookie.
+  const tokenKey='scorta:demo-session:'+name;
+  let remember=null;
+  try{remember=tokenStorage===null?null:tokenStorage??globalThis.localStorage??null}catch{onStorageError('No se pudo recordar la sesión de prueba. El acceso se conservará solo mientras esta pestaña esté abierta.');}
   let token=null,closed=false,queue=Promise.resolve();
+  try{const saved=remember?.getItem(tokenKey);if(/^[A-Za-z0-9_-]{43}$/.test(saved||''))token=saved;else if(saved)remember.removeItem(tokenKey)}catch{onStorageError('No se pudo leer la sesión de prueba guardada. Vuelve a ingresar.');}
+  const setToken=(next,{forceClear=false}={})=>{
+    const previous=token;
+    token=typeof next==='string'&&/^[A-Za-z0-9_-]{43}$/.test(next)?next:null;
+    try{
+      if(token)remember?.setItem(tokenKey,token);
+      else if(forceClear||remember?.getItem(tokenKey)===previous)remember?.removeItem(tokenKey);
+    }catch{onStorageError('No se pudo recordar la sesión de prueba. El acceso se conservará solo mientras esta pestaña esté abierta.');}
+  };
   const report=error=>{const failure=error?.storage?error:storageFailure(error);onStorageError(failure.message);return failure;};
   const serial=work=>{const run=()=>{if(closed)throw report(Error('La demo está cerrada'));return work()};const result=queue.then(()=>lockManager?.request?lockManager.request('scorta-demo:'+name,{mode:'exclusive'},run):run());queue=result.catch(()=>{});return result;};
   const transaction=(mode,run)=>new Promise((resolve,reject)=>{
@@ -99,8 +112,8 @@ export async function createPlatformDemoStore({indexedDBFactory=globalThis.index
       const result=await requestFactory(record.state,{...snapshotInput,token},{baseUrl,...(now===undefined?{}:{now})});
       // GETs that return the same immutable state need no write or transaction upgrade.
       if(result.state!==record.state&&!await compareAndSet(record.storageVersion,result.state))continue;
-      if(Object.hasOwn(result,'token'))token=result.token;
-      if(result.status===401&&snapshotInput.path!=='/api/v2/login')token=null;
+      if(Object.hasOwn(result,'token'))setToken(result.token);
+      if(result.status===401&&snapshotInput.path!=='/api/v2/login')setToken(null);
       return {status:result.status,body:structuredClone(result.body)};
     }
     return {status:409,body:{error:'La demo cambió en otra pestaña. Actualiza los datos y vuelve a intentar.'}};
@@ -108,7 +121,7 @@ export async function createPlatformDemoStore({indexedDBFactory=globalThis.index
   const reset=()=>serial(async()=>{
     const seed=await seedFactory();
     await transaction('readwrite',(records,done)=>{const get=records.get(RECORD_KEY);get.onsuccess=()=>{records.put({storageVersion:(get.result?.storageVersion||0)+1,state:seed},RECORD_KEY);done(true)}});
-    token=null;
+    setToken(null,{forceClear:true});
   });
   const exportData=()=>serial(async()=>publicExport((await read()).state));
   const loginAs=async role=>{

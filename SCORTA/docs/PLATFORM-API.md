@@ -48,3 +48,7 @@ Todas pueden incluir `requestId` (el cliente debe generarlo una vez por intento)
 Leer envelope actualizado tras cada acción. Soporte conserva identidad propietaria y motivo en auditoría; `usuario` visible en operaciones incluye `· Soporte`.
 
 - `sale.receipt`: `id:venta.id`, renueva el enlace compartible por 7 días para una venta autorizada; no modifica cobro ni existencias. Usar antes de compartir un comprobante antiguo.
+
+## Revisión de experiencia 2
+
+La sesión de plataforma tiene vigencia absoluta de 30 días (`PLATFORM_SESSION_TTL_MS`), con cookie HttpOnly/Secure en producción, y se conserva al reiniciar el proceso. Restaurar respaldos continúa revocando sesiones. Cada solicitud vuelve a validar usuario, rol y contrato. Los usuarios admiten `email` opcional y `emailVerified:false`; crear la empresa admite `adminEmail`. El bootstrap del propietario admite `SCORTA_OWNER_EMAIL`. Ninguno de estos campos envía correo ni acredita verificación: la recuperación automática, los avisos por WhatsApp y la aceptación contractual real siguen sin integrarse en esta revisión de interfaz.

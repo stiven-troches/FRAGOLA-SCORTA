@@ -2,7 +2,7 @@ import {DatabaseSync, backup} from 'node:sqlite';
 import {mkdirSync,existsSync,readFileSync,writeFileSync,rmSync,chmodSync,mkdtempSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createPlatform,platformRequest} from './platform.mjs';
+import {createPlatform,platformRequest,PLATFORM_SESSION_TTL_MS} from './platform.mjs';
 
 const COOKIE='scorta_platform';
 const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
@@ -19,7 +19,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState}
   try{
     const prior=db.prepare('SELECT data FROM platform WHERE id=1').get();
     if(!prior){const initial=await createPlatform({owner,ownerContact,legacyState});db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(initial));}
-    else{const state=JSON.parse(prior.data);state.sessions={};if(ownerContact)state.ownerContact=ownerContact;db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));}
+    else{const state=JSON.parse(prior.data);state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));}
     try{chmodSync(file,0o600);}catch{}
   }catch(error){db.close();rmSync(pidFile,{force:true});throw error;}
   let queue=Promise.resolve(),closed=false;
@@ -58,7 +58,7 @@ export function createPlatformHandler({store,production=false,publicUrl}={}){
       const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='));
       const token=match?.slice(COOKIE.length+1);
       const result=await store.request({method:req.method,path,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:req.socket.remoteAddress},{baseUrl:origin});
-      if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?28800:0));
+      if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
       json(res,result.status,result.body);return true;
     }catch(error){json(res,error.status||400,{error:error.message||'No se pudo completar la solicitud'});return true;}
