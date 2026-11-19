@@ -7,8 +7,8 @@ import {Readable} from 'node:stream';
 import {createPlatform,platformRequest} from '../platform.mjs';
 import {openPlatformStore,createPlatformHandler} from '../platform-server.mjs';
 
-const owner={company:'Fragola',username:'Steven',password:'OwnerPersistentFixture2026',email:'OWNER@EXAMPLE.COM'};
-const clientPassword='ClientPersistentFixture2026';
+const owner={company:'Fragola',username:'Steven',password:'OwnerPersistentFixture2026!',email:'OWNER@EXAMPLE.COM'};
+const clientPassword='ClientPersistentFixture2026!';
 const initial=Date.parse('2026-12-01T14:00:00Z');
 async function core(){let state=await createPlatform({owner});let token;return {get state(){return state},get token(){return token},async request(method,path,body,now=initial){const r=await platformRequest(state,{method,path,body,token},{now,baseUrl:'https://scorta.example'});state=r.state;if(Object.hasOwn(r,'token'))token=r.token;return r},setToken(value){token=value}}}
 async function createClient(f){assert.equal((await f.request('POST','/api/v2/login',owner)).status,200);const r=await f.request('POST','/api/v2/action',{type:'company.create',form:{name:'Empresa persistente',startDate:'2026-01-01',endDate:'2027-12-31',monthlyFee:100000,username:'admin',password:clientPassword,adminEmail:'ADMIN@EXAMPLE.COM'}});assert.equal(r.status,200);return r.body.companies[0]}

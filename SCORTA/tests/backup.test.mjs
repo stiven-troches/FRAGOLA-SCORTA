@@ -12,7 +12,7 @@ const sandbox=()=>mkdtempSync(join(tmpdir(),'scorta-recovery-test-'));
 test('online WAL snapshot restores inventory, users and retry protection via CLI',async()=>{
  const dir=sandbox();let store;
  try{
-  const source=join(dir,'source.sqlite');store=openStore(source);store.addUser('admin','contraseña-larga-segura','admin');
+  const source=join(dir,'source.sqlite');store=openStore(source);store.addUser('admin','Contraseña-larga-segura1','admin');
   const operation={kind:'producto',revision:0,requestId:'same-request',form:{nombre:'Casco',stock:4,precio_venta:100}};
   store.change(operation,'admin');
   const file=join(dir,'full.sqlite');writeFileSync(file,await store.fullBackup());
@@ -20,7 +20,7 @@ test('online WAL snapshot restores inventory, users and retry protection via CLI
   const targetDir=join(dir,'restored');
   const result=spawnSync(process.execPath,['restore.mjs',file,'--offline'],{cwd:new URL('..',import.meta.url),env:{...process.env,DATA_DIR:targetDir},encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);store=openStore(join(targetDir,'motoshop.sqlite'));
-  assert.equal(store.read().prods[0].stock,4);assert.equal(store.verifyUser('admin','contraseña-larga-segura').role,'admin');
+  assert.equal(store.read().prods[0].stock,4);assert.equal(store.verifyUser('admin','Contraseña-larga-segura1').role,'admin');
   assert.equal(store.change(operation,'admin').revision,1);assert.equal(store.read().prods.length,1);
  }finally{store?.close();rmSync(dir,{recursive:true,force:true})}
 });
@@ -40,7 +40,7 @@ test('restore rejects active database, requires offline acknowledgement and reta
 test('legacy JSON restores business state, keeps existing users, clears stale retry IDs',()=>{
  const dir=sandbox();let store;
  try{
-  const source=join(dir,'db.sqlite');store=openStore(source);store.addUser('admin','contraseña-larga-segura','admin');
+  const source=join(dir,'db.sqlite');store=openStore(source);store.addUser('admin','Contraseña-larga-segura1','admin');
   const state=store.read();store.change({kind:'producto',revision:0,requestId:'obsolete',form:{nombre:'Aceite',precio_venta:20}},'admin');store.close();store=null;
   const json=join(dir,'partial.json');writeFileSync(json,JSON.stringify(state));assert.equal(restoreBackup(json,{target:source,offline:true}).full,false);
   store=openStore(source);assert.equal(store.read().prods.length,0);assert.equal(store.listUsers().length,1);store.close();store=null;

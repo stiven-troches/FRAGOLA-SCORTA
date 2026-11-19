@@ -1,3 +1,4 @@
+import {passwordPolicyError} from './password-policy.mjs';
 import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 
@@ -22,15 +23,14 @@ const token = () => toBase64(crypto.getRandomValues(new Uint8Array(32))).replace
 const toBase64 = bytes => btoa(Array.from(bytes, v => String.fromCharCode(v)).join(''));
 const fromBase64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const hash = async value => toBase64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
-const checkPassword = v => {if (typeof v !== 'string' || v.length < 16 || v.length > 200) fail('La contraseña debe tener entre 16 y 200 caracteres'); return v;};
+const checkPassword = v => {const error=passwordPolicyError(v);if(error)fail(error,400,'INVALID_PASSWORD');return v;};
 async function passwordHash(password, salt = toBase64(crypto.getRandomValues(new Uint8Array(16)))) {
-  checkPassword(password);
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   const result = await crypto.subtle.deriveBits({name:'PBKDF2',salt:fromBase64(salt),iterations:120000,hash:'SHA-256'},key,256);
   return {salt,digest:toBase64(new Uint8Array(result)),iterations:120000,algorithm:'PBKDF2-SHA256'};
 }
 async function verifyPassword(user, password) {
-  if (typeof password !== 'string' || password.length < 16 || password.length > 200) return false;
+  if (typeof password !== 'string' || password.length < 1 || password.length > 200) return false;
   const actual = await passwordHash(password,user.password.salt);
   const a=fromBase64(actual.digest),b=fromBase64(user.password.digest);let different=a.length^b.length;
   for(let i=0;i<a.length;i++)different|=a[i]^(b[i]||0);
@@ -64,7 +64,7 @@ const businessAudit = (business,actor,action,details,now) => {business.auditoria
 async function makeUser(form, companyId, role, now) {
   const username=text(form.username,'Usuario',60);if(!/^[A-Za-z0-9._-]{3,60}$/.test(username))fail('Usuario: utiliza de 3 a 60 letras, números, puntos o guiones');
   if(!['owner','admin','vendedor'].includes(role))fail('Rol inválido');
-  return {id:id(),companyId,username,name:optionalText(form.name)||username,email:recoveryEmail(form.email),emailVerified:false,role,active:true,password:await passwordHash(form.password),passwordChangedAt:iso(now),createdAt:iso(now),version:1};
+  return {id:id(),companyId,username,name:optionalText(form.name)||username,email:recoveryEmail(form.email),emailVerified:false,role,active:true,password:await passwordHash(checkPassword(form.password)),passwordChangedAt:iso(now),createdAt:iso(now),version:1};
 }
 export async function createPlatform({owner: config,ownerContact='',legacyState}={}) {
   if(!config)fail('Configura el propietario de SCORTA',503,'SETUP_REQUIRED');
@@ -168,7 +168,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
     if(!['admin','vendedor'].includes(form.role))fail('Rol inválido');state.users.push(await makeUser(form,a.companyId,form.role,now));
   }else if(a.type==='user.update'||a.type==='user.reset'){
     const user=state.users.find(u=>u.id===a.userId&&u.role!=='owner');if(!user)fail('Usuario inexistente',404);
-    if(a.type==='user.reset'){user.password=await passwordHash(form.password);user.passwordChangedAt=iso(now);user.version++;}
+    if(a.type==='user.reset'){user.password=await passwordHash(checkPassword(form.password));user.passwordChangedAt=iso(now);user.version++;}
     else{const role=form.role??user.role,active=form.active??user.active;if(!['admin','vendedor'].includes(role)||typeof active!=='boolean')fail('Rol o estado inválido');if(user.role==='admin'&&user.active&&(role!=='admin'||!active)&&!state.users.some(u=>u.id!==user.id&&u.companyId===user.companyId&&u.role==='admin'&&u.active))fail('La empresa debe conservar al menos un administrador activo');if(form.name!=null)user.name=text(form.name,'Nombre');if(Object.hasOwn(form,'email')){const email=recoveryEmail(form.email);if(email!==user.email){user.email=email;user.emailVerified=false;}}if(role!==user.role||active!==user.active)user.version++;user.role=role;user.active=active;}
   }else if(a.type==='support.start'){
     owner(actor);company=companyFor(state,a.companyId);const reason=text(form.motivo,'Motivo de soporte',500);session.support={companyId:company.id,reason,startedAt:iso(now)};
@@ -270,7 +270,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     if(method==='POST'&&path==='/api/v2/password'){
       const user=state.users.find(u=>u.id===actor.id);if(!await verifyPassword(user,body.currentPassword))fail('La contraseña actual no es correcta');
-      if(body.newPassword===body.currentPassword)fail('Elige una contraseña diferente a la actual');user.password=await passwordHash(body.newPassword);user.passwordChangedAt=iso(now);user.version++;
+      if(body.newPassword===body.currentPassword)fail('Elige una contraseña diferente a la actual');user.password=await passwordHash(checkPassword(body.newPassword));user.passwordChangedAt=iso(now);user.version++;
       for(const [key,s]of Object.entries(state.sessions))if(s.userId===user.id)delete state.sessions[key];state.revision++;
       audit(state,actor,'password.change',actor.companyId,{documento:actor.id},now);return response(200,{ok:true},{token:null});
     }

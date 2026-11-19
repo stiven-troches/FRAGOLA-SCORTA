@@ -12,7 +12,7 @@ tokens en localStorage. Reiniciar el servidor cierra todas las sesiones.
 
 Entrar utiliza `POST /api/login`; salir, `POST /api/logout`. Cerrar sesión
 invalida la cookie en el servidor. `POST /api/password` exige la contraseña
-actual y una nueva de entre 16 y 200 caracteres, y cierra todas las sesiones
+actual y una nueva de entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo, y cierra todas las sesiones
 de ese usuario. La aplicación solicita entrar de nuevo tras cambiarla.
 
 Si vence la sesión durante una operación o un formulario sin guardar, la

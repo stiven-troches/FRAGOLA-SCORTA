@@ -26,7 +26,7 @@ Esta iteración implementa el alcance A01–A32 en `SCORTA/`. Los archivos de PR
 
 ## Dos destinos de ejecución
 
-**Servidor real:** `platform.mjs` y `platform-server.mjs` utilizan la base `platform.sqlite` en `DATA_DIR`. Los usuarios de una empresa comparten su información mediante ese servidor. Su primer propietario se configura con variables privadas y una contraseña de 16–200 caracteres. Las rutas anteriores quedan bloqueadas cuando se activa la plataforma para evitar saltarse el aislamiento.
+**Servidor real:** `platform.mjs` y `platform-server.mjs` utilizan la base `platform.sqlite` en `DATA_DIR`. Los usuarios de una empresa comparten su información mediante ese servidor. Su primer propietario se configura con variables privadas y una contraseña de 8–200 caracteres, con número, mayúscula, minúscula y símbolo. Las rutas anteriores quedan bloqueadas cuando se activa la plataforma para evitar saltarse el aislamiento.
 
 La preparación preserva `motoshop.sqlite` y copia el inventario anterior a Almacén principal si corresponde. Las cuentas anteriores deben recrearse o restablecerse desde el propietario. Los comandos de copia/restauración anteriores no equivalen al respaldo de todas las nuevas empresas; utilizar `platform-backup.mjs` como indica la guía.
 

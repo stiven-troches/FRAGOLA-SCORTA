@@ -1,3 +1,4 @@
+import {passwordPolicyError} from './password-policy.mjs';
 import {createHash, randomBytes} from 'node:crypto';
 
 const COOKIE = 'scorta_session';
@@ -99,9 +100,8 @@ export function createAuth({store, production = false, allowLocal = false,
           !store.verifyUser(actor.username, body.currentPassword)) {
         return json(res, 400, {error: 'La contraseña actual no es correcta'});
       }
-      if (typeof body.newPassword !== 'string' || body.newPassword.length < 16 || body.newPassword.length > 200) {
-        return json(res, 400, {error: 'La nueva contraseña debe tener entre 16 y 200 caracteres'});
-      }
+      const policyError=passwordPolicyError(body.newPassword);
+      if(policyError)return json(res,400,{error:policyError});
       if (body.newPassword === body.currentPassword) return json(res, 400, {error: 'Elige una contraseña diferente a la actual'});
       try { store.setUserPassword(actor.username, body.newPassword); }
       catch { return json(res, 400, {error: 'No se pudo cambiar la contraseña. Revisa los datos.'}); }

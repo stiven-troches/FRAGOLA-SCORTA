@@ -1,3 +1,4 @@
+import {passwordPolicyError} from './password-policy.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 import {mkdirSync,readFileSync,existsSync} from 'node:fs';
@@ -15,9 +16,9 @@ export function openStore(file){
  const empty=estadoVacio();
  db.prepare('INSERT OR IGNORE INTO app VALUES(1,?)').run(JSON.stringify(empty));
  const read=()=>JSON.parse(db.prepare('SELECT data FROM app WHERE id=1').get().data);
- function addUser(username,password,role){if(!listUsers().length&&role!=='admin')throw Error('La primera cuenta debe ser administradora para poder gestionar el almacén. Selecciona Administrador.');if(!/^[a-zA-Z0-9._-]{3,60}$/.test(username)||!['admin','operador'].includes(role)||typeof password!=='string'||password.length<16||password.length>200)throw Error('Usuario, rol o contraseña inválidos (mínimo 16 caracteres)');const salt=randomBytes(16).toString('hex'),digest=scryptSync(password,salt,64).toString('hex');db.prepare('INSERT INTO users(username,role,salt,digest) VALUES(?,?,?,?)').run(username,role,salt,digest)}
+ function addUser(username,password,role){if(!listUsers().length&&role!=='admin')throw Error('La primera cuenta debe ser administradora para poder gestionar el almacén. Selecciona Administrador.');if(!/^[a-zA-Z0-9._-]{3,60}$/.test(username)||!['admin','operador'].includes(role))throw Error('Usuario o rol inválidos');const policyError=passwordPolicyError(password);if(policyError)throw Error(policyError);const salt=randomBytes(16).toString('hex'),digest=scryptSync(password,salt,64).toString('hex');db.prepare('INSERT INTO users(username,role,salt,digest) VALUES(?,?,?,?)').run(username,role,salt,digest)}
  function verifyUser(username,password){const u=db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);if(!u)return null;const actual=scryptSync(password,u.salt,64), expected=Buffer.from(u.digest,'hex');return timingSafeEqual(actual,expected)?{username:u.username,role:u.role}:null}
- function setUserPassword(username,password){if(typeof password!=='string'||password.length<16||password.length>200)throw Error('La contraseña debe tener entre 16 y 200 caracteres');const salt=randomBytes(16).toString('hex'),digest=scryptSync(password,salt,64).toString('hex');const result=db.prepare('UPDATE users SET salt=?, digest=? WHERE username=? AND active=1').run(salt,digest,username);if(!result.changes)throw Error('Usuario inexistente');}
+ function setUserPassword(username,password){const policyError=passwordPolicyError(password);if(policyError)throw Error(policyError);const salt=randomBytes(16).toString('hex'),digest=scryptSync(password,salt,64).toString('hex');const result=db.prepare('UPDATE users SET salt=?, digest=? WHERE username=? AND active=1').run(salt,digest,username);if(!result.changes)throw Error('Usuario inexistente');}
  function listUsers(){return db.prepare('SELECT username,role,active FROM users ORDER BY username').all()}
  function change(a,actor='local') {
   db.exec('BEGIN IMMEDIATE');
@@ -48,7 +49,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const handlePlatform=createPlatformHandler({store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL});
  const bootstrap=process.env.SCORTA_ADMIN_PASSWORD;
  if(!store.listUsers().length&&bootstrap){store.addUser(process.env.SCORTA_ADMIN_USER||'admin',bootstrap,'admin')}
- if(process.env.NODE_ENV==='production'&&!platformStore&&!store.listUsers().length)throw Error('Configura SCORTA_ADMIN_PASSWORD con al menos 16 caracteres para crear el primer administrador');
+ if(process.env.NODE_ENV==='production'&&!platformStore&&!store.listUsers().length)throw Error('Configura SCORTA_ADMIN_PASSWORD con 8 o más caracteres, número, mayúscula, minúscula y símbolo para crear el primer administrador');
  const production=process.env.NODE_ENV==='production';
  const auth=createAuth({store,production,allowLocal:!production});
  const server=createServer(async(req,res)=>{

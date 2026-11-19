@@ -10,7 +10,7 @@ import {once} from 'node:events';
 test('sesiones, permisos y ventas por HTTP', {timeout:20000}, async t=>{
  const dir=mkdtempSync(join(tmpdir(),'scorta-http-'));
  const port=19382, base=`http://127.0.0.1:${port}`, origin=`https://127.0.0.1:${port}`;
- const password='UnaClaveSeguraDePrueba123';
+ const password='UnaClaveSeguraDePrueba123!';
  const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,NODE_ENV:'production',SCORTA_ADMIN_PASSWORD:password}});
  let stderr='';child.stderr.on('data',chunk=>{stderr+=chunk});
  try {
@@ -34,8 +34,8 @@ test('sesiones, permisos y ventas por HTTP', {timeout:20000}, async t=>{
    assert.equal((await request('/api/logout',{cookie:admin,body:{},headers:{'Content-Type':'text/plain'}})).status,415);
   });
   await t.test('operador no crea productos, consulta usuarios ni respalda datos',async()=>{
-   const r=await request('/api/users',{cookie:admin,body:{username:'cajero',password:'SeguraParaCajero12345',role:'operador'}});assert.equal(r.status,200);
-   operator=await login('cajero','SeguraParaCajero12345');
+   const r=await request('/api/users',{cookie:admin,body:{username:'cajero',password:'SeguraParaCajero12345!',role:'operador'}});assert.equal(r.status,200);
+   operator=await login('cajero','SeguraParaCajero12345!');
    for(const path of ['/api/users','/api/backup'])assert.equal((await request(path,{cookie:operator})).status,403);
    const before=await (await request('/api/state',{cookie:admin})).json();
    for(const kind of ['producto','compra','ajuste','eliminar','importar','reversion'])assert.equal((await request('/api/change',{cookie:operator,body:{kind,revision:before.revision,form:{}}})).status,403);
@@ -56,7 +56,7 @@ test('sesiones, permisos y ventas por HTTP', {timeout:20000}, async t=>{
    assert.equal((await request('/api/state',{cookie:operator})).status,401);
   });
   await t.test('cambiar contraseña invalida todas las sesiones del usuario',async()=>{
-   const second=await login('admin',password),newPassword='OtraClaveNuevaSegura12345';
+   const second=await login('admin',password),newPassword='OtraClaveNuevaSegura12345!';
    let r=await request('/api/password',{cookie:admin,body:{currentPassword:'incorrecta',newPassword}});assert.notEqual(r.status,200);
    r=await request('/api/password',{cookie:admin,body:{currentPassword:password,newPassword}});assert.equal(r.status,200);
    for(const cookie of [admin,second])assert.equal((await request('/api/session',{cookie})).status,401);

@@ -22,7 +22,7 @@ Abrir `http://127.0.0.1:4173` y mantener el comando activo mientras se utiliza l
 
 La franja **Demo · Datos ficticios** ofrece **Propietario**, **Administrador** y **Vendedor**. La sección **Datos de prueba** muestra empresa, usuario y contraseña de cada cuenta ficticia para probar también el login manual.
 
-Estas contraseñas son públicas y exclusivas de la demostración. No son la contraseña privada solicitada por el propietario ni deben reutilizarse en una instalación real. El servidor real crea su primer propietario desde `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER` y una `SCORTA_OWNER_PASSWORD` privada de 16–200 caracteres; consultar [LEEME.md](../LEEME.md).
+Estas contraseñas son públicas y exclusivas de la demostración. No son la contraseña privada solicitada por el propietario ni deben reutilizarse en una instalación real. El servidor real crea su primer propietario desde `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER` y una `SCORTA_OWNER_PASSWORD` privada de 8–200 caracteres, con número, mayúscula, minúscula y símbolo; consultar [LEEME.md](../LEEME.md).
 
 ## Recorridos sugeridos
 

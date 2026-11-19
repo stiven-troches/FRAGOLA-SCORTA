@@ -7,7 +7,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {openPlatformStore,createPlatformHandler,validatePlatformDatabase} from '../platform-server.mjs';
 import {savePlatformBackup,restorePlatformBackup} from '../platform-backup.mjs';
-const password='OwnerPlatformFixture123456';
+const password='OwnerPlatformFixture123456!';
 const owner={company:'Fragola',username:'Steven',password};
 
 async function fixture(t){const dir=mkdtempSync(join(tmpdir(),'scorta-platform-sqlite-')),file=join(dir,'platform.sqlite');let store=await openPlatformStore(file,{owner});t.after(()=>{try{store.close();}catch{}rmSync(dir,{recursive:true,force:true});});return {dir,file,get store(){return store},reopen:async()=>{store.close();store=await openPlatformStore(file);return store;}};}
@@ -15,7 +15,7 @@ async function login(store){const result=await store.request({method:'POST',path
 
 test('SQLite de plataforma conserva empresas y sesión al reiniciar sin exponer la contraseña',async t=>{
  const f=await fixture(t),token=await login(f.store);
- const created=await f.store.request({method:'POST',path:'/api/v2/action',token,body:{type:'company.create',requestId:'create-fixture',form:{name:'Moto Fixture',startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:50000,username:'adminfixture',password:'ClientPlatformFixture12345'}}});
+ const created=await f.store.request({method:'POST',path:'/api/v2/action',token,body:{type:'company.create',requestId:'create-fixture',form:{name:'Moto Fixture',startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:50000,username:'adminfixture',password:'ClientPlatformFixture12345!'}}});
  assert.equal(created.status,200);assert.equal(created.body.companies.length,1);
  assert.ok(!JSON.stringify(f.store.readPrivate()).includes(password));
  assert.ok(!JSON.stringify(created.body).includes('digest'));

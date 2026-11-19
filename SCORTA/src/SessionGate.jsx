@@ -1,3 +1,4 @@
+import {PASSWORD_MIN_LENGTH,PASSWORD_PATTERN,PASSWORD_HELP} from '../password-policy.mjs';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 async function request(path, data) {
@@ -51,10 +52,10 @@ function PasswordDialog({onClose, onChanged, onExpired}) {
         <label htmlFor="password-current">Contraseña actual</label>
         <input id="password-current" type="password" autoComplete="current-password" value={form.currentPassword} required maxLength={200} disabled={busy} onChange={e => setForm({...form, currentPassword: e.target.value})}/>
         <label htmlFor="password-new">Nueva contraseña</label>
-        <input id="password-new" type="password" autoComplete="new-password" value={form.newPassword} required minLength={16} maxLength={200} disabled={busy} aria-describedby="password-help" onChange={e => setForm({...form, newPassword: e.target.value})}/>
-        <p id="password-help" className="session-help">Usa entre 16 y 200 caracteres. Puedes utilizar una frase larga.</p>
+        <input id="password-new" type="password" autoComplete="new-password" value={form.newPassword} required minLength={PASSWORD_MIN_LENGTH} pattern={PASSWORD_PATTERN} title={PASSWORD_HELP} maxLength={200} disabled={busy} aria-describedby="password-help" onChange={e => setForm({...form, newPassword: e.target.value})}/>
+        <p id="password-help" className="session-help">{PASSWORD_HELP}</p>
         <label htmlFor="password-confirmation">Confirmar nueva contraseña</label>
-        <input id="password-confirmation" type="password" autoComplete="new-password" value={form.confirmation} required minLength={16} maxLength={200} disabled={busy} onChange={e => setForm({...form, confirmation: e.target.value})}/>
+        <input id="password-confirmation" type="password" autoComplete="new-password" value={form.confirmation} required minLength={PASSWORD_MIN_LENGTH} pattern={PASSWORD_PATTERN} title={PASSWORD_HELP} maxLength={200} disabled={busy} onChange={e => setForm({...form, confirmation: e.target.value})}/>
         {error && <p className="session-error" role="alert">{error}</p>}
         <div className="session-actions">
           <button className="btn btn-secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button>

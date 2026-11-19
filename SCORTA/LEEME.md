@@ -25,7 +25,7 @@ npm ci
 npm run build
 ```
 
-Copiar `.env.example` a `.env` y completar `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER`, `SCORTA_OWNER_NAME`, `SCORTA_OWNER_PASSWORD` y opcionalmente `SCORTA_OWNER_CONTACT` y `SCORTA_OWNER_EMAIL`. `npm start` carga ese archivo privado; también se pueden configurar las variables en el entorno del proceso. La contraseña debe tener entre 16 y 200 caracteres. No escribirla en comandos compartidos, código ni GitHub. `SCORTA_PUBLIC_URL` debe contener el origen HTTPS definitivo en producción. `DATA_DIR` indica el directorio persistente.
+Copiar `.env.example` a `.env` y completar `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER`, `SCORTA_OWNER_NAME`, `SCORTA_OWNER_PASSWORD` y opcionalmente `SCORTA_OWNER_CONTACT` y `SCORTA_OWNER_EMAIL`. `npm start` carga ese archivo privado; también se pueden configurar las variables en el entorno del proceso. La contraseña debe tener entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo. No escribirla en comandos compartidos, código ni GitHub. `SCORTA_PUBLIC_URL` debe contener el origen HTTPS definitivo en producción. `DATA_DIR` indica el directorio persistente.
 
 Después ejecutar `npm start`. Desde el ingreso, utilizar la empresa y usuario configurados. La credencial inicial solo crea al propietario en una base nueva: cambiar la variable no reemplaza su contraseña existente. «Mi perfil» permite cambiarla indicando la actual.
 

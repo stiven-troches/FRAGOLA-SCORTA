@@ -176,3 +176,13 @@ Aprobada por el propietario. Implementación e integración: Coordinación (fron
 | Logo transparente original | PNG RGBA 1122×1402 recibido en ZIP; sustituido íntegro sin redibujar, cambiar colores ni tipografía. Es raster con transparencia, no SVG. |
 
 Las últimas ediciones se guardan tras 400 ms de pausa. «Venta pendiente guardada» confirma la persistencia. Al ocultar/cerrar la página se intenta completar el guardado; sin conexión se avisa y se debe reintentar antes de cerrar. Los borradores no reservan existencias. Dos pestañas no se sobrescriben: ante un conflicto hay que cargar expresamente la versión guardada. El cobro guarda primero su identificador de reintento; venta y limpieza de borrador se confirman juntas.
+
+## Regla de contraseñas · actualización aprobada
+
+Mínimo 8 y máximo 200 caracteres, con al menos un número, una mayúscula, una minúscula y un símbolo. Implementado en creación de empresas/usuarios, restablecimiento por propietario y cambio de clave propio; formularios, ayuda y backend comparten la regla. El login verifica los hashes existentes sin exigir retroactivamente la nueva composición. El cifrado/hash, límites de intentos y revocación de sesiones se conservan.
+
+La empresa solicitada JE Accesorios y Repuestos continúa pendiente de una contraseña válida. Ficha acordada: Jhoan Monsalve, usuario joan, 30 días de prueba y mensualidad posterior de 80.000 COP. La clave numérica indicada no cumple la composición aprobada. No se creó una cuenta con otra contraseña ni se publicaron credenciales del cliente.
+
+Los cambios de jerarquía de marca (empresa protagonista y SCORTA discreto), Nueva venta simplificada, igualdad de pantallas de operación para administrador/vendedor y ticket compacto con logo de empresa están anotados, todavía sin ejecutar. Esta actualización solo modifica la regla de contraseñas.
+
+Validación de la regla: 99/99 pruebas Node aprobadas, incluidas longitud/composición, creación/restablecimiento/cambio y acceso con hash anterior. Compilaciones de aplicación y demo aprobadas. Revisión visual pendiente.

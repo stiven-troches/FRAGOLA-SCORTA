@@ -1,9 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPlatform,platformRequest} from '../platform.mjs';
-const password='HardeningOwnerFixture12345';
+const password='HardeningOwnerFixture12345!';
 async function fixture(){let state=await createPlatform({owner:{company:'Fragola',username:'Steven',password}}),token;const call=async(type,extra={})=>{const result=await platformRequest(state,{method:'POST',path:'/api/v2/action',token,body:{type,...extra}},{now:'2026-11-19T15:00:00Z',baseUrl:'https://scorta.example'});state=result.state;return result;};const signed=await platformRequest(state,{method:'POST',path:'/api/v2/login',body:{company:'Fragola',username:'Steven',password}},{now:'2026-11-19T15:00:00Z'});state=signed.state;token=signed.token;return {call,get state(){return state}};}
-async function company(f,name){const result=await f.call('company.create',{form:{name,startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:100,username:'administrador',password:'HardeningClientFixture12345'}});assert.equal(result.status,200);return result.body.companies.find(c=>c.name===name);}
+async function company(f,name){const result=await f.call('company.create',{form:{name,startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:100,username:'administrador',password:'HardeningClientFixture12345!'}});assert.equal(result.status,200);return result.body.companies.find(c=>c.name===name);}
 
 test('reutilizar un requestId en otra empresa durante soporte se rechaza y no informa éxito falso',async()=>{
  const f=await fixture(),a=await company(f,'Moto A'),b=await company(f,'Moto B');
