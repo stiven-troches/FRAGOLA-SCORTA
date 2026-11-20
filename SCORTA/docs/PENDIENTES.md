@@ -238,3 +238,16 @@ Ejecutado lo aprobado: Dashboard pasa a llamarse **Resumen general** en PC y men
 **Verificación:** 161/161 pruebas aprobadas sin omisiones, incluidas seis de cálculo, tres de API y siete de SSR. Compilaciones aplicación/demo correctas; diff limpio. GET /api/v2/overview exige administrador de su empresa o propietario en soporte y no modifica datos. Se conserva la consulta /api/v2/reports. Los accesos de Administración y Ver ventas permanecen; este último abre el mismo rango seleccionado.
 
 Pendientes: revisión conjunta en dispositivos/impresora reales y P05–P10. El entorno no tiene cua_repl.js, por lo que no se declara QA visual. Guion: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).
+
+## Revisión 8 · simplificación de Resumen general
+
+Ejecutados los ajustes solicitados. Sustituye los controles y bloques de interfaz descritos en revisión 7. Responsable: coordinación, implementación y verificación.
+
+- FECHA abre Desde/Hasta con FILTRAR y LIMPIAR; eliminados Hoy, Ayer, Esta semana y Este mes. Las ediciones son borrador hasta filtrar; fechas incompletas, imposibles o invertidas conservan el período aplicado y muestran un error. Escape/clic exterior cierran sin aplicar.
+- Inicio conserva mes actual hasta hoy. LIMPIAR elimina ambos límites y muestra todo el historial.
+- SIN VENTAS en Productos destacados, diez resultados iniciales y Ver más; eliminada la lista plegable aparte.
+- Retirados los cuatro textos indicados y toda la franja de ventas con ingreso neto, venta promedio, devoluciones y anulaciones.
+- Títulos y encabezados de tabla en mayúsculas, incluidas etiquetas del detalle móvil.
+- Cálculos financieros, permisos y correcciones históricas conservados.
+
+**Verificación:** 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan; diff sin errores. Incluye pruebas de borrador/aplicación/validación/limpieza, rango histórico y selección sin ventas. No hay herramienta de navegador disponible para QA visual. Pendientes: revisión conjunta en dispositivos/impresora reales y P05–P10; APIs externas y servidor definitivo conservan su alcance previo. Guion: [REVISION8-RESUMEN.md](REVISION8-RESUMEN.md).

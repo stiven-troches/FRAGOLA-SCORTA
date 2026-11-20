@@ -121,3 +121,7 @@ Los reportes por período separan neto de productos/mano de obra y margen de pro
 ## Resumen general · revisión 7
 
 La pestaña antes llamada Dashboard ahora es **Resumen general**. Permite ver cómo fue el negocio entre fechas: ventas netas de productos/mano de obra, unidades/servicios, detalle y rankings, con ganancia total de productos y margen agregado al final. Se usan costos históricos y correcciones del período por fecha original de venta. La mano de obra permanece como ingreso separado; costos faltantes no se suponen cero. Resumen general → Administración conserva los cierres, reportes, reposición y mecánicos. Consulte [REVISION7-RESUMEN.md](docs/REVISION7-RESUMEN.md).
+
+### Revisión 8 · interfaz compacta
+
+FECHA es el único filtro de fechas: abre Desde/Hasta, FILTRAR confirma el rango y LIMPIAR muestra todo el historial. Abre inicialmente el mes actual hasta hoy. Productos destacados incluye SIN VENTAS, sin lista separada. Se retiran los textos y la franja de indicadores secundarios indicados; títulos y encabezados quedan en mayúsculas. Los cálculos de neto y ganancia histórica no cambian. Guion vigente: [REVISION8-RESUMEN.md](docs/REVISION8-RESUMEN.md).

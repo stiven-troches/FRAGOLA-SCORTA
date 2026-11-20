@@ -83,4 +83,8 @@ Los cierres concilian ventas netas por la fecha original de venta y el medio de 
 
 ## Revisión 7 · Resumen general
 
-Dashboard se renombra a **Resumen general**. Filtra Desde/Hasta con Hoy, Ayer, Esta semana o Este mes; abre el mes actual. Muestra ventas/productos/mano de obra, qué se vendió, rankings y ganancia total de productos al final, con costos históricos y devoluciones. La lista sin ventas netas corresponde al catálogo actual. Las herramientas previas están en Resumen general → Administración. Ver ventas usa el mismo rango. No se necesita Reiniciar demo. Guion y límites: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).
+Dashboard se renombra a **Resumen general**. Abre con el mes actual. FECHA despliega Desde/Hasta; FILTRAR aplica el rango y LIMPIAR muestra todo el historial, sin atajos. Muestra ventas/productos/mano de obra, qué se vendió, rankings y ganancia total de productos al final, con costos históricos y devoluciones. SIN VENTAS se consulta en el selector de Productos destacados y corresponde al catálogo actual, sin un bloque separado. Las herramientas previas están en Resumen general → Administración. Ver ventas usa el mismo rango. No se necesita Reiniciar demo. Guion y límites: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).
+
+## Revisión 8 · pantalla simplificada
+
+Títulos y encabezados en mayúsculas. Se retiran los cuatro textos explicativos indicados y la franja de ventas con ingreso neto, promedio, devoluciones y anulaciones. Los cálculos históricos y el tratamiento de correcciones se conservan. 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan. Ver [REVISION8-RESUMEN.md](REVISION8-RESUMEN.md). Recargar el demo conserva los datos; no usar Reiniciar demo.
