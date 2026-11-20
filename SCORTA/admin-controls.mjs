@@ -7,17 +7,19 @@ const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value
 const amount=(value,label)=>{if(value==null||value===''||!['string','number'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>1e12)fail(`${label}: indica un importe entre 0 y 1.000.000.000.000.`);return Number(value)};
 const methods=['efectivo','transferencia','tarjeta'];
 const rounded=value=>Math.round((Number(value)+Number.EPSILON)*100)/100;
+const percentage=value=>{if(value==null||String(value).trim()===''||!['string','number'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>100||Math.abs(Math.round(Number(value)*100)-Number(value)*100)>1e-8)fail('Indica el porcentaje del mecánico entre 0 y 100, con hasta dos decimales.');return Number(value)};
 
 /** Public selector data never includes inactive staff or administrative metadata. */
 export function activeMechanics(business){return (business.mechanics||[]).filter(item=>item.active!==false).map(({id,name})=>({id,name}))}
 
 /** A sale keeps the mechanic's historical display name even after catalog edits. */
 export function mechanicForLabor(business,line){
-  if(!Object.hasOwn(line||{},'mecanicoId')||line.mecanicoId==null||line.mecanicoId==='')return null;
+  if(!line?.mecanicoId)fail('Selecciona un mecánico registrado y activo.',400,'INVALID_MECHANIC');
   if(typeof line.mecanicoId!=='string'||line.mecanicoId.length>100)fail('Selecciona un mecánico válido.');
   const selected=(business.mechanics||[]).find(item=>item.id===line.mecanicoId&&item.active!==false);
   if(!selected)fail('El mecánico seleccionado no está activo o no pertenece a esta empresa.',400,'INVALID_MECHANIC');
-  return {mecanicoId:selected.id,mecanico:selected.name};
+  if(selected.percentage==null)fail('El administrador debe asignar el porcentaje de este mecánico antes de registrar el servicio.',400,'MECHANIC_PERCENTAGE_REQUIRED');
+  return {mecanicoId:selected.id,mecanico:selected.name,mecanicoPorcentaje:percentage(selected.percentage)};
 }
 
 export function applyAdminControl(business,actor,action,{now,today}){
@@ -28,7 +30,7 @@ export function applyAdminControl(business,actor,action,{now,today}){
     if(action.type==='mechanic.create'){
       const nextName=name(form.name);
       if(records.some(item=>normalize(item.name)===normalize(nextName)))fail('Ya existe un mecánico con ese nombre. Puedes editarlo o volver a activarlo.');
-      const record={id:crypto.randomUUID(),name:nextName,active:true,createdAt:at,updatedAt:at};
+      const record={id:crypto.randomUUID(),name:nextName,percentage:percentage(form.percentage),active:true,createdAt:at,updatedAt:at};
       business.mechanics=[...records,record];business.revision++;
       return {id:record.id,before:null,after:structuredClone(record)};
     }
@@ -39,7 +41,8 @@ export function applyAdminControl(business,actor,action,{now,today}){
       const active=Object.hasOwn(form,'active')?form.active:record.active!==false;
       if(typeof active!=='boolean')fail('Indica si el mecánico está activo.');
       if(records.some(item=>item.id!==record.id&&normalize(item.name)===normalize(nextName)))fail('Ya existe otro mecánico con ese nombre.');
-      Object.assign(record,{name:nextName,active,updatedAt:at});
+      const nextPercentage=Object.hasOwn(form,'percentage')?percentage(form.percentage):record.percentage;
+      Object.assign(record,{name:nextName,active,...(nextPercentage!=null?{percentage:nextPercentage}:{}),updatedAt:at});
     }else if(action.type==='mechanic.archive')Object.assign(record,{active:false,updatedAt:at});
     else fail('Operación de mecánicos desconocida.',404,'NOT_FOUND');
     business.revision++;

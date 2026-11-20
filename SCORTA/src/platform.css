@@ -3,3 +3,5 @@
 .sp-primary,.sp-login-card .sp-primary{color:#080808;background:var(--brand-yellow,#f4cf32);border-color:var(--brand-yellow,#f4cf32)}.sp-primary:hover,.sp-login-card .sp-primary:hover{background:var(--brand-yellow-hover,#e0ba20)}.sp-secondary{color:#171717}.sp-login-link{display:block;width:100%;background:transparent;border:0;color:#f4cf32;text-decoration:underline;text-underline-offset:4px;font-size:.9375rem;margin-top:12px;min-height:44px}.sp-legal-link{color:#d8d8d8;font-size:.875rem;margin-top:0}.sp-profile-legal{display:block;background:transparent;color:#333;border:0;text-decoration:underline;text-underline-offset:4px;margin-top:20px;padding:0;min-height:44px}.sp-recovery h3{font-size:1.15rem;margin:0 0 12px}.sp-recovery .sp-muted{margin-top:18px}.sp-recovery .sp-profile-data form{gap:14px}.sp-login-card .sp-brand{color:white}.sp-login-card>.scorta-brand{color:white}
 
 .sp-email-state{display:block;color:#626262;margin-top:5px;font-size:.875rem}
+
+h1,h2,h3,h4,h5,h6,thead th{text-transform:uppercase}

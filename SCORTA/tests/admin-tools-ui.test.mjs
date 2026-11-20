@@ -11,7 +11,7 @@ const root=resolve(new URL('..',import.meta.url).pathname),date=new Intl.DateTim
 let directory,components;
 before(async()=>{
  mkdirSync(join(root,'test-results'),{recursive:true});directory=mkdtempSync(join(root,'test-results','admin-tools-ui-'));
- const entry=join(directory,'entry.mjs');writeFileSync(entry,`export {default as AdminTools,mechanicActivity} from ${JSON.stringify(join(root,'src/AdminTools.jsx'))};`);
+ const entry=join(directory,'entry.mjs');writeFileSync(entry,`export {default as AdminTools,mechanicActivity} from ${JSON.stringify(join(root,'src/AdminTools.jsx'))}; export {default as LaborTable} from ${JSON.stringify(join(root,'src/LaborTable.jsx'))}; export {default as PurchaseExcel} from ${JSON.stringify(join(root,'src/PurchaseExcel.jsx'))};`);
  const result=await build({root,logLevel:'silent',build:{ssr:entry,write:false,minify:false}}),output=Array.isArray(result)?result[0].output:result.output,chunk=output.find(item=>item.type==='chunk'&&item.isEntry);
  assert.ok(chunk);const module=join(directory,'compiled.mjs');writeFileSync(module,chunk.code);components=await import(pathToFileURL(module).href);
 });
@@ -20,8 +20,8 @@ const render=(view,state={},role='admin')=>renderToStaticMarkup(React.createElem
 
 test('SSR administrador: reportes identifican costos incompletos y no llaman utilidad a la mano de obra',()=>{
  const html=render('reports',{ventas:[{id:'v1',fecha:date,usuario:'Admin',cliente:'Cliente',paymentMethod:'efectivo',total:120,detalles:[{producto_id:'p1',nombre:'Aceite',cantidad:1,precio_unitario:100}],labor:[{descripcion:'Cambio',mecanico:'Ana',importe:20}]}]});
- assert.match(html,/role="dialog"/);assert.match(html,/Ventas netas/);assert.match(html,/Margen de productos/);assert.match(html,/Sin costo completo/);assert.match(html,/la mano de obra es ingreso, no utilidad calculada/);assert.match(html,/Descargar CSV/);
- const seller=render('reports',{},'vendedor');assert.match(seller,/disponible para el administrador/);assert.doesNotMatch(seller,/Descargar CSV/);
+ assert.match(html,/role="dialog"/);assert.match(html,/VENTAS NETAS/);assert.match(html,/GANANCIA EN PRODUCTOS/);assert.match(html,/Sin costo completo/);assert.match(html,/Reparto pendiente/);assert.match(html,/DESCARGAR EXCEL/);
+ const seller=render('reports',{},'vendedor');assert.match(seller,/disponible para el administrador/);assert.doesNotMatch(seller,/DESCARGAR EXCEL/);
 });
 
 test('SSR cierre: conserva snapshot inmutable y avisa cambios por medio de pago aun con total idéntico',()=>{
@@ -31,18 +31,31 @@ test('SSR cierre: conserva snapshot inmutable y avisa cambios por medio de pago 
 
 test('SSR reposición: agotados y mínimos claros, sugerencias sin compra automática',()=>{
  const html=render('replenishment',{prods:[{id:'p1',nombre:'Agotado',stock:0,stock_minimo:2,precio_compra:5,precio_venta:10},{id:'p2',nombre:'En mínimo',stock:3,stock_minimo:3,precio_compra:5,precio_venta:10},{id:'p3',nombre:'Suficiente',stock:5,stock_minimo:3,precio_compra:5,precio_venta:10}]});
- assert.match(html,/at-stock-agotado/);assert.match(html,/at-stock-minimo/);assert.match(html,/Compra sugerida/);assert.doesNotMatch(html,/Suficiente/);assert.match(html,/no registra una compra ni cambia las existencias/);
+ assert.match(html,/at-stock-agotado/);assert.match(html,/at-stock-minimo/);assert.doesNotMatch(html,/Compra sugerida|Unidades sugeridas|Buscar producto|no registra una compra ni cambia las existencias|sugerencia|Suficiente/);assert.match(html,/DESCARGAR EXCEL/);
 });
 
 test('mecánicos: solo ventas, historial por ID y devoluciones ambiguas sin reparto ficticio',()=>{
  const business={ventas:[{id:'v1',fecha:date,total:50,labor:[{mecanicoId:'m1',mecanico:'Nombre anterior',importe:30},{mecanicoId:'m2',mecanico:'Otro',importe:20}],laborRefund:10}],servs:[{fecha:date,mecanico:'Nombre anterior',costo_mano_obra:50}]};
  const activity=components.mechanicActivity(business,{id:'m1',name:'Nuevo nombre'},{from:date,to:date});assert.equal(activity.jobs,1);assert.equal(activity.amount,null);assert.equal(activity.allocationComplete,false);
- const html=render('mechanics',{...business,mechanics:[{id:'m1',name:'Nuevo nombre',active:true}]});assert.match(html,/Devolución sin desglose/);assert.match(html,/no representan el pago al mecánico/);assert.match(html,/Desactivar/);assert.match(html,/Agregar mecánico/);
+ const html=render('mechanics',{...business,mechanics:[{id:'m1',name:'Nuevo nombre',active:true}]});assert.match(html,/Devolución sin desglose/);assert.doesNotMatch(html,/no representan el pago al mecánico/);assert.match(html,/PORCENTAJE DEL MECÁNICO/);assert.match(html,/Ver trabajos/);assert.match(html,/Desactivar/);assert.match(html,/Agregar mecánico/);
 });
 
 
-test('SSR mecánicos: conserva cobros históricos de nombres sin asociación sin inventar un catálogo',()=>{
+test('SSR mecánicos: oculta históricos sin asociación sin borrar documentos',()=>{
  const state={mechanics:[{id:'m1',name:'Nombre nuevo',active:true}],ventas:[{id:'v1',fecha:date,total:30000,labor:[{mecanico:'Nombre anterior sin ID',importe:30000}]}]};
  const html=render('mechanics',state);
- assert.match(html,/Históricos sin asociación a la lista/);assert.match(html,/Nombre anterior sin ID/);assert.match(html,/sin asignarlos automáticamente/);assert.equal(state.mechanics.length,1);
+ assert.doesNotMatch(html,/Históricos sin asociación a la lista|Nombre anterior sin ID|sin asignarlos automáticamente/);assert.equal(state.mechanics.length,1);assert.equal(state.ventas[0].labor[0].mecanico,'Nombre anterior sin ID');
+});
+
+
+test('SSR detalle de mecánico: lista compacta de trabajos, placa y reparto, con Excel y Ver más',()=>{
+ const rows=Array.from({length:20},(_,i)=>({id:'work-'+i,date,plate:'ABC12D',customer:'Cliente',description:'Trabajo '+i,mechanic:'Ana',status:'Vigente',net:10000,percentage:60,mechanicAmount:6000,businessAmount:4000}));
+ const html=renderToStaticMarkup(React.createElement(components.LaborTable,{rows,from:date,to:date,title:'TRABAJOS DE ANA'}));
+ assert.match(html,/TRABAJOS DE ANA/);assert.match(html,/ABC12D/);assert.match(html,/6\.000/);assert.match(html,/4\.000/);assert.match(html,/60 %/);
+ assert.match(html,/DESCARGAR EXCEL/);assert.match(html,/Ver más trabajos/);assert.equal((html.match(/<tr>/g)||[]).length,11);
+});
+
+test('SSR compra Excel: plantilla y carga explícita separadas de la confirmación de inventario',()=>{
+ const html=renderToStaticMarkup(React.createElement(components.PurchaseExcel,{products:[{id:'p1',nombre:'Aceite'}],onApply(){}}));
+ assert.match(html,/DESCARGAR PLANTILLA EXCEL/);assert.match(html,/ARCHIVO EXCEL/);assert.match(html,/accept=".xlsx/);assert.match(html,/deben existir en Inventario/);assert.doesNotMatch(html,/type="submit"/);
 });

@@ -125,7 +125,7 @@ const schemas={
   sales:[['id','Documento'],['date','Fecha'],['seller','Vendedor'],['customer','Cliente'],['plate','Placa'],['paymentMethod','Medio de pago'],['status','Estado'],['gross','Venta original'],['returns','Devoluciones'],['cancellations','Anulaciones'],['net','Venta neta'],['products','Productos netos'],['labor','Mano de obra neta'],['productCost','Costo histórico productos'],['productMargin','Margen productos'],['marginComplete','Costo completo']],
   purchases:[['id','Documento'],['date','Fecha'],['supplier','Proveedor'],['user','Usuario'],['status','Estado'],['gross','Compra original'],['cancellations','Anulaciones'],['net','Compra neta']],
   inventory:[['id','Producto ID'],['name','Producto'],['reference','Referencia'],['category','Categoría'],['stock','Existencia actual'],['minimum','Mínimo'],['purchaseCost','Costo actual'],['salePrice','Precio venta'],['stockValue','Valor existencia actual']],
-  replenishment:[['id','Producto ID'],['name','Producto'],['reference','Referencia'],['category','Categoría'],['stock','Existencia actual'],['minimum','Mínimo'],['stockStatus','Estado'],['suggestedQty','Sugerencia para superar mínimo']]
+  replenishment:[['id','Producto ID'],['name','Producto'],['reference','Referencia'],['category','Categoría'],['stock','Existencia actual'],['minimum','Mínimo'],['stockStatus','Estado']]
 };
 export function csvCell(value){
   if(value===null||value===undefined)return '';
@@ -141,3 +141,5 @@ export function reportCSV(kind,report){
   for(const row of rows)lines.push(columns.map(([key])=>csvCell(row[key])).join(','));
   return '\ufeff'+lines.join('\r\n')+'\r\n';
 }
+
+export function reportColumns(kind){if(!schemas[kind])throw Error('Tipo de reporte no válido.');return schemas[kind].map(([key,label])=>[key,label.toLocaleUpperCase('es')]);}

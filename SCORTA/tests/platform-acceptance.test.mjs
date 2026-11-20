@@ -31,6 +31,8 @@ async function fixture({now = NOW} = {}) {
     success(result); assert.ok(tokens.get(actor)); return result.body;
   };
   const action = async (actor, input) => {
+    if(input.type==='sale.create'&&input.labor?.length){const actorData=await call(actor);input={...input,labor:input.labor.map(line=>({...line,mecanicoId:line.mecanicoId||actorData.body.state.mechanics.find(m=>m.name===line.mecanico)?.id}))};}
+
     const response = await call(actor, '/api/v2/action', {requestId: randomId(), ...input});
     success(response); return response.body;
   };
@@ -57,6 +59,7 @@ async function setupShop(f, {name = 'Moto Norte', seller = 'vendedor'} = {}) {
     form: {nombre: 'Pastillas de freno', referencia: 'FRE-01', categoria: 'Frenos', marca: 'QA',
       codigo_barras: '7700000000012', stock: 5, stock_minimo: 2,
       precio_compra: 18000, precio_venta: 34000}}});
+  for(const name of ['Carlos','Luis'])await f.action('admin',{type:'mechanic.create',form:{name,percentage:60}});
   return {company, product: data.state.prods.find(p => p.referencia === 'FRE-01')};
 }
 const sale = (product, extra = {}) => ({type: 'sale.create',

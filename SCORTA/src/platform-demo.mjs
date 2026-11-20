@@ -43,10 +43,14 @@ export async function createPlatformDemoSeed({now=Date.now()}={}) {
   for(const product of legacy.prods.slice(0,4))other=aplicarCambio(other,{kind:'producto',revision:other.revision,form:{...product,id:undefined}},'Demo');
   state.businesses[south.id]={...other,customers:[],vehicles:[]};
   await perform('POST','/api/v2/logout',{});
+  await perform('POST','/api/v2/login',DEMO_ACCOUNTS.admin);
+  const withMechanic=await perform('POST','/api/v2/action',{type:'mechanic.create',requestId:'seed-mechanic-carlos',form:{name:'Carlos Ramírez',percentage:60}});
+  const mechanic=withMechanic.state.mechanics.find(item=>item.name==='Carlos Ramírez');
+  await perform('POST','/api/v2/logout',{});
   await perform('POST','/api/v2/login',DEMO_ACCOUNTS.vendedor);
   const product=state.businesses[north.id].prods.find(product=>product.referencia==='REP-001');
-  await perform('POST','/api/v2/action',{type:'sale.create',requestId:'seed-sale-service',form:{fecha:date(timestamp),cliente:'Ana Torres',telefono:'+573001112233',placa:'ABC12D',paymentMethod:'efectivo'},items:[{producto_id:product.id,cantidad:1,precio_unitario:product.precio_venta}],labor:[{descripcion:'Cambio de pastillas de freno delanteras',mecanico:'Carlos Ramírez',importe:30000}]});
-  await perform('POST','/api/v2/action',{type:'sale.create',requestId:'seed-sale-labor',form:{fecha:date(timestamp),cliente:'Ana Torres',telefono:'+573001112233',placa:'ABC12D',paymentMethod:'transferencia'},items:[],labor:[{descripcion:'Revisión y ajuste de frenos',mecanico:'Carlos Ramírez',importe:20000}]});
+  await perform('POST','/api/v2/action',{type:'sale.create',requestId:'seed-sale-service',form:{fecha:date(timestamp),cliente:'Ana Torres',telefono:'+573001112233',placa:'ABC12D',paymentMethod:'efectivo'},items:[{producto_id:product.id,cantidad:1,precio_unitario:product.precio_venta}],labor:[{descripcion:'Cambio de pastillas de freno delanteras',mecanico:'Carlos Ramírez',mecanicoId:mechanic.id,importe:30000}]});
+  await perform('POST','/api/v2/action',{type:'sale.create',requestId:'seed-sale-labor',form:{fecha:date(timestamp),cliente:'Ana Torres',telefono:'+573001112233',placa:'ABC12D',paymentMethod:'transferencia'},items:[],labor:[{descripcion:'Revisión y ajuste de frenos',mecanico:'Carlos Ramírez',mecanicoId:mechanic.id,importe:20000}]});
   await perform('POST','/api/v2/logout',{});
   // No signed-in session is shipped in the prepared seed.
   return installJETrial(state,{now:timestamp});

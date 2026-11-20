@@ -125,3 +125,7 @@ La pestaña antes llamada Dashboard ahora es **Resumen general**. Permite ver c�
 ### Revisión 8 · interfaz compacta
 
 FECHA es el único filtro de fechas: abre Desde/Hasta, FILTRAR confirma el rango y LIMPIAR muestra todo el historial. Abre inicialmente el mes actual hasta hoy. Productos destacados incluye SIN VENTAS, sin lista separada. Se retiran los textos y la franja de indicadores secundarios indicados; títulos y encabezados quedan en mayúsculas. Los cálculos de neto y ganancia histórica no cambian. Guion vigente: [REVISION8-RESUMEN.md](docs/REVISION8-RESUMEN.md).
+
+### Administrador y Excel · revisión 9
+
+Resumen general suma ganancia de productos y parte del negocio en mano de obra; exporta sus tres tablas a Excel .xlsx. Mecánicos administra porcentajes y detalle de trabajos por fechas, fijando el porcentaje en cada venta nueva. Taller exige selección de un mecánico registrado/activo; históricos sin porcentaje o devoluciones sin desglose quedan incompletos explícitamente. Compras acepta varias líneas manuales o importadas desde plantilla Excel con vista previa. Reposición conserva tabla/Excel sin sugerencias y Reportes reúne balances/descargas, separado del historial de Movimientos. Guion, límites y configuración de porcentajes existentes: [REVISION9-ADMINISTRADOR.md](docs/REVISION9-ADMINISTRADOR.md).

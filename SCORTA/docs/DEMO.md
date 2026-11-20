@@ -88,3 +88,7 @@ Dashboard se renombra a **Resumen general**. Abre con el mes actual. FECHA despl
 ## Revisión 8 · pantalla simplificada
 
 Títulos y encabezados en mayúsculas. Se retiran los cuatro textos explicativos indicados y la franja de ventas con ingreso neto, promedio, devoluciones y anulaciones. Los cálculos históricos y el tratamiento de correcciones se conservan. 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan. Ver [REVISION8-RESUMEN.md](REVISION8-RESUMEN.md). Recargar el demo conserva los datos; no usar Reiniciar demo.
+
+## Revisión 9 · porcentajes y Excel
+
+Resumen general incorpora tabla de mano de obra, tres descargas .xlsx y ganancia final de productos + parte del negocio en mano de obra. Mecánicos permite porcentaje y Ver trabajos por fechas. Nuevos servicios exigen un mecánico registrado/activo; los antiguos sin porcentaje se señalan sin inventarlo. Reposición y Administración se simplifican; Compras incorpora plantilla Excel, vista previa y varios productos por documento. Títulos/encabezados en mayúsculas, bordes más visibles y sin referencias en las dos tablas de productos del resumen. La copia existente conserva datos; configurar porcentajes antes de vender servicios, sin usar Reiniciar demo. Guion vigente: [REVISION9-ADMINISTRADOR.md](REVISION9-ADMINISTRADOR.md).

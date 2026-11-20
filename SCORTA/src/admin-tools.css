@@ -3,3 +3,5 @@
 @media(prefers-reduced-motion:reduce){.at-dialog *{scroll-behavior:auto!important}}
 
 .at-unallocated{font-size:.875rem;color:#6b5300;font-weight:600}
+
+.at-dialog h1,.at-dialog h2,.at-dialog h3,.at-dialog th,.at-value>span,.at-summary dt,.at-field>span{text-transform:uppercase}.at-dialog{border:1px solid #999}.at-table-wrap,.at-value{border-color:#999}.at-table th,.at-table td{border-bottom-color:#b8b8b8}.at-mechanic-form{flex-wrap:wrap}.at-mechanic-form .at-field{flex:1 1 220px}.at-dialog .ov-labor{margin:20px 0}.at-dialog .excel-control{max-width:100%}.at-table td{white-space:normal}.at-row-actions{flex-wrap:wrap}

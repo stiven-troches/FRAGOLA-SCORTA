@@ -107,7 +107,7 @@ function aggregates(business) {
   }
   return {customers:[...customers.values()],vehicles:[...vehicles.values()]};
 }
-function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra'].includes(key))next[key]=removeCosts(item);return next;}return value;}
+function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje'].includes(key))next[key]=removeCosts(item);return next;}return value;}
 function envelope(state, actor, now, baseUrl) {
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact};
   if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
@@ -210,7 +210,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='sale.create'){
     assertDraftSale(state,actor,a);
     if(!Array.isArray(a.items||[])||!Array.isArray(a.labor||[])||(a.items||[]).length>1000||(a.labor||[]).length>100)fail('Lista de artículos o servicios inválida');
-    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>{const mechanic=mechanicForLabor(b,line);return {descripcion:text(line?.descripcion,'Trabajo realizado',3000),mecanico:mechanic?.mecanico||text(line?.mecanico,'Mecánico'),importe:number(line?.importe,'Mano de obra'),...(mechanic?{mecanicoId:mechanic.mecanicoId}:{})}});
+    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>({...mechanicForLabor(b,line),descripcion:text(line?.descripcion,'Trabajo realizado',3000),importe:number(line?.importe,'Mano de obra')}));
     if(!items.length&&!labor.length)fail('Agrega productos o mano de obra');
     const fecha=date(form.fecha||dateBogota(now),'Fecha de venta'),placa=validatePlate(form.placa);if(labor.length&&!placa)fail('Ingresa la placa para registrar el servicio');
     if(!['efectivo','transferencia','tarjeta'].includes(form.paymentMethod))fail('Selecciona efectivo, transferencia o tarjeta');

@@ -1,4 +1,5 @@
 import {salesReport,reportDate} from './admin-reports.mjs';
+import {laborReport} from './labor-report.mjs';
 
 const array=value=>Array.isArray(value)?value:[];
 const text=value=>value==null?'':String(value);
@@ -35,7 +36,7 @@ export function quickOverviewRange(key,now=Date.now()){
  * report; historical unit costs come exclusively from each retained sale line.
  */
 export function overviewReport(business={},filters={}){
-  const report=salesReport(business,filters),range={from:report.from,to:report.to};
+  const report=salesReport(business,filters),labor=laborReport(business,filters),range={from:report.from,to:report.to};
   const catalog=new Map(array(business.prods).map(product=>[text(product.id),product]));
   const groups=new Map();let laborServices=0;
   for(const sale of array(business.ventas)){
@@ -75,12 +76,14 @@ export function overviewReport(business={},filters={}){
     kind:'overview',basis:report.basis,...range,
     countBasis:{sales:'noncancelled_positive_net',laborServices:'registered_lines_noncancelled_sales',noSales:'current_catalog_no_net_units'},
     totals:{net:report.totals.net,products:report.totals.products,labor:report.totals.labor,
+      laborProfit:labor.totals.businessAmount,mechanicAmount:labor.totals.mechanicAmount,laborSplitComplete:labor.totals.splitComplete,
+      totalProfit:report.totals.productMargin!==null&&labor.totals.businessAmount!==null?Math.round((report.totals.productMargin+labor.totals.businessAmount)*100)/100:null,
       salesCount,averageSale:salesCount?report.totals.net/salesCount:0,laborServices,
       productUnits:products.reduce((total,row)=>total+row.netUnits,0),
       productProfit:report.totals.productMargin,productMarginPercent:percent(report.totals.productMargin,report.totals.products),
       costComplete:report.totals.marginComplete,unknownCostLines:report.totals.unknownCostLines,
       returns:report.totals.returns,cancellations:report.totals.cancellations},
-    products,rankings:{mostSold:rank(sold,'netUnits',-1),leastSold:rank(sold,'netUnits',1),
+    labor,products,rankings:{mostSold:rank(sold,'netUnits',-1),leastSold:rank(sold,'netUnits',1),
       mostProfit:rank(rankable,'profit',-1),leastProfit:rank(rankable,'profit',1)},noSales,
     incompleteCostProducts:sold.filter(row=>!row.costComplete).length,
     paymentTotals:report.paymentTotals,unknownPaymentCount:report.unknownPaymentCount

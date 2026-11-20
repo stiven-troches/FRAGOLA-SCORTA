@@ -26,10 +26,10 @@ async function fixture(){
 }
 
 test('mecánicos: gestión solo admin, selector del vendedor limitado y aislamiento entre empresas',async()=>{
- const f=await fixture();let r=await f.act('seller',{type:'mechanic.create',form:{name:'Carlos'}});assert.equal(r.status,403);
- r=await f.act('admin',{type:'mechanic.create',form:{name:'Carlos'}});assert.equal(r.status,200,r.body.error);const mechanic=r.body.state.mechanics[0];
+ const f=await fixture();let r=await f.act('seller',{type:'mechanic.create',form:{name:'Carlos',percentage:60}});assert.equal(r.status,403);
+ r=await f.act('admin',{type:'mechanic.create',form:{name:'Carlos',percentage:60}});assert.equal(r.status,200,r.body.error);const mechanic=r.body.state.mechanics[0];
  assert.equal(mechanic.active,true);assert.ok(mechanic.createdAt&&mechanic.updatedAt);
- assert.equal((await f.act('admin',{type:'mechanic.create',form:{name:'cárlos'}})).status,400);
+ assert.equal((await f.act('admin',{type:'mechanic.create',form:{name:'cárlos',percentage:60}})).status,400);
  let seller=await f.data('seller');assert.deepEqual(seller.state.mechanics,[{id:mechanic.id,name:'Carlos'}]);assert.ok(!Object.hasOwn(seller.state,'cashClosures'));
  assert.deepEqual((await f.data('other')).state.mechanics,[]);
  assert.equal((await f.act('other',{type:'mechanic.update',id:mechanic.id,form:{name:'Otro'}})).status,404);
@@ -39,21 +39,21 @@ test('mecánicos: gestión solo admin, selector del vendedor limitado y aislamie
  assert.equal((await f.data('seller')).state.mechanics[0].name,'Carlos activo');
 });
 
-test('mano de obra selecciona el mecánico activo, fija su nombre histórico y admite registros anteriores',async()=>{
- const f=await fixture();let r=await f.act('admin',{type:'mechanic.create',form:{name:'Ana'}});const mechanic=r.body.state.mechanics[0];
+test('mano de obra selecciona el mecánico activo, fija su nombre y porcentaje históricos y rechaza nombres libres',async()=>{
+ const f=await fixture();let r=await f.act('admin',{type:'mechanic.create',form:{name:'Ana',percentage:60}});const mechanic=r.body.state.mechanics[0];
  const sale=await f.sell('seller',{quantity:0,labor:[{descripcion:'Cambio de frenos',mecanico:'Nombre no confiable',importe:25000,mecanicoId:mechanic.id}]});
  assert.equal(sale.labor[0].mecanico,'Ana');assert.equal(sale.labor[0].mecanicoId,mechanic.id);
  assert.equal((await f.act('admin',{type:'mechanic.update',id:mechanic.id,form:{name:'Ana editada'}})).status,200);
  let data=await f.data();assert.equal(data.state.ventas.find(s=>s.id===sale.id).labor[0].mecanico,'Ana');
  await f.act('admin',{type:'mechanic.archive',id:mechanic.id});
  r=await f.act('seller',{type:'sale.create',form:{fecha:day,placa:'ABC12D',paymentMethod:'efectivo'},items:[],labor:[{descripcion:'Otro trabajo',mecanico:'Ana',importe:1000,mecanicoId:mechanic.id}]});assert.equal(r.status,400);assert.equal(r.body.code,'INVALID_MECHANIC');
- const external=await f.act('other',{type:'mechanic.create',form:{name:'Mecánico de otra empresa'}});
+ const external=await f.act('other',{type:'mechanic.create',form:{name:'Mecánico de otra empresa',percentage:60}});
  r=await f.act('admin',{type:'sale.create',form:{fecha:day,placa:'ABC12D',paymentMethod:'efectivo'},items:[],labor:[{descripcion:'Otro trabajo',mecanico:'Otro',importe:1000,mecanicoId:external.body.state.mechanics[0].id}]});assert.equal(r.status,400);assert.equal(r.body.code,'INVALID_MECHANIC');
- const legacy=await f.sell('seller',{quantity:0,labor:[{descripcion:'Servicio con borrador anterior',mecanico:'Nombre histórico',importe:1000}]});assert.equal(legacy.labor[0].mecanico,'Nombre histórico');assert.ok(!Object.hasOwn(legacy.labor[0],'mecanicoId'));
+ const before=structuredClone(f.getState());r=await f.act('seller',{type:'sale.create',form:{fecha:day,placa:'ABC12D',paymentMethod:'efectivo'},items:[],labor:[{descripcion:'Nombre libre',mecanico:'No registrado',importe:1000}]});assert.equal(r.status,400);assert.equal(r.body.code,'INVALID_MECHANIC');assert.deepEqual(f.getState(),before);
 });
 
 test('borrador conserva mecanicoId y un reintento protegido confirma una sola venta',async()=>{
- const f=await fixture(),r=await f.act('admin',{type:'mechanic.create',form:{name:'Carlos'}}),mechanic=r.body.state.mechanics[0],requestId=crypto.randomUUID();
+ const f=await fixture(),r=await f.act('admin',{type:'mechanic.create',form:{name:'Carlos',percentage:60}}),mechanic=r.body.state.mechanics[0],requestId=crypto.randomUUID();
  const form={cliente:'Cliente',telefono:'',placa:'ABC12D',fecha:day,paymentMethod:'efectivo'},labor=[{descripcion:'Cambio de aceite',mecanico:'Carlos',importe:18000,mecanicoId:mechanic.id}];
  const pendingSale={type:'sale.create',requestId,draftRequestId:requestId,form,items:[],labor};
  const draft={cart:[],labor:[{...labor[0],key:'service-1'}],laborDraft:{descripcion:'',mecanico:'',importe:''},saleForm:form,pendingSale};
@@ -65,7 +65,8 @@ test('borrador conserva mecanicoId y un reintento protegido confirma una sola ve
 
 test('cierre por ventas netas: snapshot inmutable, diferencias e idempotencia sin afectar existencias',async()=>{
  const f=await fixture();await f.sell('seller',{method:'efectivo',quantity:2});const transfer=await f.sell('admin',{method:'transferencia',quantity:2});
- await f.sell('admin',{method:'tarjeta',quantity:0,labor:[{descripcion:'Trabajo',mecanico:'Carlos',importe:15000}]});
+ const mechanicCreated=await f.act('admin',{type:'mechanic.create',form:{name:'Carlos',percentage:60}});
+ await f.sell('admin',{method:'tarjeta',quantity:0,labor:[{descripcion:'Trabajo',mecanico:'Carlos',mecanicoId:mechanicCreated.body.state.mechanics[0].id,importe:15000}]});
  let reversed=await f.act('admin',{type:'sale.reverse',id:transfer.id,form:{motivo:'Retorna una unidad',parcial:true},items:[{index:0,cantidad:1}]});assert.equal(reversed.status,200,reversed.body.error);
  const before=await f.data(),stock=before.state.prods[0].stock,requestId='cash-once';
  const body={type:'cash.close',requestId,revision:before.revision,form:{date:day,actual:{efectivo:19500,transferencia:10000,tarjeta:16000},note:'Conteo de ventas del día'}};
@@ -97,9 +98,43 @@ test('SQLite conserva mecánicos y cierre al reiniciar',async()=>{
   const sign=await store.request({method:'POST',path:'/api/v2/login',body:owner},{now:clock}),token=sign.token;
   const created=await store.request({method:'POST',path:'/api/v2/action',token,body:{type:'company.create',form:{name:'Moto Persistente',username:'admin',password,startDate:'2026-01-01',endDate:'2030-12-31'}}},{now:clock});assert.equal(created.status,200,created.body.error);
   const signed=await store.request({method:'POST',path:'/api/v2/login',body:{company:'Moto Persistente',username:'admin',password}},{now:clock}),adminToken=signed.token;
-  let r=await store.request({method:'POST',path:'/api/v2/action',token:adminToken,body:{type:'mechanic.create',form:{name:'Carlos'}}},{now:clock});assert.equal(r.status,200,r.body.error);
+  let r=await store.request({method:'POST',path:'/api/v2/action',token:adminToken,body:{type:'mechanic.create',form:{name:'Carlos',percentage:60}}},{now:clock});assert.equal(r.status,200,r.body.error);
   r=await store.request({method:'POST',path:'/api/v2/action',token:adminToken,body:{type:'cash.close',form:{date:day,actual:{efectivo:0,transferencia:0,tarjeta:0}}}},{now:clock});assert.equal(r.status,200,r.body.error);
   const business=r.body.state;store.close();store=await openPlatformStore(file);
   r=await store.request({method:'GET',path:'/api/v2/data',token:adminToken},{now:clock});assert.deepEqual(r.body.state.mechanics,business.mechanics);assert.deepEqual(r.body.state.cashClosures,business.cashClosures);
  }finally{store?.close();rmSync(directory,{recursive:true,force:true})}
+});
+
+test('porcentaje: valida límites, no acepta blancos ni fórmulas y conserva nombre/porcentaje de cada venta',async()=>{
+ const f=await fixture();
+ for(const percentage of [undefined,'',' ',null,true,-1,101,'abc',12.345]){
+  const before=structuredClone(f.getState()),r=await f.act('admin',{type:'mechanic.create',form:{name:'Inválido',percentage}});
+  assert.equal(r.status,400);assert.deepEqual(f.getState(),before);
+ }
+ let r=await f.act('admin',{type:'mechanic.create',form:{name:'Ana',percentage:33.33}});assert.equal(r.status,200,r.body.error);const mechanic=r.body.state.mechanics[0];
+ const one=await f.sell('admin',{quantity:0,labor:[{descripcion:'Primero',mecanicoId:mechanic.id,mecanico:'No confiable',mecanicoPorcentaje:100,importe:30000}]});
+ assert.equal(one.labor[0].mecanicoPorcentaje,33.33);assert.equal(one.labor[0].mecanico,'Ana');
+ r=await f.act('admin',{type:'mechanic.update',id:mechanic.id,form:{percentage:80,name:'Ana editada'}});assert.equal(r.status,200,r.body.error);
+ await f.sell('seller',{quantity:0,labor:[{descripcion:'Segundo',mecanicoId:mechanic.id,mecanico:'Ana',importe:10000}]});
+ const data=await f.data(),first=data.state.ventas.find(s=>s.id===one.id),second=data.state.ventas.find(s=>s.id!==one.id);
+ assert.equal(first.labor[0].mecanicoPorcentaje,33.33);assert.equal(second.labor[0].mecanicoPorcentaje,80);
+ r=await f.request('admin','GET',`/api/v2/overview?from=${day}&to=${day}`);assert.equal(r.status,200,r.body.error);
+ const totals=r.body.report.totals;assert.equal(totals.laborProfit,22001);assert.equal(totals.mechanicAmount,17999);assert.equal(totals.totalProfit,22001);
+ const seller=await f.data('seller');assert.ok(!Object.hasOwn(seller.state.ventas[0].labor[0],'mecanicoPorcentaje'));assert.deepEqual(seller.state.mechanics,[{id:mechanic.id,name:'Ana editada'}]);
+ const receipt=await f.request('missing','GET','/api/v2'+new URL(first.receiptUrl).pathname);assert.equal(receipt.status,200);assert.ok(!Object.hasOwn(receipt.body.sale.labor[0],'mecanicoPorcentaje'));
+ await f.act('admin',{type:'sale.reverse',id:first.id,form:{motivo:'Anulación prueba',parcial:false},items:[]});
+ r=await f.request('admin','GET',`/api/v2/overview?from=${day}&to=${day}`);assert.equal(r.body.report.totals.laborProfit,2000);
+});
+
+test('compra múltiple: líneas de Excel se registran en un documento y un reintento no duplica existencias',async()=>{
+ const {parsePurchaseRows,purchaseColumns}=await import('../purchase-import.mjs'),f=await fixture();
+ let r=await f.act('admin',{type:'business.change',payload:{kind:'producto',form:{nombre:'Filtro',referencia:'FILTRO-2',stock:0,precio_compra:2000,precio_venta:5000}}});assert.equal(r.status,200,r.body.error);
+ const p2=r.body.state.prods.find(p=>p.nombre==='Filtro'),p1=f.product;
+ const items=parsePurchaseRows([purchaseColumns.map(([,name])=>name),[p1.id,p1.referencia||'',p1.nombre,2,3000],[p2.id,p2.referencia,p2.nombre,3,2000]],r.body.state.prods);
+ const action={type:'business.change',requestId:'excel-compra-once',payload:{kind:'compra',form:{fecha:day,proveedor:'Proveedor Excel'},items}};
+ r=await f.act('admin',action);assert.equal(r.status,200,r.body.error);const document=r.body.state.compras[0];
+ assert.equal(document.detalles.length,2);assert.equal(document.total,12000);assert.equal(document.proveedor,'Proveedor Excel');
+ const stock=r.body.state.prods.map(p=>[p.id,p.stock]);assert.equal(r.body.state.prods.find(p=>p.id===p1.id).stock,22);assert.equal(r.body.state.prods.find(p=>p.id===p2.id).stock,3);
+ const repeated=await f.act('admin',action);assert.equal(repeated.status,200);assert.equal(repeated.body.state.compras.length,r.body.state.compras.length);assert.deepEqual(repeated.body.state.prods.map(p=>[p.id,p.stock]),stock);
+ const before=structuredClone(f.getState());r=await f.act('admin',{...action,requestId:'invalid-excel',payload:{...action.payload,items:[items[0],{...items[1],producto_id:'inexistente'}]}});assert.equal(r.status,400);assert.deepEqual(f.getState(),before);
 });

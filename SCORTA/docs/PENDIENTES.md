@@ -251,3 +251,17 @@ Ejecutados los ajustes solicitados. Sustituye los controles y bloques de interfa
 - Cálculos financieros, permisos y correcciones históricas conservados.
 
 **Verificación:** 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan; diff sin errores. Incluye pruebas de borrador/aplicación/validación/limpieza, rango histórico y selección sin ventas. No hay herramienta de navegador disponible para QA visual. Pendientes: revisión conjunta en dispositivos/impresora reales y P05–P10; APIs externas y servidor definitivo conservan su alcance previo. Guion: [REVISION8-RESUMEN.md](REVISION8-RESUMEN.md).
+
+## Revisión 9 · ajustes aprobados de administrador y Excel
+
+Lista ejecutada por coordinación; sustituye la presentación y funciones anteriores donde corresponda. Detalle y guion: [REVISION9-ADMINISTRADOR.md](REVISION9-ADMINISTRADOR.md).
+
+- Mayúsculas en títulos/encabezados y bordes más oscuros; descripción sin referencia en destacados/Qué vendimos; retirado «excluye anulados».
+- Tabla de mano de obra, Excel .xlsx de las tres tablas del resumen y reparto de mano de obra en la ganancia final, con suma general.
+- Mecánicos registrados/activos obligatorios, porcentaje editable, nombre/porcentaje histórico fijado en cada venta, valores del mecánico/negocio y Ver trabajos con placa/servicio/Excel por fechas.
+- Texto largo e Históricos sin asociación retirados sin borrar ventas. Sin porcentajes históricos o desglose de devolución no se inventan totales.
+- Menú Administración sin Nueva venta, Ver inventario ni Ingresar mercancía; recepción solo desde Compras.
+- Reposición con solo Excel y tabla de estado/stock/mínimo, sin buscador, textos, cuadros o compra sugerida. Reportes enfocados en balances/Excel y Movimientos en historial de operaciones.
+- Compra manual o Excel con plantilla, vista previa, validación completa y varias líneas en una compra atómica/idempotente. El importador de productos CSV de Inventario se conserva separado.
+
+181/181 pruebas aprobadas, sin omisiones. Aplicación/demo compilan. Pendiente revisión conjunta visual, Excel de escritorio y equipos/impresora reales; P05–P10 y conexiones externas mantienen su alcance previo. Configurar porcentajes en mecánicos ya existentes antes de nuevos servicios; no se modifica retroactivamente el reparto de ventas antiguas.

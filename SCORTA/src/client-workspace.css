@@ -58,3 +58,6 @@
 @media print{.cw-mobile-company,.cw-bottom-nav,.cw-powered-by,.cw-save-state{display:none!important}.cw-main{padding:0!important}}
 
 .cw-admin-heading{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}.cw-admin-heading>.cw-muted{font-size:.875rem}.cw-admin-heading .cw-options>div{z-index:20}@media(max-width:760px){.cw-admin-heading{justify-content:flex-start;width:100%;gap:10px}.cw-admin-heading>.cw-options{margin-left:auto}}
+
+.cw-purchase-excel{padding:16px;border:1px solid #999;border-radius:10px;margin:12px 0}.cw-purchase-excel>summary{cursor:pointer;font-size:.9375rem;font-weight:650;min-height:44px;display:flex;align-items:center}.cw-purchase-excel .cw-field{margin-top:16px}.cw-import-errors{white-space:pre-line}.cw-purchase-excel h3{font-size:1rem;margin-top:20px}.cw-form>h3{font-size:1rem;margin:18px 0 8px}
+.cw-table td::before{text-transform:uppercase}

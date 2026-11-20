@@ -17,7 +17,8 @@ test('reutilizar un requestId en otra empresa durante soporte se rechaza y no in
 
 test('el cambio de estado del taller conserva antes, después y motivo del soporte',async()=>{
  const f=await fixture(),c=await company(f,'Moto Auditoría');await f.call('support.start',{companyId:c.id,form:{motivo:'Entrega solicitada por cliente'}});
- const sale=await f.call('sale.create',{form:{fecha:'2026-11-19',placa:'ABC12D',paymentMethod:'efectivo'},items:[],labor:[{descripcion:'Revisión de frenos',mecanico:'Carlos',importe:30000}]});assert.equal(sale.status,200);
+ const added=await f.call('mechanic.create',{form:{name:'Carlos',percentage:60}});assert.equal(added.status,200);
+ const sale=await f.call('sale.create',{form:{fecha:'2026-11-19',placa:'ABC12D',paymentMethod:'efectivo'},items:[],labor:[{descripcion:'Revisión de frenos',mecanico:'Carlos',mecanicoId:added.body.state.mechanics[0].id,importe:30000}]});assert.equal(sale.status,200);
  const service=sale.body.state.servs[0];
  const changed=await f.call('business.change',{payload:{kind:'estado',id:service.id,form:{}}});assert.equal(changed.status,200);
  const audit=changed.body.state.auditoria[0];assert.equal(audit.antes.estado,'completado');assert.equal(audit.despues.estado,'entregado');assert.equal(audit.supportReason,'Entrega solicitada por cliente');assert.match(audit.usuario,/Steven · Soporte/);
