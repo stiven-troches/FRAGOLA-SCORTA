@@ -3,8 +3,12 @@ import {randomUUID} from 'node:crypto';
 export {expect};
 export const ORIGIN='http://127.0.0.1:19420';
 export const OWNER=Object.freeze({company:'QA Owner',username:'qaowner',password:'QA.Owner!2026',name:'QA Owner'});
+// Keep the synthetic login burst below the production limit of 60 attempts per minute.
+let lastLoginAt=0;
+async function paceLogin(){const delay=1100-(Date.now()-lastLoginAt);if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));lastLoginAt=Date.now()}
 export const day=offset=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
 export async function request(api,path,{method='GET',body,companyId='@owner'}={}){
+ if(path==='/api/v2/login')await paceLogin();
  const response=await api.fetch(path,{method,headers:{...(method==='POST'?{Origin:ORIGIN}:{}),'X-SCORTA-Company':companyId},...(body?{data:body}:{})});
  const value=await response.json();expect(response.ok(),JSON.stringify(value)).toBeTruthy();return value;
 }
@@ -40,7 +44,7 @@ export const test=base.extend({
 export async function login(page,account){
  await page.goto('/');await expect(page.getByLabel('Empresa',{exact:true})).toBeVisible();await expect(page.getByRole('img',{name:'FRAGOLA SCORTA',exact:true})).toBeVisible();await page.getByLabel('Empresa',{exact:true}).fill(account.company);
  await page.getByLabel('Usuario',{exact:true}).fill(account.username);await page.getByLabel('Contraseña',{exact:true}).fill(account.password);
- await page.getByRole('button',{name:'Ingresar',exact:true}).click();
+ await paceLogin();await page.getByRole('button',{name:'Ingresar',exact:true}).click();
  await expect(page.getByRole('heading',{name:account===OWNER?'Empresas':/Nueva venta|Resumen general/i}).first()).toBeVisible();
  if(account!==OWNER)await expect(page.getByText('Recuperando venta pendiente…',{exact:true})).toHaveCount(0);
 }
