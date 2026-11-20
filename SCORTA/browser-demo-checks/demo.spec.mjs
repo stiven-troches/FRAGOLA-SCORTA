@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-async function selectRole(page,name){await page.getByRole('region',{name:'Demostración de SCORTA'}).getByRole('button',{name,exact:true}).click()}
+async function selectRole(page,name){const button=page.getByRole('region',{name:'Demostración de SCORTA'}).getByRole('button',{name,exact:true});await button.click();await expect(button).toBeEnabled();await expect(page.getByRole('heading',{name:({Propietario:'Empresas',Administrador:'RESUMEN GENERAL',Vendedor:'Nueva venta'})[name],exact:true})).toBeVisible();if(name!=='Propietario')await expect(page.getByText('Recuperando venta pendiente…',{exact:true})).toHaveCount(0)}
 async function navigate(page,name){
  const mobile=page.getByRole('navigation',{name:'Navegación móvil'});
  if(await mobile.isVisible()){

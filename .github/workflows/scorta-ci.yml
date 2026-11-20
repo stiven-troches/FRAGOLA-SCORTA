@@ -46,8 +46,20 @@ jobs:
         run: npm run build
       - name: Build static demo
         run: npm run build:demo
+      - name: Restore CI browser cache
+        id: browser-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-scorta-playwright-${{ hashFiles('SCORTA/package-lock.json') }}
       - name: Install CI Chromium
         run: npx playwright install --with-deps chromium
+      - name: Save prepared browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.browser-cache.outputs.cache-primary-key }}
       - name: Test current platform through HTTP
         run: npm run test:ui
       - name: Test static demo

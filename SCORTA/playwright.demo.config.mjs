@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './browser-demo-checks',
   fullyParallel: false,
   workers: 1,
+  maxFailures: process.env.CI ? 3 : undefined,
   timeout: 45000,
   expect: {timeout: 8000},
   outputDir: 'test-results/demo',

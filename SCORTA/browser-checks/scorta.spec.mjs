@@ -38,7 +38,7 @@ test('vendedor sólo ve sus módulos y móvil usa cuatro pestañas sin estrechar
 test('Escape solicita confirmación de datos sin guardar y conserva el formulario al cancelar',async({page,scenario})=>{
  await login(page,scenario.admin);await navigate(page,'Inventario');await page.getByRole('button',{name:'Nuevo producto',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Producto',exact:true});await dialog.getByLabel('Nombre del producto',{exact:true}).fill('Producto aún no guardado');
- const confirmation=page.waitForEvent('dialog');await page.keyboard.press('Escape');const prompt=await confirmation;expect(prompt.type()).toBe('confirm');await prompt.dismiss();
+ const confirmation=page.waitForEvent('dialog').then(async prompt=>{expect(prompt.type()).toBe('confirm');await prompt.dismiss()});await Promise.all([confirmation,page.keyboard.press('Escape')]);
  await expect(dialog).toBeVisible();await expect(dialog.getByLabel('Nombre del producto',{exact:true})).toHaveValue('Producto aún no guardado');
  page.once('dialog',d=>d.accept());await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
 });
