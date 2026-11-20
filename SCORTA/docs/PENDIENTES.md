@@ -1,6 +1,6 @@
 # Pendientes asignados de SCORTA
 
-Actualizado: 19 de noviembre de 2026 (America/Bogota).
+Actualizado: 20 de noviembre de 2026 (America/Bogota).
 
 La primera demo multiempresa está publicada en [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site), con acceso privado. Sites confirmó esa publicación el 19 de noviembre de 2026. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** La guía está en [DEMO.md](DEMO.md). La revisión visual, la prueba conjunta y el uso real del almacén siguen pendientes; la demo guarda datos ficticios en el navegador.
 
@@ -265,3 +265,9 @@ Lista ejecutada por coordinación; sustituye la presentación y funciones anteri
 - Compra manual o Excel con plantilla, vista previa, validación completa y varias líneas en una compra atómica/idempotente. El importador de productos CSV de Inventario se conserva separado.
 
 181/181 pruebas aprobadas, sin omisiones. Aplicación/demo compilan. Pendiente revisión conjunta visual, Excel de escritorio y equipos/impresora reales; P05–P10 y conexiones externas mantienen su alcance previo. Configurar porcentajes en mecánicos ya existentes antes de nuevos servicios; no se modifica retroactivamente el reparto de ventas antiguas.
+
+## Correcciones de auditoría · cierre de implementación
+
+Implementados los 27 puntos autorizados; ver [CIERRE-CORRECCIONES-AUDITORIA.md](CIERRE-CORRECCIONES-AUDITORIA.md) para responsables, contratos, pruebas y límites de validación. GitHub recibió primero la instantánea de auditoría e9d6201. Suite local: 237/237 pruebas sin omisiones; ambas compilaciones correctas y npm audit sin vulnerabilidades conocidas. Los resultados de navegador se verifican en la CI nueva, sin afirmar una revisión visual local.
+
+Demo privada actualizada a la versión 14 el 20 de noviembre de 2026. Los 9 casos de navegador de demo pasaron en escritorio y móviles de 390 y 360 px. El resultado integral de aplicación HTTP queda enlazado en la propuesta de cambios de GitHub; las revisiones anteriores se conservan como historial.

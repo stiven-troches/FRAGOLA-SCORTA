@@ -1,12 +1,13 @@
 import {cashExpected,salesReport} from './admin-reports.mjs';
+import {moneyAmount,roundMoney,sumMoney} from './money.mjs';
 
 const fail=(message,status=400,code='INVALID_ADMIN_OPERATION')=>{throw Object.assign(Error(message),{status,code})};
 const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const name=value=>{if(typeof value!=='string'||!value.trim()||value.length>100)fail('Escribe el nombre del mecánico (hasta 100 caracteres).');return value.trim()};
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
-const amount=(value,label)=>{if(value==null||value===''||!['string','number'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>1e12)fail(`${label}: indica un importe entre 0 y 1.000.000.000.000.`);return Number(value)};
+const amount=(value,label)=>{try{return moneyAmount(value,label)}catch(error){fail(error.message)}};
 const methods=['efectivo','transferencia','tarjeta'];
-const rounded=value=>Math.round((Number(value)+Number.EPSILON)*100)/100;
+const rounded=roundMoney;
 const percentage=value=>{if(value==null||String(value).trim()===''||!['string','number'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>100||Math.abs(Math.round(Number(value)*100)-Number(value)*100)>1e-8)fail('Indica el porcentaje del mecánico entre 0 y 100, con hasta dos decimales.');return Number(value)};
 
 /** Public selector data never includes inactive staff or administrative metadata. */
@@ -60,10 +61,10 @@ export function applyAdminControl(business,actor,action,{now,today}){
     const expected=cashExpected(business,form.date);
     for(const method of methods)if(!Number.isFinite(expected[method]))fail('No se pudo calcular el importe esperado. Revisa el reporte.');
     const differences=Object.fromEntries(methods.map(method=>[method,rounded(actual[method]-expected[method])]));
-    const sum=object=>rounded(methods.reduce((total,method)=>total+Number(object[method]||0),0));
+    const sum=object=>sumMoney(methods.map(method=>Number(object[method]||0)));
     const summary=Object.fromEntries(['gross','returns','cancellations','net','products','labor','productMargin'].filter(key=>typeof report.totals?.[key]==='number').map(key=>[key,report.totals[key]]));
     const record={id:crypto.randomUUID(),date:form.date,createdAt:at,userId:actor.id,username:actor.username,name:actor.name||actor.username,
-      expected:structuredClone(expected),actual,differences,totals:{expected:sum(expected),actual:sum(actual),difference:sum(differences)},
+      expected:structuredClone(expected),actual,differences,totals:{expected:sum(expected),actual:sum(actual),difference:rounded(sum(actual)-sum(expected))},
       note:(form.note||'').trim(),businessRevision:business.revision,summary};
     business.cashClosures=[record,...records];business.revision++;
     return {id:record.id,before:null,after:structuredClone(record)};

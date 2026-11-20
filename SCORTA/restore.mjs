@@ -4,6 +4,7 @@ import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {defaultDatabase,validateDatabase,validateState} from './backup.mjs';
+import {snapshotForRestore} from './sqlite-restore-snapshot.mjs';
 
 export function restoreBackup(input,{target=defaultDatabase(),offline=false}={}){
   if(!offline)throw Error('Detén SCORTA y confirma la restauración con --offline');
@@ -22,7 +23,7 @@ export function restoreBackup(input,{target=defaultDatabase(),offline=false}={})
       previous=target+'.'+new Date().toISOString().replaceAll(':','-')+'.'+randomUUID()+'.bak';
       copyFileSync(target,previous);chmodSync(previous,0o600);
     }
-    if(full){copyFileSync(input,stage);chmodSync(stage,0o600);validateDatabase(stage)}
+    if(full){snapshotForRestore(input,stage);validateDatabase(stage)}
     else{
       // Legacy JSON contains business data only; existing accounts are preserved.
       if(existsSync(target))copyFileSync(target,stage);

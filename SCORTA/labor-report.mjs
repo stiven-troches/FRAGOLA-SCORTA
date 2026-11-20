@@ -1,13 +1,15 @@
 import {reportDate,salesReport} from './admin-reports.mjs';
+import {financialSales} from './financial-sales.mjs';
+import {roundMoney} from './money.mjs';
 const list=v=>Array.isArray(v)?v:[];
-const amount=v=>Number.isFinite(Number(v))?Math.max(0,Number(v)):0;
-const round=v=>Math.round((v+Number.EPSILON)*100)/100;
-const validPercentage=v=>v!==null&&v!==undefined&&v!==''&&['number','string'].includes(typeof v)&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=100;
+const amount=v=>Number.isFinite(Number(v))?roundMoney(Math.max(0,Number(v))):0;
+const round=roundMoney;
+const validPercentage=v=>v!==null&&v!==undefined&&String(v).trim()!==''&&['number','string'].includes(typeof v)&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=100;
 
 /** Historical snapshots only. Unallocated multi-line refunds remain unknown. */
 export function laborReport(business={},filters={}){
  const sales=salesReport(business,filters),allowed=new Set(sales.rows.map(row=>row.id)),rows=[];
- for(const sale of list(business.ventas)){
+ for(const sale of financialSales(business)){
   if(!allowed.has(String(sale.id??'')))continue;
   const lines=list(sale.labor||sale.mano_obra||sale.servicios),gross=lines.reduce((n,l)=>n+amount(l.importe??l.valor??l.precio),0);
   const refund=Math.min(gross,amount(sale.laborRefund??sale.devolucion_mano_obra));
@@ -17,7 +19,7 @@ export function laborReport(business={},filters={}){
    const mechanicAmount=net===0?0:net!==null&&percentage!==null?round(net*percentage/100):null;
    rows.push({id:String(sale.id)+':'+index,saleId:String(sale.id),date:reportDate(sale.fecha),plate:String(sale.placa||''),customer:String(sale.cliente||'Cliente general'),
     description:String(line.descripcion||line.descripcion_trabajo||'Servicio'),mechanicId:line.mecanicoId||null,mechanic:String(line.mecanico||'Sin identificar'),
-    status:sale.anulada?'Anulado':refund?'Con devolución':'Vigente',cancelled:!!sale.anulada,gross:charged,net,percentage,mechanicAmount,
+    legacyService:!!sale.legacyService,status:sale.anulada?'Anulado':refund?'Con devolución':sale.legacyService?'Histórico':'Vigente',cancelled:!!sale.anulada,gross:charged,net,percentage,mechanicAmount,
     businessAmount:mechanicAmount===null?null:round(net-mechanicAmount),allocationComplete:net!==null,splitComplete:mechanicAmount!==null});
   }
  }

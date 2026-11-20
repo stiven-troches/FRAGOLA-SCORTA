@@ -38,10 +38,13 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState}
   }
   return {request,readPrivate:()=>JSON.parse(db.prepare('SELECT data FROM platform WHERE id=1').get().data),async snapshot(){await queue;const directory=mkdtempSync(resolve(tmpdir(),'scorta-platform-')),target=resolve(directory,'platform.sqlite');try{await backup(db,target);validatePlatformDatabase(target);return readFileSync(target);}finally{rmSync(directory,{recursive:true,force:true});}},close(){closed=true;db.close();rmSync(pidFile,{force:true});}};
 }
-export function createPlatformHandler({store,production=false,publicUrl}={}){
+export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now}={}){
   const cookie=(value,age)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${production?'; Secure':''}`;
+  // Bound unauthenticated work before reading a body or opening the global JSON
+  // state. The origin comes from the socket, never a client-supplied proxy header.
+  const loginOrigins=new Map(),loginWindowMs=60000,loginOriginLimit=120,maxOrigins=1000;
   return async(req,res)=>{
-    const path=new URL(req.url,'http://localhost').pathname;if(!path.startsWith('/api/v2/'))return false;
+    const url=new URL(req.url,'http://localhost'),path=url.pathname;if(!path.startsWith('/api/v2/'))return false;
     try{
       const protocol=production||req.socket.encrypted?'https':'http';
       const origin=publicUrl?new URL(publicUrl).origin:`${protocol}://${req.headers.host}`;
@@ -50,16 +53,27 @@ export function createPlatformHandler({store,production=false,publicUrl}={}){
         if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){json(res,415,{error:'La solicitud debe utilizar JSON'});return true;}
       }
       if(!store){json(res,503,{error:'Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',code:'SETUP_REQUIRED'});return true;}
+      if(path==='/api/v2/login'&&req.method==='POST'){
+        const timestamp=Number(clock());
+        for(const [key,value]of loginOrigins)if(value.until<=timestamp)loginOrigins.delete(key);
+        const key=String(req.socket.remoteAddress||'unknown'),previous=loginOrigins.get(key);
+        if(previous&&previous.count>=loginOriginLimit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiados intentos desde este origen. Espera un minuto.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
+        if(!previous&&loginOrigins.size>=maxOrigins)loginOrigins.delete(loginOrigins.keys().next().value);
+        loginOrigins.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+      }
       let body;
       if(req.method==='POST'){
-        let source='';for await(const chunk of req){source+=chunk;if(Buffer.byteLength(source)>2000000){json(res,413,{error:'La solicitud es demasiado grande'});return true;}}
-        try{body=JSON.parse(source||'{}');}catch{json(res,400,{error:'Datos JSON inválidos'});return true;}
+        const chunks=[],limit=path==='/api/v2/login'?8192:2000000;let size=0;
+        for await(const chunk of req){const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=bytes.length;if(size>limit){json(res,413,{error:'La solicitud es demasiado grande'});return true;}chunks.push(bytes);}
+        try{body=JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');}catch{json(res,400,{error:'Datos JSON inválidos'});return true;}
       }
       const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='));
       const token=match?.slice(COOKIE.length+1);
-      const result=await store.request({method:req.method,path,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:req.socket.remoteAddress},{baseUrl:origin});
+      const hasContext=Object.hasOwn(req.headers,'x-scorta-company');
+      const result=await store.request({method:req.method,path:path+url.search,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:req.socket.remoteAddress,enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin});
       if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
+      if(result.status===429&&Number.isFinite(result.body?.retryAfterSeconds))res.setHeader('Retry-After',String(result.body.retryAfterSeconds));
       json(res,result.status,result.body);return true;
     }catch(error){json(res,error.status||400,{error:error.message||'No se pudo completar la solicitud'});return true;}
   };

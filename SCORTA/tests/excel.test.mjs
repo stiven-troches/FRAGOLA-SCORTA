@@ -44,3 +44,30 @@ test('Excel inválido o con ZIP declarado demasiado grande se rechaza antes de d
  let found=false;for(let i=0;i<bytes.length-46;i++)if(view.getUint32(i,true)===0x02014b50){view.setUint32(i+24,21000000,true);found=true;break}
  assert.ok(found);assert.throws(()=>validateWorkbookArchive(bytes),/20 MB/);
 });
+
+test('Excel: comillas y truncado producen hojas válidas sin alterar el dato del mecánico',async()=>{
+ for(const title of ["TRABAJOS DE Juan 'Pepe'", " 'Prueba' ","'".repeat(50),"TRABAJOS DE "+'x'.repeat(18)+"'más"]){
+  const buffer=await excelBuffer({title,columns:[['mechanic','MECÁNICO']],rows:[{mechanic:"Juan 'Pepe'"}]});const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);
+  const sheet=book.worksheets[0];assert.ok(sheet.name.length<=31);assert.ok(!sheet.name.startsWith("'")&&!sheet.name.endsWith("'"));assert.equal(sheet.getCell('A2').value,"Juan 'Pepe'");
+ }
+});
+
+test('Excel: costos vacíos o subcentavos rechazados y cero explícito conservado',()=>{
+ for(const value of [' ','\t','\u00a0',0.001])assert.throws(()=>parsePurchaseRows([headers,['p1','ACE-01','Aceite 4T',1,value]],products),/costo/);
+ for(const value of [0,'0',12.34])assert.equal(parsePurchaseRows([headers,['p1','ACE-01','Aceite 4T',1,value]],products)[0].precio_unitario,Number(value));
+});
+
+test('Excel: directorio con contadores alterados, CRC o tamaño inconsistente se rechaza',async()=>{
+ const source=await excelBuffer({title:'COMPRA',columns:purchaseColumns,rows:[{...purchaseTemplate(products)[0],cantidad:1}]});
+ const altered=new Uint8Array(source),view=new DataView(altered.buffer);let end=-1;for(let i=altered.length-22;i>=0;i--)if(view.getUint32(i,true)===0x06054b50){end=i;break}
+ assert.ok(end>=0);view.setUint16(end+8,0,true);view.setUint16(end+10,0,true);assert.throws(()=>validateWorkbookArchive(altered),/directorio/);
+ const crc=new Uint8Array(source),crcView=new DataView(crc.buffer);for(let i=0;i<crc.length-46;i++)if(crcView.getUint32(i,true)===0x02014b50){crcView.setUint32(i+16,123,true);break}
+ assert.throws(()=>validateWorkbookArchive(crc),/cabecera|tamaños|dañados/);
+});
+
+test('Excel: expansión real tiene límite aunque los tamaños declarados coincidan entre cabeceras',async()=>{
+ const {zipSync,strToU8}=await import('fflate');const bytes=zipSync({'[Content_Types].xml':strToU8('<Types/>'),'xl/workbook.xml':strToU8('<workbook/>'),'xl/notes.xml':strToU8('n'.repeat(1000000))}),view=new DataView(bytes.buffer);
+ // Keep local and central declarations mutually consistent, but incorrect for the actual stream.
+ for(let at=0;at<bytes.length-46;at++)if(view.getUint32(at,true)===0x02014b50&&view.getUint32(at+24,true)===1000000){view.setUint32(at+24,32,true);const local=view.getUint32(at+42,true);view.setUint32(local+22,32,true);break}
+ assert.throws(()=>validateWorkbookArchive(bytes),/tamaño permitido/);
+});

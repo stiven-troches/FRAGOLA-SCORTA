@@ -6,5 +6,5 @@ if errorlevel 1 (pause & exit /b 1)
 call npm.cmd run build
 if errorlevel 1 (pause & exit /b 1)
 start "" http://localhost:3000
-node server.mjs
+call npm.cmd start
 pause
