@@ -44,7 +44,7 @@ test('HTTP v2 verifica origen/formato, emite cookie segura y permite cerrar una 
  const invalid=await request('/api/v2/login',owner,{Origin:'https://evil.example'});assert.equal(invalid.status,403);
  const format=await request('/api/v2/login',owner,{'Content-Type':'text/plain'});assert.equal(format.status,415);
  const signed=await request('/api/v2/login',owner);assert.equal(signed.status,200);const cookie=signed.headers.get('set-cookie');for(const marker of ['HttpOnly','SameSite=Strict','Secure','Max-Age=2592000'])assert.ok(cookie.includes(marker));assert.ok(!cookie.includes(password));
- const session=await request('/api/v2/data',undefined,{Cookie:cookie.split(';')[0]});assert.equal(session.status,200);assert.equal((await session.json()).session.role,'owner');
+ const session=await request('/api/v2/data',undefined,{Cookie:cookie.split(';')[0],'X-SCORTA-Company':'@owner'});assert.equal(session.status,200);assert.equal((await session.json()).session.role,'owner');
  const out=await request('/api/v2/logout',{}, {Cookie:cookie.split(';')[0]});assert.equal(out.status,200);assert.match(out.headers.get('set-cookie'),/Max-Age=0/);
- const ended=await request('/api/v2/data',undefined,{Cookie:cookie.split(';')[0]});assert.equal(ended.status,401);
+ const ended=await request('/api/v2/data',undefined,{Cookie:cookie.split(';')[0],'X-SCORTA-Company':'@owner'});assert.equal(ended.status,401);
 });

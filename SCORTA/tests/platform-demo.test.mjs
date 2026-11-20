@@ -122,7 +122,7 @@ test('adaptador resuelve API y recibos en local, adapta enlaces estáticos y del
     response=await target.fetch('/receipt/'+withReceipt.receiptToken);assert.equal(response.status,200);
     assert.equal((await response.json()).sale.id,withReceipt.id);
     assert.equal((await target.fetch('/api/no-existe')).status,404);
-    assert.equal((await target.fetch('/api/v2/no-existe')).status,404);
+    assert.equal((await target.fetch('/api/v2/no-existe',{headers:{'X-SCORTA-Company':data.session.companyId}})).status,404);
     assert.equal(network.length,0);
     await target.fetch('/assets/app.js');assert.equal(network.length,1);
     const bad=await target.fetch('/api/v2/action',{method:'POST',body:'{'});assert.equal(bad.status,400);

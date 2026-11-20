@@ -12,10 +12,13 @@ function findTicket(state,actor,id){
   return ticket;
 }
 function markRead(ticket,actor){ticket.readers??={};ticket.readers[actor.id]=count(ticket)}
-function addMessage(ticket,actor,message,now){
+function addMessage(ticket,actor,message,now,{finalResolution=false}={}){
   ticket.messages??=[];
-  if(ticket.messages.length>=500)fail('Este ticket alcanzó el límite de mensajes. Crea uno nuevo para continuar.');
-  ticket.messages.push({id:crypto.randomUUID(),userId:actor.id,name:actor.name||actor.username,role:actor.role,message,createdAt:now});
+  // Keep all existing history and reserve exactly one extra event to resolve a
+  // full conversation. It cannot be used for replies or repeated status toggles.
+  const closingFull=finalResolution&&ticket.messages.length===500;
+  if(ticket.messages.length>=500&&!closingFull)fail('Este ticket alcanzó el límite de mensajes. Si sigue abierto, el propietario puede resolverlo. Para continuar la conversación se necesita otro ticket.');
+  ticket.messages.push({id:crypto.randomUUID(),userId:actor.id,name:actor.name||actor.username,role:actor.role,message,createdAt:now,...(closingFull?{kind:'final_resolution'}:{})});
   ticket.updatedAt=now;
   markRead(ticket,actor);
 }
@@ -47,7 +50,7 @@ export function applyTicketAction(state,actor,action,now){
     if(actor.role!=='owner')fail('Solo el propietario puede cambiar el estado del ticket.',403,'FORBIDDEN');
     if(!Object.hasOwn(statuses,form.status))fail('Selecciona Abierto, En atención o Resuelto.');
     if(ticket.status!==form.status){
-      addMessage(ticket,actor,`Estado del ticket: ${statuses[form.status]}.`,now);
+      addMessage(ticket,actor,`Estado del ticket: ${statuses[form.status]}.`,now,{finalResolution:form.status==='resolved'});
       ticket.status=form.status;
     }
   }else if(action.type==='ticket.read')markRead(ticket,actor);

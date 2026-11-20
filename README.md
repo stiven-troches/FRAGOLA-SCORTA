@@ -1,12 +1,12 @@
 # FRAGOLA SCORTA
 
-Aplicación multiempresa de inventario, ventas y taller para almacenes de accesorios y repuestos de moto. Incluye un panel del propietario del software, administradores por empresa y vendedores con acceso limitado. La revisión 2 organiza el vendedor en Nueva venta, Inventario y Taller, y utiliza una paleta blanca, negra y amarilla.
+Aplicación multiempresa para almacenes de accesorios y repuestos de moto: inventario, compras, ventas, taller, clientes, reportes y cierres por medio de pago. El propietario administra empresas y contratos; cada empresa tiene administradores y vendedores con permisos propios.
 
-El proyecto trabajado está en **[`SCORTA/`](SCORTA/)**. Los archivos de PRENOTA que permanecen en la raíz pertenecen a otro proyecto.
+**El proyecto está en [`SCORTA/`](SCORTA/).** Los archivos de PRENOTA que permanecen en la raíz corresponden a otro proyecto. Ejecuta los comandos desde `SCORTA`, como hace la integración continua.
 
-## Instalar la aplicación de servidor
+## Instalar el servidor
 
-Con Node.js 24:
+Requiere Node.js 24:
 
 ```sh
 cd SCORTA
@@ -14,11 +14,17 @@ npm ci
 npm run build
 ```
 
-Antes de `npm start`, configura las variables del propietario y una contraseña privada de entre 16 y 200 caracteres como explica [LEEME.md](SCORTA/LEEME.md). La credencial no se incluye en GitHub. La versión real utiliza SQLite en el servidor y comparte los datos de cada empresa entre sus equipos, respetando los permisos. La sesión dura hasta 30 días y se conserva al reiniciar el navegador y el servidor; el navegador real conserva únicamente una cookie de sesión segura, no la contraseña ni el inventario.
+Copia `.env.example` a `.env` y configura el propietario según [SCORTA/LEEME.md](SCORTA/LEEME.md). La contraseña inicial debe tener entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo. No guardes contraseñas en GitHub. Después ejecuta:
 
-La guía incluye instalación con Docker/HTTPS, migración del inventario anterior y respaldo de la nueva base de plataforma. Las cuentas anteriores deben recrearse o restablecerse desde el propietario.
+```sh
+npm start
+```
 
-## Demo multiempresa con datos ficticios
+`npm start` carga `.env`; `SCORTA/INICIAR.cmd` usa el mismo comando en Windows. La instalación compartida conserva los datos comerciales en SQLite del servidor y admite varios equipos por empresa. En producción requiere HTTPS y `SCORTA_PUBLIC_URL` con el origen definitivo. La sesión de plataforma dura hasta 30 días y se conserva al reiniciar el servidor; cada petición verifica de nuevo cuenta, permisos y contrato.
+
+La [guía de instalación](SCORTA/LEEME.md) incluye Docker Compose, migración de datos anteriores y respaldo/restauración de `platform.sqlite`. Los comandos antiguos para `motoshop.sqlite` no respaldan la plataforma multiempresa.
+
+## Demo con datos ficticios
 
 ```sh
 cd SCORTA
@@ -27,29 +33,31 @@ npm run build:demo
 npm run preview:demo
 ```
 
-Abre `http://127.0.0.1:4173`. La demo contiene dos empresas de ejemplo, un catálogo principal de 24 productos y accesos de propietario, administrador y vendedor. Sus botones y la sección **Datos de prueba** utilizan cuentas y contraseñas públicas exclusivamente ficticias.
+Abre `http://127.0.0.1:4173`. La demo usa IndexedDB del navegador y cuentas públicas de prueba para propietario, administrador y vendedor. Otro equipo o navegador tiene su propia copia. Los enlaces de comprobantes de la demo funcionan donde existen esos datos; la instalación de servidor permite compartir el enlace con el cliente.
 
-Los datos se conservan en IndexedDB del navegador actual y se pueden reiniciar. Otro equipo o navegador tiene su propia copia. Los enlaces de comprobantes de esta demo sólo funcionan donde existen esos datos; el servidor real sí permite compartir el comprobante con el cliente por su enlace.
+La [demo publicada](https://fragola-scorta-demo.safeturnip2.chatgpt.site) y su procedencia se documentan en [DEMO.md](SCORTA/docs/DEMO.md). Un cambio local o un control de CI aprobado no publica automáticamente esa demo ni despliega un servidor.
 
-La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera entrega multiempresa fue publicada y confirmada. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** Véase [DEMO.md](SCORTA/docs/DEMO.md).
+El logo original está incorporado en `SCORTA/src/assets/`; su procedencia se documenta en [LEEME-LOGO.md](SCORTA/src/assets/LEEME-LOGO.md).
 
-## Validación y entrega
+## Comprobaciones
 
 ```sh
 cd SCORTA
+npm ci
+npm audit --audit-level=moderate
 npm test
 npm run build
 npm run build:demo
 ```
 
-La verificación inicial multiempresa se registra en [QA-PLATAFORMA.md](SCORTA/docs/QA-PLATAFORMA.md). La comprobación de esta revisión y su conteo final se registran en [QA-REVISION2.md](SCORTA/docs/QA-REVISION2.md); la ejecución final de revisión 2 aprobó **86/86 pruebas**, además de ambas compilaciones; las 72 pruebas históricas no son el conteo de la nueva ejecución. La ejecución visual en navegador y los dispositivos físicos siguen pendientes. Los recorridos y capturas de la interfaz anterior no acreditan la plataforma nueva.
+La [integración continua](.github/workflows/scorta-ci.yml) ejecuta estas comprobaciones en Node.js 24 y las suites Playwright actuales de aplicación y demo, con Chromium de escritorio y móvil. Instala el navegador en el runner de GitHub y conserva trazas y capturas si falla. No despliega ni recibe la credencial privada de JE: esa prueba se omite expresamente cuando falta `SCORTA_JE_TEST_PASSWORD`. Las demás pruebas utilizan datos ficticios.
 
-Consulta la [entrega de revisión 2](SCORTA/docs/ENTREGA-REVISION2.md), la [entrega anterior](SCORTA/docs/ENTREGA.md), la [API de plataforma](SCORTA/docs/PLATFORM-API.md) y el [estado de los 32 ajustes](SCORTA/docs/PENDIENTES.md). El uso real todavía requiere alojamiento definitivo, HTTPS, cuentas privadas, respaldo externo probado, inventario real conciliado y piloto con el almacén.
+Consulta el contrato actual en [PLATFORM-API.md](SCORTA/docs/PLATFORM-API.md). Los informes históricos de QA describen sus respectivas revisiones; sus conteos no sustituyen una ejecución del código actual. CI tampoco acredita pruebas en dispositivos físicos ni un piloto con el personal del almacén.
 
-No deben añadirse al repositorio `SCORTA/data/`, `.env` ni credenciales privadas. SCORTA genera comprobantes comerciales; no incluye caja, contabilidad, pasarela bancaria ni facturación electrónica DIAN.
+## Límites de la entrega
 
-## Alcance pendiente de conexión y marca
+SCORTA registra operaciones, medios de pago y cierres; no procesa pagos bancarios ni sustituye contabilidad o facturación electrónica DIAN. El comprobante puede imprimirse o compartirse mediante un enlace; el envío manual abre WhatsApp y requiere confirmación de quien lo utiliza.
 
-Los avisos automáticos por WhatsApp, la recuperación por correo y los documentos legales tienen pantallas de vista previa: no envían mensajes, no restablecen contraseñas mediante correo y no registran firmas o aceptaciones legales reales. La conexión de esos servicios y la revisión jurídica permanecen aplazadas. El envío manual opcional del comprobante por WhatsApp sí conserva el flujo existente.
+Los avisos automáticos por WhatsApp, la recuperación automática por correo y la aceptación contractual continúan como vistas previas: no envían mensajes ni registran firmas o aceptaciones reales. El uso operativo requiere alojamiento definitivo, HTTPS, respaldos externos probados, inventario conciliado y piloto con el almacén.
 
-El archivo original del logo oficial todavía no está disponible en el entorno; no se ha redibujado ni se afirma que esté incorporado. Mientras se recibe, Brand.jsx muestra el nombre SCORTA como identificación neutra. Véase [la indicación del archivo original](SCORTA/src/assets/LEEME-LOGO.md).
+No subas `.env`, `SCORTA/data/`, bases SQLite, respaldos ni credenciales privadas al repositorio.

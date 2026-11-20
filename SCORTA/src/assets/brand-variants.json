@@ -1,0 +1,61 @@
+{
+  "source": {
+    "file": "fragola-scorta-logo.png",
+    "width": 1122,
+    "height": 1402,
+    "bytes": 1489083,
+    "sha256": "92ae7c9e238bc03528506dd2225c8af75b66ae10022afe0c4790d5d60bb46c2d"
+  },
+  "referenceResize": "Pillow LANCZOS RGBA, proportional integer dimensions; every PNG/WebP decoded byte matches the reference resize",
+  "webp": "lossless=True, exact=True, method=6; no color quantization",
+  "variants": [
+    {
+      "file": "fragola-scorta-logo-160.png",
+      "width": 160,
+      "height": 200,
+      "bytes": 49813,
+      "sha256": "e12e0ed51f52d26075291acfd667de85bd0e3c64dab3ee53a82f56e0372d9b28",
+      "rgbaMatchesReferenceResize": true
+    },
+    {
+      "file": "fragola-scorta-logo-160.webp",
+      "width": 160,
+      "height": 200,
+      "bytes": 42424,
+      "sha256": "862d0760efb368702b1dd9950c018649ffad7ea80e858b795fb7c6e9e10b9718",
+      "rgbaMatchesReferenceResize": true
+    },
+    {
+      "file": "fragola-scorta-logo-320.png",
+      "width": 320,
+      "height": 400,
+      "bytes": 161535,
+      "sha256": "7cd5563aac3487747f2a98368673738852589823c0d20019a67f429fe430e6a1",
+      "rgbaMatchesReferenceResize": true
+    },
+    {
+      "file": "fragola-scorta-logo-320.webp",
+      "width": 320,
+      "height": 400,
+      "bytes": 130078,
+      "sha256": "428bdbbe8a12e2af8288864e54a86e61c4686173d1c5c749edfab81ba3ec278c",
+      "rgbaMatchesReferenceResize": true
+    },
+    {
+      "file": "fragola-scorta-logo-480.png",
+      "width": 480,
+      "height": 600,
+      "bytes": 321586,
+      "sha256": "9792841a1f5fb4baea316d4d4c666c0b178c754fb99750c59885642e154f6aa7",
+      "rgbaMatchesReferenceResize": true
+    },
+    {
+      "file": "fragola-scorta-logo-480.webp",
+      "width": 480,
+      "height": 600,
+      "bytes": 261776,
+      "sha256": "8407a1a4df28e3a46bc73e8e5d059515d6c5bd1021fd60c6b479d4bf62942971",
+      "rgbaMatchesReferenceResize": true
+    }
+  ]
+}

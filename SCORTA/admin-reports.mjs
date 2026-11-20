@@ -1,9 +1,12 @@
+import {financialSales} from './financial-sales.mjs';
+import {roundMoney,sumMoney} from './money.mjs';
 // Pure administrator queries. No mutation, storage, current-price reconstruction
 // of historical costs, or exposure of raw documents/credentials in exports.
 const methods=['efectivo','transferencia','tarjeta'];
 const array=value=>Array.isArray(value)?value:[];
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
 const nonnegative=value=>Math.max(0,number(value));
+const monetary=value=>roundMoney(nonnegative(value));
 const string=value=>typeof value==='string'?value:value==null?'':String(value);
 const hasNumber=value=>(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value))&&Number(value)>=0;
 const fail=message=>{throw Object.assign(Error(message),{status:400,code:'INVALID_REPORT_PERIOD'})};
@@ -25,20 +28,20 @@ function period({from='',to=''}={}){
 const inPeriod=(date,range)=>!!date&&(!range.from||date>=range.from)&&(!range.to||date<=range.to);
 function originalLabor(sale){
   const lines=array(sale.labor||sale.mano_obra||sale.servicios);
-  if(lines.length)return lines.reduce((sum,line)=>sum+nonnegative(line.importe??line.valor??line.precio),0);
-  return nonnegative(sale.subtotal_mano_obra??sale.costo_mano_obra??sale.laborTotal);
+  if(lines.length)return lines.reduce((sum,line)=>sum+monetary(line.importe??line.valor??line.precio),0);
+  return monetary(sale.subtotal_mano_obra??sale.costo_mano_obra??sale.laborTotal);
 }
 function saleRow(sale){
   const details=array(sale.detalles),cancelled=!!sale.anulada;
   let grossProducts=0,productReturns=0,knownProductCost=0,unknownCostLines=0;
   for(const line of details){
-    const quantity=nonnegative(line.cantidad),price=nonnegative(line.precio_unitario),returned=Math.min(quantity,nonnegative(line.devuelto));
+    const quantity=nonnegative(line.cantidad),price=monetary(line.precio_unitario),returned=Math.min(quantity,nonnegative(line.devuelto));
     grossProducts+=quantity*price;productReturns+=returned*price;
     const retained=cancelled?0:quantity-returned;
-    if(retained>0){if(hasNumber(line.costo_unitario))knownProductCost+=retained*Number(line.costo_unitario);else unknownCostLines++}
+    if(retained>0){if(hasNumber(line.costo_unitario))knownProductCost+=retained*roundMoney(line.costo_unitario);else unknownCostLines++}
   }
-  const grossLabor=originalLabor(sale),laborReturns=Math.min(grossLabor,nonnegative(sale.laborRefund??sale.devolucion_mano_obra));
-  const gross=hasNumber(sale.total)?Number(sale.total):grossProducts+grossLabor;
+  const grossLabor=originalLabor(sale),laborReturns=Math.min(grossLabor,monetary(sale.laborRefund??sale.devolucion_mano_obra));
+  const gross=hasNumber(sale.total)?roundMoney(sale.total):roundMoney(grossProducts+grossLabor);
   // A full cancellation takes priority over any prior partial returns so the
   // gross - returns - cancellations reconciliation never deducts them twice.
   const returns=cancelled?0:Math.min(gross,productReturns+laborReturns),cancellations=cancelled?gross:0;
@@ -47,23 +50,23 @@ function saleRow(sale){
   return {id:string(sale.id),date:reportDate(sale.fecha),seller:string(sale.usuario||sale.sellerName||'Sin usuario'),
     customer:string(sale.cliente||'Cliente general'),plate:string(sale.placa),paymentMethod:string(sale.paymentMethod||sale.medio_pago),
     status:cancelled?'Anulada':returns>0?'Con devolución':'Vigente',cancelled,
-    gross,returns,cancellations,net:Math.max(0,gross-returns-cancellations),products,labor,
-    productCost:marginComplete?knownProductCost:null,knownProductCost,productMargin:marginComplete?products-knownProductCost:null,marginComplete,unknownCostLines};
+    gross:roundMoney(gross),returns:roundMoney(returns),cancellations:roundMoney(cancellations),net:roundMoney(Math.max(0,gross-returns-cancellations)),products:roundMoney(products),labor:roundMoney(labor),
+    productCost:marginComplete?roundMoney(knownProductCost):null,knownProductCost:roundMoney(knownProductCost),productMargin:marginComplete?roundMoney(products-knownProductCost):null,marginComplete,unknownCostLines};
 }
 function salesTotals(rows){
   const totals={count:rows.length,gross:0,returns:0,cancellations:0,net:0,products:0,labor:0,productCost:0,knownProductCost:0,productMargin:0,marginComplete:true,unknownCostLines:0};
   for(const row of rows){
-    for(const key of ['gross','returns','cancellations','net','products','labor','knownProductCost','unknownCostLines'])totals[key]+=row[key];
+    for(const key of ['gross','returns','cancellations','net','products','labor','knownProductCost','unknownCostLines'])totals[key]=roundMoney(totals[key]+row[key]);
     if(!row.marginComplete)totals.marginComplete=false;
   }
   totals.productCost=totals.marginComplete?totals.knownProductCost:null;
-  totals.productMargin=totals.marginComplete?totals.products-totals.knownProductCost:null;
+  totals.productMargin=totals.marginComplete?roundMoney(totals.products-totals.knownProductCost):null;
   return totals;
 }
 export function salesReport(business={},filters={}){
-  const range=period(filters),rows=array(business.ventas).map(saleRow).filter(row=>inPeriod(row.date,range));
+  const range=period(filters),rows=financialSales(business).map(saleRow).filter(row=>inPeriod(row.date,range));
   const paymentTotals={efectivo:0,transferencia:0,tarjeta:0};let unknownPaymentCount=0;
-  for(const row of rows){if(methods.includes(row.paymentMethod))paymentTotals[row.paymentMethod]+=row.net;else if(row.net>0)unknownPaymentCount++}
+  for(const row of rows){if(methods.includes(row.paymentMethod))paymentTotals[row.paymentMethod]=roundMoney(paymentTotals[row.paymentMethod]+row.net);else if(row.net>0)unknownPaymentCount++}
   const sellers=new Map();for(const row of rows){const group=sellers.get(row.seller)||[];group.push(row);sellers.set(row.seller,group)}
   return {kind:'sales',basis:'sale_date_current_net',...range,rows,totals:salesTotals(rows),paymentTotals,unknownPaymentCount,
     bySeller:[...sellers].map(([seller,entries])=>({seller,...salesTotals(entries)}))};
@@ -73,13 +76,13 @@ export function cashExpected(business,date){if(typeof date!=='string'||!/^\d{4}-
 export function mechanicReport(business={},filters={}){
   const range=period(filters),groups=new Map(),totals={services:0,gross:0,returns:0,net:0};
   const normalize=value=>string(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
-  for(const sale of array(business.ventas)){
+  for(const sale of financialSales(business)){
     if(sale.anulada||!inPeriod(reportDate(sale.fecha),range))continue;
     // Service records mirror their sale: count only the labor snapshots on ventas.
     const lines=array(sale.labor||sale.mano_obra||sale.servicios);if(!lines.length)continue;
     const keys=lines.map(line=>line.mecanicoId||'legacy:'+normalize(line.mecanico||'Sin identificar'));
-    const gross=lines.reduce((sum,line)=>sum+nonnegative(line.importe??line.valor??line.precio),0);
-    const refunded=Math.min(gross,nonnegative(sale.laborRefund??sale.devolucion_mano_obra));
+    const gross=lines.reduce((sum,line)=>sum+monetary(line.importe??line.valor??line.precio),0);
+    const refunded=Math.min(gross,monetary(sale.laborRefund??sale.devolucion_mano_obra));
     const unambiguous=new Set(keys).size===1;
     totals.services+=lines.length;totals.gross+=gross;totals.returns+=refunded;totals.net+=gross-refunded;
     for(let index=0;index<lines.length;index++){

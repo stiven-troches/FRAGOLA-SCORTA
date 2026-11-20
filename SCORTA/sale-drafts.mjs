@@ -20,8 +20,9 @@ function cleanDraft(value){
     const a=value.pendingSale;
     if(a.type!=='sale.create'||a.requestId!==a.draftRequestId)fail('Operación pendiente inválida.');
     str(a.requestId,150);
+    if(Object.hasOwn(a,'revision')&&(!Number.isSafeInteger(a.revision)||a.revision<0))fail('La revisión del cobro pendiente debe ser un entero válido no negativo.');
     // Keep the exact payload for a safe retry, while admitting only the sale fields.
-    next.pendingSale={type:'sale.create',requestId:a.requestId,draftRequestId:a.draftRequestId,form:structuredClone(next.saleForm),
+    next.pendingSale={type:'sale.create',requestId:a.requestId,draftRequestId:a.draftRequestId,...(Object.hasOwn(a,'revision')?{revision:a.revision}:{}),form:structuredClone(next.saleForm),
       items:array(a.items,1000).map(v=>({producto_id:str(v.producto_id,100),nombre:str(v.nombre),cantidad:amount(v.cantidad),precio_unitario:amount(v.precio_unitario)})),
       labor:array(a.labor,100).map(labor)};
     next.pendingSale.form.placa=next.pendingSale.form.placa.trim().toUpperCase();

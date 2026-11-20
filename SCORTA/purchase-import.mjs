@@ -1,6 +1,6 @@
 export const purchaseColumns=[['producto_id','PRODUCTO ID'],['referencia','REFERENCIA'],['nombre','PRODUCTO'],['cantidad','CANTIDAD'],['precio_unitario','COSTO UNITARIO']];
 const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
-const empty=v=>v===null||v===undefined||v==='';
+const empty=v=>v===null||v===undefined||typeof v==='string'&&v.trim()==='';
 export function purchaseTemplate(prods){return prods.slice(0,1000).map(p=>({producto_id:p.id,referencia:p.referencia||'',nombre:p.nombre,cantidad:null,precio_unitario:p.precio_compra??0}))}
 export function parsePurchaseRows(table,prods){
  if(!Array.isArray(table)||table.length<2||table.length>1001)throw Error('El Excel debe contener entre 1 y 1000 productos.');
@@ -21,7 +21,7 @@ export function parsePurchaseRows(table,prods){
   if(candidates.length!==1){issue(candidates.length?'El producto es ambiguo; indica su ID o referencia.':'Producto inexistente o identificadores que no coinciden.');continue}
   const p=candidates[0],qty=Number(row.CANTIDAD),cost=Number(row['COSTO UNITARIO']);
   if(!Number.isSafeInteger(qty)||qty<1||qty>1e9){issue('La cantidad debe ser un entero positivo.');continue}
-  if(empty(row['COSTO UNITARIO'])||!Number.isFinite(cost)||cost<0||cost>1e12){issue('Indica un costo numérico no negativo, sin símbolos de moneda.');continue}
+  if(empty(row['COSTO UNITARIO'])||!Number.isFinite(cost)||cost<0||cost>1e12||Math.abs(Math.round(cost*100)-cost*100)>1e-7){issue('Indica un costo numérico no negativo, sin símbolos de moneda.');continue}
   if(qty*cost>1e12){issue('El importe del producto supera el límite permitido.');continue}
   if(seen.has(p.id)){issue('Producto repetido en el archivo.');continue}seen.add(p.id);
   lines.push({producto_id:p.id,nombre:p.nombre,cantidad:qty,precio_unitario:cost});

@@ -5,6 +5,7 @@ import {passwordPolicyError} from './password-policy.mjs';
 import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
 import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
+import {moneyAmount,sumMoney} from './money.mjs';
 
 const encoder = new TextEncoder();
 const MAX_IMAGE = 700000;
@@ -12,6 +13,8 @@ const MAX_IMAGE = 700000;
 export const PLATFORM_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_MS = PLATFORM_SESSION_TTL_MS;
 const RECEIPT_MS = 7 * 86400000;
+const LOGIN_ACCOUNT_WINDOW_MS=15*60000,LOGIN_ORIGIN_WINDOW_MS=60000;
+const LOGIN_ORIGIN_LIMIT=60,MAX_LOGIN_FAILURES=2000,MAX_LOGIN_ORIGINS=1000;
 const fail = (message, status = 400, code) => {throw Object.assign(Error(message), {status, code});};
 const stamp = value => {const n = typeof value === 'function' ? value() : value ?? Date.now(); const d = new Date(n); if (!Number.isFinite(d.getTime())) fail('Fecha inválida'); return d;};
 export const dateBogota = now => new Intl.DateTimeFormat('en-CA', {timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(stamp(now));
@@ -21,13 +24,59 @@ const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,''
 const text = (v, label, max = 200) => {if (typeof v !== 'string' || !v.trim() || v.length > max) fail(`${label}: dato obligatorio o demasiado largo`); return v.trim();};
 const optionalText = (v, max = 200) => v == null ? '' : String(v).trim().slice(0,max);
 const recoveryEmail = value => {if(value==null||value==='')return '';if(typeof value!=='string'||value.length>254)fail('Correo de recuperación inválido');const email=value.trim().toLowerCase();if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo de recuperación inválido');return email;};
-const number = (v, label, integer = false) => {const n = Number(v); if (v === '' || v == null || !Number.isFinite(n) || n < 0 || n > 1e12 || integer && !Number.isSafeInteger(n)) fail(`${label}: valor inválido`); return n;};
 const date = (v, label) => {if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(Date.parse(v)) || new Date(v).toISOString().slice(0,10) !== v) fail(`${label}: fecha inválida`); return v;};
 const token = () => toBase64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 const toBase64 = bytes => btoa(Array.from(bytes, v => String.fromCharCode(v)).join(''));
 const fromBase64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const hash = async value => toBase64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
 const checkPassword = v => {const error=passwordPolicyError(v);if(error)fail(error,400,'INVALID_PASSWORD');return v;};
+function pruneLoginTracking(state,now){
+  for(const [field,max]of [['loginFailures',MAX_LOGIN_FAILURES],['loginOrigins',MAX_LOGIN_ORIGINS]]){
+    const records=state[field]??={};
+    for(const [key,value]of Object.entries(records))if(!value||!Number.isFinite(value.until)||value.until<=now)delete records[key];
+    const entries=Object.entries(records);
+    if(entries.length>max)for(const [key]of entries.sort((a,b)=>a[1].until-b[1].until).slice(0,entries.length-max))delete records[key];
+  }
+}
+function companySlug(value){return norm(value).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,50)||'empresa'}
+function normalizeContext(value){
+  if(value===null||value==='@owner')return null;
+  if(typeof value!=='string'||!value||value.length>100||value.trim()!==value)fail('Contexto de empresa inválido.',400,'INVALID_CONTEXT');
+  return value;
+}
+async function actionFingerprint(actor,body){
+  const action=structuredClone(body);delete action.revision;delete action.requestId;
+  if(action.payload){delete action.payload.revision;delete action.payload.requestId;}
+  const contextCompanyId=['support.start','support.end'].includes(body.type)?null:actor.companyId;
+  return hash(JSON.stringify({contextCompanyId,action}));
+}
+async function assertRequestContext(state,actor,request,body,path){
+  const fromRequest=Object.hasOwn(request,'expectedCompanyId'),fromBody=Object.hasOwn(body,'expectedCompanyId');
+  if(!fromRequest&&!fromBody){
+    // The initial session bootstrap is deliberately context-free. Internal pure
+    // engine callers stay compatible; every browser/HTTP adapter opts in below.
+    if(request.enforceContext&&path!=='/api/v2/session')fail('Recarga la aplicación para confirmar la empresa antes de continuar.',428,'CONTEXT_REQUIRED');
+    return;
+  }
+  const expected=normalizeContext(fromRequest?request.expectedCompanyId:body.expectedCompanyId);
+  if(fromRequest&&fromBody&&normalizeContext(body.expectedCompanyId)!==expected)fail('La solicitud contiene contextos de empresa diferentes.',400,'INVALID_CONTEXT');
+  if(expected===(actor.companyId??null))return;
+  // A transition may already have succeeded before its response was lost. Only
+  // acknowledge its exact recorded request while still in its resulting scope.
+  if(path==='/api/v2/action'&&['support.start','support.end'].includes(body.type)&&typeof body.requestId==='string'&&body.requestId.trim()&&body.requestId.length<=150){
+    const previous=state.requests[actor.id+'|'+body.requestId.trim()];
+    const inResult=body.type==='support.start'?actor.companyId===body.companyId&&actor.support?.reason===String(body.form?.motivo||'').trim():actor.companyId===null;
+    if(inResult&&previous?.fingerprint===await actionFingerprint(actor,body))return;
+  }
+  fail('La empresa o sesión cambió en otra pestaña. Recarga para confirmar el contexto; no se aplicaron cambios.',409,'COMPANY_CONTEXT_CHANGED');
+}
+function publicReceiptSale(sale){
+  const result={};
+  for(const key of ['id','fecha','usuario','cliente','telefono','placa','paymentMethod','anulada','total','subtotal_productos','subtotal_mano_obra','laborRefund','devolucion_mano_obra'])if(Object.hasOwn(sale,key))result[key]=structuredClone(sale[key]);
+  result.detalles=(sale.detalles||[]).map(line=>Object.fromEntries(['nombre','cantidad','precio_unitario','devuelto'].filter(key=>Object.hasOwn(line,key)).map(key=>[key,structuredClone(line[key])])));
+  result.labor=(sale.labor||[]).map(line=>Object.fromEntries(['descripcion','mecanico','importe'].filter(key=>Object.hasOwn(line,key)).map(key=>[key,structuredClone(line[key])])));
+  return result;
+}
 async function passwordHash(password, salt = toBase64(crypto.getRandomValues(new Uint8Array(16)))) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   const result = await crypto.subtle.deriveBits({name:'PBKDF2',salt:fromBase64(salt),iterations:120000,hash:'SHA-256'},key,256);
@@ -107,7 +156,7 @@ function aggregates(business) {
   }
   return {customers:[...customers.values()],vehicles:[...vehicles.values()]};
 }
-function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje'].includes(key))next[key]=removeCosts(item);return next;}return value;}
+function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje','costHistory'].includes(key))next[key]=removeCosts(item);return next;}return value;}
 function envelope(state, actor, now, baseUrl) {
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact};
   if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
@@ -130,9 +179,9 @@ function companyForm(state,form,old,now) {
   const name=text(form.name??old?.name,'Nombre de empresa',100);
   if(norm(name)===norm(state.ownerCompany)||state.companies.some(c=>c.id!==old?.id&&(norm(c.name)===norm(name)||norm(c.slug)===norm(name))))fail('Ya existe una empresa con ese nombre');
   const email=optionalText(form.email??old?.email,254);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo inválido');
-  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:number(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
+  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:moneyAmount(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
   if(old)return {...old,...fields};
-  const base=norm(name).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,50)||'empresa';let slug=base;while(state.companies.some(c=>c.slug===slug||norm(c.name)===slug))slug=base+'-'+id().slice(0,6);
+  const base=companySlug(name),reserved=new Set([norm(state.ownerCompany),companySlug(state.ownerCompany)]);let slug=base;while(reserved.has(norm(slug))||state.companies.some(c=>c.slug===slug||norm(c.name)===slug))slug=base+'-'+id().slice(0,6);
   return {id:id(),slug,...fields,enabled:true,createdAt:iso(now)};
 }
 function customerFor(business,form) {
@@ -172,7 +221,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='company.renew'){
     const proposal=renewalProposal(company,now),next=period({startDate:form.startDate||proposal.startDate,endDate:form.endDate});
     if(next.endDate<=company.endDate)fail('La nueva fecha debe ampliar el vencimiento actual');
-    const payment={id:id(),companyId:company.id,date:date(form.date||dateBogota(now),'Fecha de pago'),amount:number(form.amount??company.monthlyFee,'Importe'),previousEndDate:company.endDate,...next,username:actor.username};
+    const payment={id:id(),companyId:company.id,date:date(form.date||dateBogota(now),'Fecha de pago'),amount:moneyAmount(form.amount??company.monthlyFee,'Importe'),previousEndDate:company.endDate,...next,username:actor.username};
     company.startDate=next.startDate;company.endDate=next.endDate;state.payments.unshift(payment);
   }else if(a.type==='user.create'){
     companyFor(state,a.companyId);uniqueUser(state,a.companyId,form.username);
@@ -210,7 +259,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='sale.create'){
     assertDraftSale(state,actor,a);
     if(!Array.isArray(a.items||[])||!Array.isArray(a.labor||[])||(a.items||[]).length>1000||(a.labor||[]).length>100)fail('Lista de artículos o servicios inválida');
-    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>({...mechanicForLabor(b,line),descripcion:text(line?.descripcion,'Trabajo realizado',3000),importe:number(line?.importe,'Mano de obra')}));
+    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>({...mechanicForLabor(b,line),descripcion:text(line?.descripcion,'Trabajo realizado',3000),importe:moneyAmount(line?.importe,'Mano de obra')}));
     if(!items.length&&!labor.length)fail('Agrega productos o mano de obra');
     const fecha=date(form.fecha||dateBogota(now),'Fecha de venta'),placa=validatePlate(form.placa);if(labor.length&&!placa)fail('Ingresa la placa para registrar el servicio');
     if(!['efectivo','transferencia','tarjeta'].includes(form.paymentMethod))fail('Selecciona efectivo, transferencia o tarjeta');
@@ -218,8 +267,8 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
     const customer=customerFor(b,form),base=structuredClone(b);let next,sale;
     if(items.length){next=aplicarCambio(base,{kind:'venta',revision:base.revision,form:{fecha,cliente:customer.cliente},items},actor.label);sale=next.ventas[0];}
     else{next=base;next.revision++;sale={id:id(),fecha,usuario:actor.label,detalles:[],total:0};next.ventas.unshift(sale);businessAudit(next,actor,'venta',{documento:sale.id},now);}
-    const subtotal_productos=sale.total,subtotal_mano_obra=labor.reduce((n,l)=>n+l.importe,0),receiptToken=token();
-    Object.assign(sale,customer,{userId:actor.id,placa,labor,subtotal_productos,subtotal_mano_obra,paymentMethod:form.paymentMethod,total:subtotal_productos+subtotal_mano_obra,receiptToken,receiptUrl:new URL('/receipt/'+receiptToken,baseUrl||'https://scorta.example').href,receiptExpiresAt:new Date(stamp(now).getTime()+RECEIPT_MS).toISOString()});
+    const subtotal_productos=sale.total,subtotal_mano_obra=sumMoney(labor.map(l=>l.importe)),receiptToken=token();
+    Object.assign(sale,customer,{userId:actor.id,placa,labor,subtotal_productos,subtotal_mano_obra,paymentMethod:form.paymentMethod,total:sumMoney([subtotal_productos,subtotal_mano_obra]),receiptToken,receiptUrl:new URL('/receipt/'+receiptToken,baseUrl||'https://scorta.example').href,receiptExpiresAt:new Date(stamp(now).getTime()+RECEIPT_MS).toISOString()});
     if(labor.length)next.servs.unshift({id:id(),venta_id:sale.id,fecha,usuario:actor.label,userId:actor.id,...customer,placa,labor:structuredClone(labor),descripcion_trabajo:labor.map(l=>l.descripcion).join('; '),mecanico:labor.map(l=>l.mecanico).join(', '),costo_mano_obra:subtotal_mano_obra,subtotal_productos,subtotal_mano_obra,total:sale.total,detalles:structuredClone(sale.detalles),estado:'completado',paymentMethod:sale.paymentMethod});
     const log=next.auditoria?.[0];if(log){log.userId=actor.id;log.motivo=actor.support?.reason||'';log.despues={total:sale.total,placa,cliente:sale.cliente};}
     state.receipts[await hash(receiptToken)]={companyId:actor.companyId,saleId:sale.id,expires:stamp(now).getTime()+RECEIPT_MS};state.businesses[actor.companyId]=next;
@@ -227,6 +276,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='sale.receipt'){
     const b=businessContext(state,actor),sale=b.ventas.find(s=>s.id===a.id);if(!sale)fail('Venta inexistente',404);
     if(actor.role==='vendedor'&&sale.userId!==actor.id)fail('Solo puedes consultar tus propias ventas',403,'FORBIDDEN');
+    for(const [key,ref]of Object.entries(state.receipts))if(ref.companyId===actor.companyId&&ref.saleId===sale.id)delete state.receipts[key];
     const nextToken=token();sale.receiptToken=nextToken;sale.receiptUrl=new URL('/receipt/'+nextToken,baseUrl||'https://scorta.example').href;sale.receiptExpiresAt=new Date(stamp(now).getTime()+RECEIPT_MS).toISOString();
     state.receipts[await hash(nextToken)]={companyId:actor.companyId,saleId:sale.id,expires:stamp(now).getTime()+RECEIPT_MS};b.revision++;businessAudit(b,actor,'comprobante_enlace',{documento:sale.id},now);
   }else if(a.type==='sale.reverse'){
@@ -252,29 +302,40 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     if(!input)fail('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',503,'SETUP_REQUIRED');
     const method=(request.method||'GET').toUpperCase(),url=new URL(request.path,'https://scorta.example'),path=url.pathname,body=request.body||{};
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
-    if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:removeCosts(structuredClone(sale)),expiresAt:new Date(ref.expires).toISOString()});}
+    if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:publicReceiptSale(sale),expiresAt:new Date(ref.expires).toISOString()});}
     if(method==='POST'){
       if(!body||typeof body!=='object'||Array.isArray(body))fail('Datos inválidos');
       state=structuredClone(input);
       for(const [key,s]of Object.entries(state.sessions))if(s.expires<=stamp(now).getTime())delete state.sessions[key];
+      pruneLoginTracking(state,stamp(now).getTime());
     }
     const sessionKey=request.token?await hash(request.token):null,session=sessionKey?state.sessions[sessionKey]:null;
     if(path==='/api/v2/login'&&method==='POST'){
-      const companyName=norm(body.company),username=norm(body.username),company=state.companies.find(c=>norm(c.name)===companyName||norm(c.slug)===companyName);
-      const companyId=companyName===norm(state.ownerCompany)?null:company?.id;
+      const timestamp=stamp(now).getTime(),originKey=await hash('origin|'+optionalText(request.clientKey||'unknown',100));
+      const origin=state.loginOrigins[originKey];
+      if(origin?.until>timestamp&&origin.count>=LOGIN_ORIGIN_LIMIT)return response(429,{error:'Demasiados intentos desde este origen. Espera un minuto antes de volver a ingresar.',code:'RATE_LIMITED',retryAfterSeconds:Math.max(1,Math.ceil((origin.until-timestamp)/1000))});
+      state.loginOrigins[originKey]={count:origin?.until>timestamp?origin.count+1:1,until:origin?.until>timestamp?origin.until:timestamp+LOGIN_ORIGIN_WINDOW_MS};
+      const validFields=typeof body.company==='string'&&body.company.length<=200&&typeof body.username==='string'&&body.username.length<=60&&typeof body.password==='string'&&body.password.length<=200;
+      if(!validFields){pruneLoginTracking(state,timestamp);return response(401,{error:'Empresa, usuario o contraseña incorrectos',code:'INVALID_CREDENTIALS'});}
+      const companyName=norm(body.company),username=norm(body.username),isOwner=companyName===norm(state.ownerCompany);
+      // The owner namespace never resolves through a tenant's legacy slug.
+      const company=isOwner?null:state.companies.find(c=>norm(c.name)===companyName||norm(c.slug)===companyName);
+      const companyId=isOwner?null:company?.id;
       const key=await hash(companyName+'|'+username+'|'+optionalText(request.clientKey,100));
-      const previous=state.loginFailures[key],timestamp=stamp(now).getTime();
-      if(previous?.until>timestamp&&previous.count>=10)fail('Demasiados intentos. Espera unos minutos antes de volver a ingresar.',429,'RATE_LIMITED');
+      const previous=state.loginFailures[key];
+      if(previous?.until>timestamp&&previous.count>=10)return response(429,{error:'Demasiados intentos. Espera unos minutos antes de volver a ingresar.',code:'RATE_LIMITED',retryAfterSeconds:Math.max(1,Math.ceil((previous.until-timestamp)/1000))});
       const user=companyId!==undefined?state.users.find(u=>u.companyId===companyId&&norm(u.username)===username&&u.active):null;
       const valid=user&&await verifyPassword(user,body.password);
-      if(!valid){state.loginFailures[key]={count:previous?.until>timestamp?previous.count+1:1,until:previous?.until>timestamp?previous.until:timestamp+15*60000};return response(401,{error:'Empresa, usuario o contraseña incorrectos',code:'INVALID_CREDENTIALS'});}
+      if(!valid){state.loginFailures[key]={count:previous?.until>timestamp?previous.count+1:1,until:previous?.until>timestamp?previous.until:timestamp+LOGIN_ACCOUNT_WINDOW_MS};pruneLoginTracking(state,timestamp);return response(401,{error:'Empresa, usuario o contraseña incorrectos',code:'INVALID_CREDENTIALS'});}
       if(company)assertAccess(company,now);
       delete state.loginFailures[key];if(sessionKey)delete state.sessions[sessionKey];
+      pruneLoginTracking(state,timestamp);
       const nextToken=token(),nextKey=await hash(nextToken);state.sessions[nextKey]={userId:user.id,version:user.version,expires:timestamp+SESSION_MS};
       return response(200,envelope(state,resolveActor(state,state.sessions[nextKey],now),now,baseUrl),{token:nextToken});
     }
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     const actor=resolveActor(state,session,now);
+    await assertRequestContext(state,actor,request,body,path);
     if(method==='GET'&&(path==='/api/v2/reports'||path==='/api/v2/overview')){
       if(!admin(actor))fail('Los reportes requieren un administrador de la empresa.',403,'FORBIDDEN');
       const business=businessContext(state,actor),period=reportDates(url.searchParams.get('from'),url.searchParams.get('to'),dateBogota(now));
@@ -292,9 +353,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(method==='POST'&&path==='/api/v2/action'){
       if(typeof body.type!=='string')fail('Acción inválida');
-      const fingerprintBody=structuredClone(body);delete fingerprintBody.revision;delete fingerprintBody.requestId;if(fingerprintBody.payload){delete fingerprintBody.payload.revision;delete fingerprintBody.payload.requestId;}
-      const contextCompanyId=['support.start','support.end'].includes(body.type)?null:actor.companyId;
-      const fingerprint=await hash(JSON.stringify({contextCompanyId,action:fingerprintBody}));
+      const fingerprint=await actionFingerprint(actor,body);
       const requestKey=body.requestId?actor.id+'|'+text(body.requestId,'Identificador',150):null;
       if(requestKey&&state.requests[requestKey]){if(state.requests[requestKey].fingerprint!==fingerprint)fail('El identificador de operación ya fue usado con otros datos');return response(200,envelope(state,actor,now,baseUrl));}
       const expected=actor.companyId?state.businesses[actor.companyId].revision:state.revision;
