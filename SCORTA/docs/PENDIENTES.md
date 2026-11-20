@@ -203,3 +203,22 @@ Validación de la regla: 99/99 pruebas Node aprobadas, incluidas longitud/compos
 **Validación:** 122/122 pruebas aprobadas, sin omisiones, incluida la prueba del acceso de JE con la clave entregada por entrada oculta. Compilaciones de aplicación y demo aprobadas; git diff --check limpio. No se declara revisión visual, prueba de impresora térmica ni aceptación de celular real: el entorno no tiene cua_repl.js. El aviso de tamaño del chunk del demo no impide compilar.
 
 La migración del demo agrega JE sin borrar empresas, sesiones, inventario, borradores o tickets existentes y sin restablecer contraseñas. Una JE ya creada se conserva; una eliminación manual no se deshace al recargar. El demo sigue siendo una copia por navegador. No se creó una instalación compartida real ni se conectaron WhatsApp automático/correo/firma. Quedan revisión conjunta de administrador, pruebas en dispositivos/impresora y P05–P10. Guion: [REVISION5-ENTREGA.md](REVISION5-ENTREGA.md).
+
+## Revisión 6 · administración del negocio
+
+Se ejecutaron los seis ajustes aprobados sin agregar pestañas principales. Dashboard → Administración abre herramientas; Taller → Mecánicos da acceso al catálogo; Perfil → Mi suscripción es de solo lectura.
+
+| Ajuste | Responsables | Entrega |
+| --- | --- | --- |
+| Cierre de caja | admin_backend, admin_tools_ui, coordinación | Conciliación de ventas netas de una fecha por efectivo/transferencia/tarjeta, recibido real y diferencias. Autor, hora y observación. Registro único e inmutable, con confirmación previa e idempotencia. |
+| Resumen por fechas | admin_reports, admin_tools_ui | Productos, mano de obra, devoluciones, anulaciones, ventas netas y margen de productos con costo histórico. Costos incompletos no generan utilidad ficticia. |
+| Mecánicos | admin_backend, admin_tools_ui, coordinación | Crear/editar/desactivar/reactivar; selector en Taller para ambos roles. Nombre histórico conservado y cobros/trabajos del período; históricos sin asociación visibles aparte. |
+| Reposición | admin_reports, admin_tools_ui | Agotados y productos en mínimo, búsqueda, sugerencia para superar mínimo y CSV de filas visibles. No crea compras ni modifica existencias. |
+| Mi suscripción | admin_subscription | Estado, vigencia, días, mensualidad y contacto del propietario si fue configurado. Acceso a soporte; sin modificar contratos o pagos. |
+| Exportar reportes | admin_reports, admin_tools_ui | Ventas/compras por período y existencias actuales en CSV, con columnas explícitas y protección frente a fórmulas. |
+
+**Validación:** 145/145 pruebas, sin omisiones, y compilaciones de aplicación/demo aprobadas. Se conserva el acceso probado de JE por entrada oculta. Dockerfile incluye los dos módulos nuevos en ambas etapas; no se desplegó un servidor real ni un contenedor.
+
+El cierre es una conciliación de ventas: devoluciones/anulaciones se atribuyen a la fecha original de venta, según su estado actual. No reconstruye flujos históricos por fecha de devolución ni agrega saldo inicial, gastos o retiros. Un cierre guardado no se recalcula; si las ventas de esa fecha cambian, se avisa al compararlo con el estado actual. Si hay cobros con medio de pago desconocido, se pide revisarlos antes de cerrar.
+
+Las nuevas consultas y mutaciones requieren administrador; el vendedor recibe solo el catálogo activo de mecánicos y no recibe cierres. Continúan revisión conjunta, dispositivos/impresora reales y P05–P10. Guion: [REVISION6-ADMINISTRADOR.md](REVISION6-ADMINISTRADOR.md).

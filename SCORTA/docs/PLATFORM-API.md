@@ -66,3 +66,11 @@ Los envelopes incluyen `tickets` con visibilidad por actor: owner todas las empr
 En POST /api/v2/action: `ticket.create` con form.title/description; `ticket.reply` con id y form.message; `ticket.read` con id; `ticket.status` con id/form.status (open|in_progress|resolved), exclusivo del propietario. Las lecturas son independientes por usuario y los cambios son idempotentes mediante requestId. Las operaciones de soporte no modifican la revisión del negocio, inventario o borradores; la persistencia global mantiene CAS. Al eliminar empresa se retiran sus tickets.
 
 La empresa acepta `nit` y `address` opcionales; la respuesta pública del comprobante incluye ambos si existen. No sustituye facturación electrónica.
+
+## Herramientas administrativas
+
+`GET /api/v2/reports?from=YYYY-MM-DD&to=YYYY-MM-DD` exige administrador con empresa o propietario en soporte. Sin fechas usa el día actual de Bogotá; valida rango y devuelve salesReport del negocio del actor. No acepta sustituir companyId por parámetros.
+
+Acciones administrativas en `/api/v2/action`: `mechanic.create` (form.name), `mechanic.update` (id y form.name/active), `mechanic.archive` (id), `cash.close` (form.date, form.actual con efectivo/transferencia/tarjeta, form.note opcional). Mantienen revisión, auditoría e idempotencia. Cierres únicos por fecha/empresa, inmutables, snapshot del cobro esperado y registrado. No modifican stock. `state.mechanics` es completo para administrador y limitado a id/name activos para vendedor; `state.cashClosures` no se entrega al vendedor.
+
+Las líneas de mano de obra admiten mecanicoId opcional: se verifica activo/pertenencia y el servidor fija el nombre de ese momento. Borradores y pendingSale conservan el campo; texto libre anterior sigue válido. Los reportes y exports usan `admin-reports.mjs` como cálculo compartido, con costos históricos y columnas permitidas.

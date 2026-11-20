@@ -56,3 +56,5 @@
 }
 @media(max-width:390px){.cw-main{padding-left:12px;padding-right:12px}.cw-card{padding:18px 14px}.cw-mobile-company>div>strong{font-size:.9375rem}.cw-mobile-company>div{gap:9px}.cw-sale-heading h1{font-size:1.65rem}.cw-sale-options>summary{font-size:.875rem}.cw-bottom-nav>button{font-size:.875rem}.cw-cart-destinations>.cw-btn{font-size:.875rem;padding-left:6px;padding-right:6px}.cw-cart-destinations>.cw-btn>svg{display:none}.cw-filter>div{max-width:calc(100vw - 24px)}}
 @media print{.cw-mobile-company,.cw-bottom-nav,.cw-powered-by,.cw-save-state{display:none!important}.cw-main{padding:0!important}}
+
+.cw-admin-heading{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}.cw-admin-heading>.cw-muted{font-size:.875rem}.cw-admin-heading .cw-options>div{z-index:20}@media(max-width:760px){.cw-admin-heading{justify-content:flex-start;width:100%;gap:10px}.cw-admin-heading>.cw-options{margin-left:auto}}

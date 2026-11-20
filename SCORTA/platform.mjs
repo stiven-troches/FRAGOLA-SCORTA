@@ -1,3 +1,5 @@
+import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './admin-controls.mjs';
+import {salesReport} from './admin-reports.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
 import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
@@ -110,7 +112,9 @@ function envelope(state, actor, now, baseUrl) {
   if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
   const business=structuredClone(state.businesses[actor.companyId]||estadoVacio());
   const aggregate=aggregates(business);Object.assign(business,aggregate);
+  business.mechanics??=[];business.cashClosures??=[];
   if(actor.role==='vendedor'){
+    business.mechanics=activeMechanics(business);delete business.cashClosures;
     business.compras=[];
     business.ventas=business.ventas.filter(s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username);
     const own=new Set(business.ventas.map(s=>s.id));
@@ -145,7 +149,10 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   if(a.type.startsWith('company.')||a.type.startsWith('user.'))owner(actor);
   if(a.type.startsWith('company.')&&a.type!=='company.create')company=companyFor(state,a.companyId);
   const before=a.companyId?structuredClone(state.companies.find(c=>c.id===a.companyId)):null;
-  if(a.type.startsWith('ticket.')){
+  if(a.type.startsWith('mechanic.')||a.type==='cash.close'){
+    const business=businessContext(state,actor),result=applyAdminControl(business,actor,a,{now:stamp(now).getTime(),today:dateBogota(now)});documentId=result.id;
+    businessAudit(business,actor,a.type,{documento:result.id,antes:result.before,despues:result.after},now);
+  }else if(a.type.startsWith('ticket.')){
     const ticket=applyTicketAction(state,actor,a,iso(now));company=companyFor(state,ticket.companyId);documentId=ticket.id;
   }else if(a.type==='company.create'){
     company=companyForm(state,form,null,now);uniqueUser(state,company.id,form.username);
@@ -202,7 +209,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='sale.create'){
     assertDraftSale(state,actor,a);
     if(!Array.isArray(a.items||[])||!Array.isArray(a.labor||[])||(a.items||[]).length>1000||(a.labor||[]).length>100)fail('Lista de artículos o servicios inválida');
-    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>({descripcion:text(line?.descripcion,'Trabajo realizado',3000),mecanico:text(line?.mecanico,'Mecánico'),importe:number(line?.importe,'Mano de obra')}));
+    const b=businessContext(state,actor),items=structuredClone(a.items||[]),labor=(a.labor||[]).map(line=>{const mechanic=mechanicForLabor(b,line);return {descripcion:text(line?.descripcion,'Trabajo realizado',3000),mecanico:mechanic?.mecanico||text(line?.mecanico,'Mecánico'),importe:number(line?.importe,'Mano de obra'),...(mechanic?{mecanicoId:mechanic.mecanicoId}:{})}});
     if(!items.length&&!labor.length)fail('Agrega productos o mano de obra');
     const fecha=date(form.fecha||dateBogota(now),'Fecha de venta'),placa=validatePlate(form.placa);if(labor.length&&!placa)fail('Ingresa la placa para registrar el servicio');
     if(!['efectivo','transferencia','tarjeta'].includes(form.paymentMethod))fail('Selecciona efectivo, transferencia o tarjeta');
@@ -242,7 +249,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
   const response=(status,body,extra={})=>({state,status,body,...extra});
   try{
     if(!input)fail('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',503,'SETUP_REQUIRED');
-    const method=(request.method||'GET').toUpperCase(),path=new URL(request.path,'https://scorta.example').pathname,body=request.body||{};
+    const method=(request.method||'GET').toUpperCase(),url=new URL(request.path,'https://scorta.example'),path=url.pathname,body=request.body||{};
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
     if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:removeCosts(structuredClone(sale)),expiresAt:new Date(ref.expires).toISOString()});}
     if(method==='POST'){
@@ -267,6 +274,11 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     const actor=resolveActor(state,session,now);
+    if(method==='GET'&&path==='/api/v2/reports'){
+      if(!admin(actor))fail('Los reportes requieren un administrador de la empresa.',403,'FORBIDDEN');
+      const business=businessContext(state,actor),period=reportDates(url.searchParams.get('from'),url.searchParams.get('to'),dateBogota(now));
+      return response(200,{...period,report:salesReport(business,period)});
+    }
     if(path==='/api/v2/draft'&&method==='GET')return response(200,readDraft(state,actor));
     if(path==='/api/v2/draft'&&method==='POST')return response(200,writeDraft(state,actor,body,stamp(now).getTime()));
     if(method==='GET'&&(path==='/api/v2/session'||path==='/api/v2/data'))return response(200,envelope(state,actor,now,baseUrl));

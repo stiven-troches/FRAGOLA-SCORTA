@@ -11,7 +11,7 @@ function cleanDraft(value){
   const array=(v,max)=>{if(!Array.isArray(v)||v.length>max)fail('Demasiadas líneas en la venta pendiente.');return v};
   const str=(v,max=200)=>{if(typeof v!=='string'||v.length>max)fail('Hay un campo demasiado largo en la venta pendiente.');return v};
   const amount=v=>{if(typeof v==='string'&&v.length<=30)return v;if(typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1e12)return v;fail('Valor inválido en la venta pendiente.')};
-  const labor=v=>({descripcion:str(v.descripcion,3000),mecanico:str(v.mecanico),importe:amount(v.importe)});
+  const labor=v=>({descripcion:str(v.descripcion,3000),mecanico:str(v.mecanico),importe:amount(v.importe),...(Object.hasOwn(v,'mecanicoId')?{mecanicoId:str(v.mecanicoId,100)}:{})});
   const form=value.saleForm||{};
   const next={cart:array(value.cart,1000).map(v=>({producto_id:str(v.producto_id,100),nombre:str(v.nombre),cantidad:amount(v.cantidad),precio_unitario:amount(v.precio_unitario)})),
     labor:array(value.labor,100).map(v=>({...labor(v),key:str(v.key,100)})),laborDraft:labor(value.laborDraft||{}),

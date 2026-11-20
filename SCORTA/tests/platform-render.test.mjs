@@ -155,3 +155,12 @@ test('SSR: Más reserva compras, movimientos y dashboard para administradores', 
   for(const label of ['Compras','Movimientos','Dashboard']){assert.ok(!seller.includes(label));assert.ok(admin.includes(label));}
   for(const html of [seller,admin]){assert.match(html,/Perfil y soporte/);assert.match(html,/Cerrar sesión/);}
 });
+
+
+test('SSR: herramientas administrativas están disponibles para admin y ocultas al vendedor',async()=>{
+ const admin=render(components.ClientWorkspace,await envelope('admin'));
+ for(const label of ['Administración','Cierre de caja','Reportes y exportaciones','Preparar reposición','Mecánicos'])assert.ok(admin.includes(label),label);
+ const seller=render(components.ClientWorkspace,await envelope('vendedor'));
+ for(const label of ['Administración','Cierre de caja','Reportes y exportaciones','Preparar reposición'])assert.ok(!seller.includes(label),label);
+ assert.ok(!seller.includes('class="at-backdrop"'),'No se monta un panel administrativo en el vendedor');
+});

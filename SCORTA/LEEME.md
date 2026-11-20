@@ -111,3 +111,9 @@ En celular, la barra inferior tiene Venta, Inventario, Taller y Más; en PC se m
 Administrador y vendedor pueden operar ventas y mano de obra; el administrador conserva gestión de catálogo, compras, movimientos y seguimiento. Desde Perfil se crea un ticket de soporte. El propietario atiende la campana de la empresa, responde y cambia el estado; la respuesta aparece como notificación sin leer en Perfil. El servidor aplica aislamiento y conserva conversaciones/lecturas en SQLite. La copia ficticia del demo usa IndexedDB.
 
 El ticket comercial de venta admite 80/58 mm con logo de empresa y datos de contacto/fiscales suministrados. Imprimir/PDF usa el diálogo del navegador; la descarga es HTML imprimible y WhatsApp comparte un enlace para envío manual. No se conecta facturación electrónica ni envío automático. Consulte [REVISION5-ENTREGA.md](docs/REVISION5-ENTREGA.md).
+
+## Herramientas administrativas · revisión 6
+
+En Dashboard → Administración se encuentran Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Inventario también enlaza reportes/reposición; Taller permite escoger el mecánico y conserva su nombre histórico. El administrador puede consultar Mi suscripción desde Perfil, sin cambiar pagos o contrato.
+
+Los reportes por período separan neto de productos/mano de obra y margen de productos con costo histórico; CSV incluye ventas/compras/existencias actuales. Cierre de caja concilia ventas netas por su fecha original, medio de pago y valores recibidos; no contabiliza saldo inicial/gastos/retiros ni reconstruye el día efectivo de cada devolución. El cierre confirmado es inmutable y avisa si esas ventas cambian después. Consultar [REVISION6-ADMINISTRADOR.md](docs/REVISION6-ADMINISTRADOR.md).

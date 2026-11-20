@@ -74,3 +74,9 @@ En el perfil se pueden crear tickets de soporte. El propietario los abre en la c
 JE aparece automáticamente en la primera apertura de esta actualización, conservando la copia anterior del navegador. Acceso manual: empresa **JE Accesorios y Repuestos**, usuario **joan**, contraseña comunicada por el propietario; no se publica en Datos de prueba. La prueba dura 30 días inclusivos desde su preparación y no se renueva al recargar. Su perfil de administrador inicia con inventario vacío y el logo original proporcionado. Correo, NIT y dirección no se han inventado.
 
 JE es todavía una cuenta de demostración por navegador: no representa una base compartida real entre equipos. El stock real del almacén y la instalación definitiva siguen pendientes. Revisión y guion: [REVISION5-ENTREGA.md](REVISION5-ENTREGA.md).
+
+## Revisión 6 · administrador
+
+Dashboard → Administración reúne Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Taller permite seleccionar mecánico; el administrador gestiona su lista e históricos. Perfil → Mi suscripción muestra la vigencia y el contacto disponible, sin habilitar pagos o cambios de contrato. El demo conserva empresas, credenciales y datos; no requiere reinicio.
+
+Los cierres concilian ventas netas por la fecha original de venta y el medio de pago, sin reconstruir flujos de devoluciones por día ni contabilizar saldos iniciales/gastos/retiros. El registro confirmado se conserva. Exportaciones CSV y reportes distinguen datos actuales de inventario y período de ventas/compras. Guion y límites: [REVISION6-ADMINISTRADOR.md](REVISION6-ADMINISTRADOR.md).
