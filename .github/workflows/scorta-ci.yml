@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   application:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -54,6 +54,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-scorta-playwright-${{ hashFiles('SCORTA/package-lock.json') }}
       - name: Install CI Chromium
+        timeout-minutes: 5
         id: chromium
         run: npx playwright install --with-deps chromium
       - name: Save prepared browser
