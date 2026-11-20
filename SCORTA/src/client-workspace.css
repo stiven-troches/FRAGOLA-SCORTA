@@ -61,3 +61,6 @@
 
 .cw-purchase-excel{padding:16px;border:1px solid #999;border-radius:10px;margin:12px 0}.cw-purchase-excel>summary{cursor:pointer;font-size:.9375rem;font-weight:650;min-height:44px;display:flex;align-items:center}.cw-purchase-excel .cw-field{margin-top:16px}.cw-import-errors{white-space:pre-line}.cw-purchase-excel h3{font-size:1rem;margin-top:20px}.cw-form>h3{font-size:1rem;margin:18px 0 8px}
 .cw-table td::before{text-transform:uppercase}
+
+/* Keep the submitted form intact until its result is known. */
+.cw-modal-fields{border:0;margin:0;padding:0;min-width:0}.cw-modal-fields[disabled]{opacity:.78}.cw-modal-operation{padding:13px 15px;margin:0 0 18px;border:1px solid #e1c68c;border-radius:9px;background:#fff6df;color:#63491e;font-size:.9375rem}.cw-modal-operation p{margin:0 0 12px}.cw-checkout-plate{padding:16px 0;border-top:1px solid #dce2e9;margin-top:12px}.cw-checkout-plate .cw-field{max-width:400px}.cw-checkout-plate>.cw-text-button{margin-top:5px}

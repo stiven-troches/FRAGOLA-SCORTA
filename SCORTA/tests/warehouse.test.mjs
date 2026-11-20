@@ -79,7 +79,7 @@ test('identificadores de producto no ambiguos en alta, edición e importación',
 
 test('vaciar importes opcionales utiliza los valores iniciales sin impedir guardar', () => warehouse(({send}) => {
   let state = send('producto', {nombre: 'Bombillo', precio_venta: 15000, precio_compra: '', stock: '', stock_minimo: ''});
-  assert.deepEqual([state.prods[0].precio_compra, state.prods[0].stock, state.prods[0].stock_minimo], [0, 0, 5]);
+  assert.deepEqual([state.prods[0].precio_compra, state.prods[0].stock, state.prods[0].stock_minimo], [null, 0, 5]);
   state = send('servicio', {fecha: '2026-11-12', placa: 'QA123B', descripcion_trabajo: 'Revisión gratuita', costo_mano_obra: ''});
   assert.equal(state.servs[0].costo_mano_obra, 0);assert.equal(state.servs[0].total, 0);
   state = send('producto', {nombre: 'Obsequio', precio_venta: 0, precio_compra: 0, stock: 0, stock_minimo: 0});

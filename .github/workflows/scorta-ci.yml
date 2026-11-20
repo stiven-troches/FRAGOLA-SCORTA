@@ -1,0 +1,64 @@
+name: SCORTA checks
+
+on:
+  push:
+    paths:
+      - 'SCORTA/**'
+      - '.github/workflows/scorta-ci.yml'
+      - 'README.md'
+  pull_request:
+    paths:
+      - 'SCORTA/**'
+      - '.github/workflows/scorta-ci.yml'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scorta-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: SCORTA
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: SCORTA/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+      - name: Explain private fixture exclusion
+        run: echo '::notice::The private JE credential test is intentionally skipped without SCORTA_JE_TEST_PASSWORD. CI uses fictional fixtures and does not receive that credential.'
+      - name: Run Node tests
+        run: npm test
+      - name: Build application
+        run: npm run build
+      - name: Build static demo
+        run: npm run build:demo
+      - name: Install CI Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test current platform through HTTP
+        run: npm run test:ui
+      - name: Test static demo
+        run: npm run test:demo:ui
+      - name: Keep failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorta-browser-failures
+          path: |
+            SCORTA/test-results/
+            SCORTA/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,5 +1,7 @@
 import {salesReport,reportDate} from './admin-reports.mjs';
 import {laborReport} from './labor-report.mjs';
+import {financialSales} from './financial-sales.mjs';
+import {roundMoney} from './money.mjs';
 
 const array=value=>Array.isArray(value)?value:[];
 const text=value=>value==null?'':String(value);
@@ -39,7 +41,7 @@ export function overviewReport(business={},filters={}){
   const report=salesReport(business,filters),labor=laborReport(business,filters),range={from:report.from,to:report.to};
   const catalog=new Map(array(business.prods).map(product=>[text(product.id),product]));
   const groups=new Map();let laborServices=0;
-  for(const sale of array(business.ventas)){
+  for(const sale of financialSales(business)){
     const saleDate=reportDate(sale.fecha);if(!inPeriod(saleDate,range))continue;
     const cancelled=!!sale.anulada;
     if(!cancelled)laborServices+=array(sale.labor||sale.mano_obra||sale.servicios).length;
@@ -55,17 +57,17 @@ export function overviewReport(business={},filters={}){
       }
       const quantity=number(line.cantidad),returned=Math.min(quantity,number(line.devuelto)),retained=cancelled?0:quantity-returned;
       row.grossUnits+=quantity;row.returnedUnits+=cancelled?0:returned;row.cancelledUnits+=cancelled?quantity:0;
-      row.netUnits+=retained;row.netRevenue+=retained*number(line.precio_unitario);
+      row.netUnits+=retained;row.netRevenue+=retained*roundMoney(number(line.precio_unitario));
       if(retained>0){
-        if(hasCost(line.costo_unitario))row.knownHistoricalCost+=retained*Number(line.costo_unitario);
+        if(hasCost(line.costo_unitario))row.knownHistoricalCost+=retained*roundMoney(line.costo_unitario);
         else{row.costComplete=false;row.unknownCostLines++}
       }
     }
   }
   const products=[...groups.values()].map(row=>({
-    ...row,historicalCost:row.costComplete?row.knownHistoricalCost:null,
-    profit:row.costComplete?row.netRevenue-row.knownHistoricalCost:null,
-    marginPercent:percent(row.costComplete?row.netRevenue-row.knownHistoricalCost:null,row.netRevenue)
+    ...row,netRevenue:roundMoney(row.netRevenue),knownHistoricalCost:roundMoney(row.knownHistoricalCost),historicalCost:row.costComplete?roundMoney(row.knownHistoricalCost):null,
+    profit:row.costComplete?roundMoney(row.netRevenue-row.knownHistoricalCost):null,
+    marginPercent:percent(row.costComplete?roundMoney(row.netRevenue-row.knownHistoricalCost):null,row.netRevenue)
   })).sort(byName);
   const sold=products.filter(row=>row.netUnits>0),rankable=sold.filter(row=>row.costComplete);
   const noSales=array(business.prods).filter(product=>!(groups.get(text(product.id))?.netUnits>0)).map(product=>({
@@ -77,7 +79,7 @@ export function overviewReport(business={},filters={}){
     countBasis:{sales:'noncancelled_positive_net',laborServices:'registered_lines_noncancelled_sales',noSales:'current_catalog_no_net_units'},
     totals:{net:report.totals.net,products:report.totals.products,labor:report.totals.labor,
       laborProfit:labor.totals.businessAmount,mechanicAmount:labor.totals.mechanicAmount,laborSplitComplete:labor.totals.splitComplete,
-      totalProfit:report.totals.productMargin!==null&&labor.totals.businessAmount!==null?Math.round((report.totals.productMargin+labor.totals.businessAmount)*100)/100:null,
+      totalProfit:report.totals.productMargin!==null&&labor.totals.businessAmount!==null?roundMoney(report.totals.productMargin+labor.totals.businessAmount):null,
       salesCount,averageSale:salesCount?report.totals.net/salesCount:0,laborServices,
       productUnits:products.reduce((total,row)=>total+row.netUnits,0),
       productProfit:report.totals.productMargin,productMarginPercent:percent(report.totals.productMargin,report.totals.products),

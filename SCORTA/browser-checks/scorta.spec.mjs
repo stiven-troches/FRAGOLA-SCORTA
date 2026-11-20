@@ -1,104 +1,93 @@
-import {test,expect} from '@playwright/test';
-import {mkdirSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {test,expect,login,navigate,profile,addProduct,noOverflow,waitSaved,request,OWNER,action,day} from './fixtures.mjs';
 
-const password='SCORTA-QA-Password-12345';
-const origin='http://127.0.0.1:19420';
-async function ensureMenu(page){const summary=page.locator('.mobile-navigation > summary');if(await summary.isVisible()&&!(await page.locator('.mobile-navigation').getAttribute('open')!==null))await summary.click()}
-async function navigate(page,name){await ensureMenu(page);await page.getByRole('navigation').getByRole('button',{name,exact:false}).click()}
-
-async function login(page,username='admin',secret=password){
- await page.goto('/');
- await page.getByLabel('Usuario',{exact:true}).fill(username);
- await page.getByLabel('Contraseña',{exact:true}).fill(secret);
- await page.getByRole('button',{name:'Entrar',exact:true}).click();
- await expect(page.getByRole('button',{name:'Cerrar sesión',exact:true})).toBeVisible();
- await expect(page.locator('.connection-bar')).toContainText('Datos actualizados');
-}
-async function state(page){const r=await page.request.get('/api/state');expect(r.ok()).toBeTruthy();return r.json()}
-async function change(page,kind,form,extra={}){const before=await state(page);const r=await page.request.post('/api/change',{headers:{Origin:origin},data:{kind,form,revision:before.revision,requestId:crypto.randomUUID(),...extra}});expect(r.ok(),await r.text()).toBeTruthy();return r.json()}
-async function seed(page,name,extra={}){const s=await change(page,'producto',{nombre:name,referencia:name.replaceAll(' ','-'),precio_venta:45000,precio_compra:25000,stock:3,stock_minimo:1,categoria:'Cascos',marca:'QA Moto',...extra});await page.getByText('Opciones',{exact:true}).click();await page.getByRole('button',{name:'Actualizar datos',exact:true}).click();return s.prods.find(p=>p.nombre===name)}
-async function noPageOverflow(page){const size=await page.evaluate(()=>({document:document.documentElement.scrollWidth,viewport:innerWidth}));expect(size.document).toBeLessThanOrEqual(size.viewport+1)}
-async function capture(page,name,info){mkdirSync(resolve('docs/capturas'),{recursive:true});await page.screenshot({path:resolve(`docs/capturas/${name}-${info.project.name}.png`),fullPage:!name.startsWith('venta'),scale:'css'})}
-
-test('acceso, producto nuevo y cierre de sesión',async({page},info)=>{
- const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/');await page.getByLabel('Usuario',{exact:true}).fill('admin');await page.getByLabel('Contraseña',{exact:true}).fill('incorrecta');await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Usuario o contraseña incorrectos');
- await page.getByLabel('Contraseña',{exact:true}).fill(password);await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.locator('.connection-bar')).toContainText('Datos actualizados');
- await navigate(page,'Inventario');
- await page.getByRole('button',{name:/Nuevo producto/i}).click();const dialog=page.getByRole('dialog');
- const name=`Guantes creación ${info.project.name}`;
- await dialog.getByLabel('Nombre *',{exact:true}).fill(name);await dialog.getByLabel(/Precio de venta/).fill('60000');await dialog.getByLabel('Existencias iniciales',{exact:true}).fill('5');
- await noPageOverflow(page);await dialog.getByRole('button',{name:/Guardar/}).click();await expect(dialog).not.toBeVisible();
- expect((await state(page)).prods.find(p=>p.nombre===name)?.stock).toBe(5);
- await page.getByRole('button',{name:'Cerrar sesión',exact:true}).click();await expect(page.getByRole('heading',{name:'Entrar al almacén'})).toBeVisible();expect((await page.request.get('/api/state')).status()).toBe(401);expect(errors).toEqual([]);
+test('propietario administra empresa y credenciales sin exponerlas en tarjetas',async({page,scenario})=>{
+ await login(page,OWNER);await expect(page.getByRole('button',{name:'Administrar '+scenario.company.name,exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Administrar '+scenario.company.name,exact:true}).click();
+ await expect(page.getByRole('heading',{name:scenario.company.name,exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Acceder como soporte',exact:true})).toBeVisible();
+ await expect(page.getByText(scenario.admin.password,{exact:true})).toHaveCount(0);await noOverflow(page);
 });
 
-test('inventario filtra, explica búsquedas vacías y abre ficha e historial',async({page},info)=>{
- await login(page);const name=`Casco búsqueda ${info.project.name}`;await seed(page,name,{codigo_barras:'770123'+info.project.name,stock:1});await seed(page,`Bombillo ${info.project.name}`,{categoria:'Luces',marca:'Otra marca',stock:0});
- await navigate(page,'Inventario');
- const search=page.getByRole('searchbox',{name:'Buscar productos',exact:true});await search.fill('770123'+info.project.name);await expect(page.getByRole('button',{name:`Ver ${name}`,exact:true})).toBeVisible();
- await search.fill('esto-no-existe-qa');await expect(page.getByText('No encontramos coincidencias',{exact:true})).toBeVisible();
- await search.fill('busqueda');await page.locator('.filter-panel > summary').click();await page.getByRole('combobox',{name:'Categoría',exact:true}).selectOption('Cascos');await page.getByRole('combobox',{name:'Existencias',exact:true}).selectOption('bajo');await expect(page.getByRole('button',{name:`Ver ${name}`,exact:true})).toBeVisible();
- await noPageOverflow(page);await capture(page,'inventario',info);
- await page.getByRole('button',{name:`Ver ${name}`,exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog).toContainText(name);await dialog.getByText('Historial de movimientos',{exact:true}).click();await expect(dialog).toContainText(/apertura/i);await noPageOverflow(page);
- await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
+for(const role of ['admin','seller'])test(`${role}: inventario y taller alimentan el mismo cobro y conservan el borrador`,async({page,scenario})=>{
+ await login(page,scenario[role]);await addProduct(page,scenario.product);
+ await page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true}).fill('2');
+ await page.getByRole('button',{name:'Agregar una unidad de '+scenario.product.nombre,exact:true}).click();
+ await expect(page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true})).toHaveValue('3');
+ await navigate(page,'Taller');await page.getByLabel('Placa de la moto',{exact:true}).fill('QA123D');
+ await page.getByLabel('Trabajo realizado',{exact:true}).fill('Cambio de aceite QA');
+ await page.getByLabel('Mecánico',{exact:true}).selectOption(scenario.mechanic.id);await page.getByLabel('Valor de mano de obra (COP)',{exact:true}).fill('15000');
+ await page.getByRole('button',{name:'Agregar al carrito',exact:true}).click();await navigate(page,'Nueva venta');
+ await waitSaved(page);await page.reload();await expect(page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true})).toHaveValue('3');
+ await expect(page.getByText('Cambio de aceite QA',{exact:true})).toBeVisible();await noOverflow(page);
+ await page.getByRole('button',{name:'Registrar venta',exact:true}).click();await expect(page.getByRole('dialog',{name:'Detalle de venta'})).toBeVisible();
+ const data=await scenario.data();const sale=data.state.ventas.find(item=>item.placa==='QA123D');expect(sale.total).toBe(120000);expect(data.state.prods.find(p=>p.id===scenario.product.id).stock).toBe(47);
 });
 
-test('venta conserva datos ante exceso y respuesta perdida; reintento no duplica',async({page},info)=>{
- await login(page);const name=`Casco venta ${info.project.name}`,barcode='880123'+info.project.name;const p=await seed(page,name,{codigo_barras:barcode});await capture(page,'inicio',info);
- await page.getByRole('button',{name:'Nueva venta',exact:true}).click();const dialog=page.getByRole('dialog');
- await expect(dialog.getByRole('button',{name:'Guardar venta',exact:true})).toBeDisabled();
- await dialog.getByRole('searchbox',{name:'Buscar producto',exact:true}).fill(barcode);await dialog.getByRole('searchbox',{name:'Buscar producto',exact:true}).press('Enter');
- await dialog.getByLabel('Cantidad a agregar',{exact:true}).fill('2');await dialog.getByRole('button',{name:'Agregar a la lista',exact:true}).click();
- const quantity=dialog.getByRole('spinbutton',{name:`Cantidad de ${name}`,exact:true});await quantity.fill('4');await expect(quantity).toHaveAttribute('aria-invalid','true');await expect(dialog.locator('.field-error')).toContainText('quedan 3');await dialog.getByRole('button',{name:'Guardar venta',exact:true}).click();await expect(page.getByRole('alert')).toContainText(/intentas usar 4 unidades y quedan 3/);expect((await state(page)).ventas.some(v=>v.detalles.some(d=>d.producto_id===p.id))).toBe(false);
- await quantity.fill('2');await expect(dialog.locator('.operation-total')).toContainText(/90[.,]000/);await noPageOverflow(page);await capture(page,'venta',info);
- let lost=false;await page.route('**/api/change',async route=>{if(!lost){lost=true;await route.fetch();await route.abort('failed')}else await route.continue()});
- await dialog.getByRole('button',{name:'Guardar venta',exact:true}).click();await expect(page.getByRole('button',{name:'Reintentar operación',exact:true})).toBeVisible();await expect(quantity).toHaveValue('2');expect((await state(page)).prods.find(x=>x.id===p.id).stock).toBe(1);
- await page.getByRole('button',{name:'Reintentar operación',exact:true}).click();await expect(dialog).not.toBeVisible();const after=await state(page);expect(after.prods.find(x=>x.id===p.id).stock).toBe(1);expect(after.ventas.filter(v=>v.detalles.some(d=>d.producto_id===p.id))).toHaveLength(1);
+test('vendedor sólo ve sus módulos y móvil usa cuatro pestañas sin estrechar contenido',async({page,scenario},info)=>{
+ await login(page,scenario.seller);await navigate(page,'Inventario');await noOverflow(page);
+ await expect(page.getByRole('button',{name:'Nuevo producto',exact:true})).toHaveCount(0);
+ if(info.project.name.startsWith('movil')){
+  await expect(page.getByRole('navigation',{name:'Módulos de la empresa'})).not.toBeVisible();
+  const mobile=page.getByRole('navigation',{name:'Navegación móvil'});await expect(mobile.getByRole('button')).toHaveCount(4);
+  await mobile.getByRole('button',{name:'Más',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Más opciones'});
+  for(const label of ['Compras','Movimientos','Resumen general'])await expect(dialog.getByRole('button',{name:label,exact:true})).toHaveCount(0);
+  await expect(dialog.getByRole('button',{name:'Perfil y soporte',exact:true})).toBeVisible();await page.keyboard.press('Escape');
+ }
 });
 
-test('operador ve sus acciones permitidas y puede iniciar venta',async({page},info)=>{
- await login(page);const user='operador_'+info.project.name;const response=await page.request.post('/api/users',{headers:{Origin:origin},data:{username:user,password,role:'operador'}});expect(response.ok()).toBeTruthy();
- await page.getByRole('button',{name:'Cerrar sesión',exact:true}).click();await login(page,user);
- await ensureMenu(page);await expect(page.getByRole('navigation').getByRole('button',{name:'Compras'})).toHaveCount(0);await expect(page.getByRole('navigation').getByRole('button',{name:'Usuarios'})).toHaveCount(0);
- await navigate(page,'Inventario');await expect(page.getByRole('button',{name:/Nuevo producto/i})).toHaveCount(0);await expect(page.getByRole('button',{name:/Ajustar existencias de/})).toHaveCount(0);
- await navigate(page,'Ventas');await expect(page.getByRole('button',{name:'Anular',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Nueva venta',exact:true}).click();await expect(page.getByRole('searchbox',{name:'Buscar producto',exact:true})).toBeVisible();await noPageOverflow(page);
+test('Escape solicita confirmación de datos sin guardar y conserva el formulario al cancelar',async({page,scenario})=>{
+ await login(page,scenario.admin);await navigate(page,'Inventario');await page.getByRole('button',{name:'Nuevo producto',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Producto',exact:true});await dialog.getByLabel('Nombre del producto',{exact:true}).fill('Producto aún no guardado');
+ const confirmation=page.waitForEvent('dialog');await page.keyboard.press('Escape');const prompt=await confirmation;expect(prompt.type()).toBe('confirm');await prompt.dismiss();
+ await expect(dialog).toBeVisible();await expect(dialog.getByLabel('Nombre del producto',{exact:true})).toHaveValue('Producto aún no guardado');
+ page.once('dialog',d=>d.accept());await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
 });
 
-test('taller registra repuesto y avanza hasta entrega conservando existencias',async({page},info)=>{
- await login(page);const name=`Repuesto taller ${info.project.name}`;const p=await seed(page,name);await navigate(page,'Taller');await page.getByRole('button',{name:'Nuevo servicio',exact:true}).click();const dialog=page.getByRole('dialog');const plate=info.project.name==='movil'?'MOV12A':'ESC12A';
- await dialog.getByLabel('Placa *',{exact:true}).fill(plate);await dialog.getByLabel('Descripción del Trabajo *',{exact:true}).fill('Instalación de accesorio de prueba');await dialog.getByLabel('Costo Mano de Obra ($)',{exact:true}).fill('20000');
- await dialog.getByRole('searchbox',{name:'Buscar repuesto',exact:true}).fill(name);await dialog.getByRole('button').filter({has:page.getByText(name,{exact:true})}).click();await dialog.getByRole('button',{name:'Agregar a la lista',exact:true}).click();await dialog.getByRole('button',{name:'Guardar servicio',exact:true}).click();await expect(dialog).not.toBeVisible();
- const card=page.locator('.service-card').filter({hasText:plate});await expect(card).toBeVisible();page.on('dialog',d=>d.accept());
- for(const next of ['En Proceso','Completado','Entregado']){await card.getByRole('button',{name:`Pasar a ${next}`,exact:true}).click();await expect(card).toContainText(next)}
- const after=await state(page);expect(after.prods.find(x=>x.id===p.id).stock).toBe(2);const service=after.servs.find(s=>s.placa===plate);expect(service.estado).toBe('entregado');expect(service.fecha_entrega).toMatch(/^\d{4}-\d{2}-\d{2}$/);await noPageOverflow(page);
+test('reintento de cobro tras respuesta perdida registra una sola venta',async({page,scenario})=>{
+ await login(page,scenario.seller);await addProduct(page,scenario.product);await waitSaved(page);
+ let lost=false;await page.route('**/api/v2/action',async route=>{const body=route.request().postDataJSON();if(!lost&&body?.type==='sale.create'){lost=true;await route.fetch();await route.abort('failed')}else await route.continue()});
+ await page.getByRole('button',{name:'Registrar venta',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Comprobar cobro pendiente',exact:true}).first()).toBeVisible();
+ await page.getByRole('button',{name:'Comprobar cobro pendiente',exact:true}).first().click();
+ await expect.poll(async()=>(await scenario.data()).state.ventas.length).toBe(1);
+ await expect(page.getByRole('button',{name:'Comprobar cobro pendiente',exact:true})).toHaveCount(0);
+ const data=await scenario.data();expect(data.state.prods.find(p=>p.id===scenario.product.id).stock).toBe(49);
 });
 
-test('teclado mantiene foco dentro de la ventana y Escape lo devuelve',async({page})=>{
- await login(page);const open=page.getByRole('button',{name:'Nueva venta',exact:true});await open.click();const dialog=page.getByRole('dialog');const close=dialog.getByRole('button',{name:'Cerrar ventana',exact:true});await expect(close).toBeFocused();
- await page.keyboard.press('Shift+Tab');await expect(dialog.getByRole('button',{name:'Cancelar',exact:true})).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(open).toBeFocused();
+test('compra pendiente bloquea cambios hasta confirmar el POST',async({page,scenario})=>{
+ await login(page,scenario.admin);await navigate(page,'Compras');await page.getByRole('button',{name:'Ingresar mercancía',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Ingresar mercancía',exact:true});await dialog.getByLabel('Proveedor',{exact:true}).fill('Proveedor QA');
+ await dialog.getByLabel('Producto',{exact:true}).selectOption(scenario.product.id);await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('2');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('20000');await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();
+ let release;const blocked=new Promise(resolve=>{release=resolve});await page.route('**/api/v2/action',async route=>{if(route.request().postDataJSON()?.payload?.kind==='compra'){await blocked;await route.continue()}else await route.continue()});
+ await dialog.getByRole('button',{name:'Registrar compra',exact:true}).click();
+ await expect(dialog.getByLabel('Proveedor',{exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'Agregar a la compra',exact:true})).toBeDisabled();
+ release();await expect(dialog).not.toBeVisible();expect((await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).stock).toBe(52);
 });
 
-test('cambio de contraseña explica errores y exige volver a entrar',async({page},info)=>{
- await login(page);const user='clave_'+info.project.name,newPassword='SCORTA-QA-Nueva-Clave-12345';const response=await page.request.post('/api/users',{headers:{Origin:origin},data:{username:user,password,role:'operador'}});expect(response.ok()).toBeTruthy();await page.getByRole('button',{name:'Cerrar sesión',exact:true}).click();await login(page,user);
- await page.getByRole('button',{name:'Cambiar contraseña',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Cambiar contraseña',exact:true});await expect(dialog.getByLabel('Contraseña actual',{exact:true})).toBeFocused();await dialog.getByLabel('Contraseña actual',{exact:true}).fill(password);await dialog.getByLabel('Nueva contraseña',{exact:true}).fill(newPassword);await dialog.getByLabel('Confirmar nueva contraseña',{exact:true}).fill('No-Coincide-Con-Nueva12345');await dialog.getByRole('button',{name:'Guardar contraseña',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('no coinciden');await dialog.getByLabel('Confirmar nueva contraseña',{exact:true}).fill(newPassword);await dialog.getByRole('button',{name:'Guardar contraseña',exact:true}).click();await expect(page.getByRole('heading',{name:'Entrar al almacén'})).toBeVisible();await expect(page.getByRole('status')).toContainText('Contraseña actualizada');
- await page.getByLabel('Usuario',{exact:true}).fill(user);await page.getByLabel('Contraseña',{exact:true}).fill(password);await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Usuario o contraseña incorrectos');await page.getByLabel('Contraseña',{exact:true}).fill(newPassword);await page.getByRole('button',{name:'Entrar',exact:true}).click();await expect(page.getByRole('button',{name:'Cerrar sesión',exact:true})).toBeVisible();
+test('ticket y respuesta llegan al perfil del solicitante y a la campana del propietario',async({page,scenario,browser})=>{
+ await login(page,scenario.seller);await profile(page);await page.getByRole('button',{name:'Crear ticket',exact:true}).click();
+ const support=page.getByRole('dialog',{name:'Tickets de soporte'});await support.getByLabel('Asunto',{exact:true}).fill('Problema QA '+scenario.suffix);await support.getByLabel('Descripción del problema',{exact:true}).fill('Descripción ficticia para comprobar respuestas de soporte');await support.getByRole('button',{name:'Enviar ticket',exact:true}).click();
+ await expect(support.getByRole('button',{name:new RegExp('Problema QA '+scenario.suffix)})).toBeVisible();
+ const ownerContext=await browser.newContext();const ownerPage=await ownerContext.newPage();
+ try{
+  await login(ownerPage,OWNER);await ownerPage.getByRole('button',{name:new RegExp('Tickets de soporte de '+scenario.company.name+':')}).click();
+  const ownerSupport=ownerPage.getByRole('dialog',{name:'Tickets de soporte'});await ownerSupport.getByRole('button',{name:new RegExp('Problema QA '+scenario.suffix)}).click();
+  await ownerSupport.getByLabel(/Respuesta|Mensaje/).fill('Respuesta QA verificada');await ownerSupport.getByRole('button',{name:/Enviar respuesta|Enviar mensaje/}).click();
+  await expect(ownerSupport.getByText('Respuesta QA verificada',{exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('heading',{name:'Nueva venta',exact:true})).toBeVisible();if(await page.getByRole('navigation',{name:'Navegación móvil'}).isVisible())await expect(page.getByRole('button',{name:'Mi perfil, 1 respuestas sin leer',exact:true})).toBeVisible();else await expect(page.getByTitle(/^Mi perfil:/).getByLabel('1 respuestas sin leer',{exact:true})).toBeVisible();await profile(page);await page.getByRole('button',{name:/Ver tickets y respuestas/}).click();
+  const response=page.getByRole('dialog',{name:'Tickets de soporte'});await response.getByRole('button',{name:new RegExp('Problema QA '+scenario.suffix)}).click();await expect(response.getByText('Respuesta QA verificada',{exact:true})).toBeVisible();
+ }finally{await ownerContext.close()}
 });
 
-test('venta de tres productos suma cantidades editadas sin concatenarlas',async({page},info)=>{
- await login(page);const products=[];
- for(const [name,price] of [['Casco',10000],['Visor',20000],['Guantes',30000]])products.push(await seed(page,`${name} múltiple ${info.project.name}`,{stock:10,precio_venta:price}));
- await page.getByRole('button',{name:'Nueva venta',exact:true}).click();const dialog=page.getByRole('dialog');
- const add=async(product,quantity)=>{const search=dialog.getByRole('searchbox',{name:'Buscar producto',exact:true});await search.fill(product.nombre);await search.press('Enter');await dialog.getByLabel('Cantidad a agregar',{exact:true}).fill(String(quantity));await dialog.getByRole('button',{name:'Agregar a la lista',exact:true}).click()};
- await add(products[0],1);await dialog.getByRole('spinbutton',{name:`Cantidad de ${products[0].nombre}`,exact:true}).fill('2');await add(products[0],1);await expect(dialog.getByRole('spinbutton',{name:`Cantidad de ${products[0].nombre}`,exact:true})).toHaveValue('3');
- await add(products[1],2);await add(products[2],1);await expect(dialog.locator('.item-line')).toHaveCount(3);await expect(dialog.locator('.operation-total')).toContainText(/100[.,]000/);await noPageOverflow(page);await capture(page,'venta-multiple',info);
- await dialog.getByRole('button',{name:'Guardar venta',exact:true}).click();await expect(dialog).not.toBeVisible();const after=await state(page),sale=after.ventas.find(v=>v.detalles.some(d=>d.producto_id===products[0].id));expect(sale.total).toBe(100000);expect(sale.detalles).toHaveLength(3);for(const [index,stock] of [7,8,9].entries())expect(after.prods.find(p=>p.id===products[index].id).stock).toBe(stock);
-});
-
-for(const expiry of ['focus','retry'])test(`sesión expirada por ${expiry} conserva operación incierta sin duplicar`,async({page},info)=>{
- await login(page);const name=`Casco sesión ${expiry} ${info.project.name}`;const product=await seed(page,name);await page.getByRole('button',{name:'Nueva venta',exact:true}).click();let dialog=page.getByRole('dialog');const search=dialog.getByRole('searchbox',{name:'Buscar producto',exact:true});await search.fill(name);await search.press('Enter');await dialog.getByLabel('Cantidad a agregar',{exact:true}).fill('2');await dialog.getByRole('button',{name:'Agregar a la lista',exact:true}).click();
- let lost=false;await page.route('**/api/change',async route=>{if(!lost){lost=true;await route.fetch();await route.abort('failed')}else await route.continue()});await dialog.getByRole('button',{name:'Guardar venta',exact:true}).click();await expect(page.getByRole('button',{name:'Reintentar operación',exact:true})).toBeVisible();expect((await state(page)).prods.find(p=>p.id===product.id).stock).toBe(1);
- const loggedOut=await page.request.post('/api/logout',{headers:{Origin:origin},data:{}});expect(loggedOut.ok()).toBeTruthy();if(expiry==='focus')await page.evaluate(()=>window.dispatchEvent(new Event('focus')));else await page.getByRole('button',{name:'Reintentar operación',exact:true}).click();await expect(page.getByRole('heading',{name:'Entrar al almacén'})).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByLabel('Usuario',{exact:true})).toHaveValue('admin');await expect(page.getByLabel('Usuario',{exact:true})).not.toBeEditable();
- await page.getByLabel('Contraseña',{exact:true}).fill(password);await page.getByRole('button',{name:'Entrar',exact:true}).click();dialog=page.getByRole('dialog');await expect(dialog.getByRole('spinbutton',{name:`Cantidad de ${name}`,exact:true})).toHaveValue('2');await page.getByRole('button',{name:'Reintentar operación',exact:true}).click();await expect(dialog).not.toBeVisible();const after=await state(page);expect(after.prods.find(p=>p.id===product.id).stock).toBe(1);expect(after.ventas.filter(v=>v.detalles.some(d=>d.producto_id===product.id))).toHaveLength(1);
+test('soporte en dos pestañas no cambia de empresa al operar con contexto anterior',async({page,scenario})=>{
+ const created=await action(scenario.ownerApi,{type:'company.create',form:{name:'QA Segunda '+scenario.suffix,contact:'QA Contacto',startDate:day(-1),endDate:day(30),monthlyFee:80000,username:'qaadmin',password:'QA.Admin!2026'}});
+ const other=created.companies.find(c=>c.name==='QA Segunda '+scenario.suffix);const stale=await page.context().newPage();
+ try{
+  await login(page,OWNER);await stale.goto('/');await expect(stale.getByRole('heading',{name:'Empresas',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Administrar '+scenario.company.name,exact:true}).click();await page.getByRole('button',{name:'Acceder como soporte',exact:true}).click();await page.getByLabel('Motivo de la solicitud del cliente',{exact:true}).fill('Prueba de soporte QA');await page.getByRole('button',{name:'Iniciar soporte',exact:true}).click();
+  await expect(page.getByText(/Acceso de soporte/).first()).toBeVisible();
+  await stale.getByRole('button',{name:'Administrar '+other.name,exact:true}).click();await stale.getByRole('button',{name:'Acceder como soporte',exact:true}).click();await stale.getByLabel('Motivo de la solicitud del cliente',{exact:true}).fill('Otra prueba de soporte QA');await stale.getByRole('button',{name:'Iniciar soporte',exact:true}).click();
+  await expect(stale.getByRole('alert').first()).toContainText(/contexto|empresa|cambi/i);
+  const actual=await request(page.request,'/api/v2/session',{companyId:scenario.company.id});expect(actual.session.companyId).toBe(scenario.company.id);
+ }finally{await stale.close();await action(scenario.ownerApi,{type:'company.delete',companyId:other.id,form:{confirmation:other.name}})}
 });

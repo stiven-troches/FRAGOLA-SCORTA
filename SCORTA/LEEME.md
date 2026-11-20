@@ -1,131 +1,115 @@
 # SCORTA — empresas, inventario, ventas y taller
 
-La aplicación está en esta carpeta. Requiere Node.js 24. La interfaz nueva utiliza `/api/v2/` y separa propietario, administradores y vendedores de cada empresa.
+Esta carpeta contiene la aplicación multiempresa. Requiere **Node.js 24** y utiliza `/api/v2/`. El propietario gestiona empresas, vigencias y cuentas; cada empresa conserva su inventario y sus operaciones, con administradores y vendedores.
 
-## Demostración
+## Instalar y abrir con Node
 
-La demo publicada utiliza datos ficticios guardados en el navegador. Sus botones permiten probar los tres perfiles. Las contraseñas visibles en «Datos de prueba» pertenecen exclusivamente a esa demostración. No son credenciales de una instalación real.
-
-Para compilar y abrir una copia de la demo:
-
-```sh
-npm ci
-npm run build:demo
-npm run preview:demo
-```
-
-Abrir `http://127.0.0.1:4173`. El enlace al comprobante de la demo solo funciona en el navegador donde existen sus datos; una instalación real sirve sus comprobantes desde el servidor.
-
-## Instalación Node
-
-Instalar dependencias y compilar:
+Desde `SCORTA`:
 
 ```sh
 npm ci
 npm run build
 ```
 
-Copiar `.env.example` a `.env` y completar `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER`, `SCORTA_OWNER_NAME`, `SCORTA_OWNER_PASSWORD` y opcionalmente `SCORTA_OWNER_CONTACT` y `SCORTA_OWNER_EMAIL`. `npm start` carga ese archivo privado; también se pueden configurar las variables en el entorno del proceso. La contraseña debe tener entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo. No escribirla en comandos compartidos, código ni GitHub. `SCORTA_PUBLIC_URL` debe contener el origen HTTPS definitivo en producción. `DATA_DIR` indica el directorio persistente.
+Copia `.env.example` a `.env` y completa `SCORTA_OWNER_COMPANY`, `SCORTA_OWNER_USER`, `SCORTA_OWNER_NAME` y `SCORTA_OWNER_PASSWORD`. La contraseña debe tener entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo. `SCORTA_OWNER_CONTACT` y `SCORTA_OWNER_EMAIL` son opcionales; indicar un correo no lo verifica ni conecta recuperación automática.
 
-Después ejecutar `npm start`. Desde el ingreso, utilizar la empresa y usuario configurados. La credencial inicial solo crea al propietario en una base nueva: cambiar la variable no reemplaza su contraseña existente. «Mi perfil» permite cambiarla indicando la actual.
+```sh
+npm start
+```
 
-## Instalación con Docker y HTTPS
+`npm start` carga `.env`. En Windows, `INICIAR.cmd` instala dependencias si faltan, compila y llama al mismo comando de inicio. No introduzcas secretos en comandos compartidos ni publiques `.env`. La contraseña inicial crea al propietario únicamente cuando la base es nueva; cambiar la variable no cambia una cuenta existente. «Mi perfil» permite cambiar su contraseña indicando la actual.
 
-1. Copiar `.env.example` a `.env`, completar `DOMAIN` y la contraseña privada del propietario; agregar un contacto real de soporte. No publicar `.env`.
-2. Apuntar el dominio al servidor y permitir los puertos 80 y 443.
-3. Ejecutar `docker compose up -d --build`. Caddy emite el certificado HTTPS.
-4. Comprobar persistencia, cuentas y recuperación antes de usar datos reales. Conservar el volumen `inventory`; `docker compose down -v` borraría la información.
+Por defecto se abre `http://localhost:3000` y se conservan las bases en `SCORTA/data/`. `DATA_DIR` selecciona otro directorio persistente. El servidor compartido de producción necesita HTTPS y `SCORTA_PUBLIC_URL` con su origen definitivo. Cada equipo accede al mismo servidor; no debe ejecutar una base local independiente para compartir inventario.
 
-## Propietario y empresas
+## Docker Compose y HTTPS
 
-El propietario crea empresas, define contacto/correo/WhatsApp/logo, vigencia y mensualidad, y crea las cuentas de sus administradores y vendedores. Las URLs `/c/codigo-de-empresa` preseleccionan la empresa en el ingreso y no conceden acceso por sí mismas. Solo el propietario administra cuentas y roles.
+1. En el servidor de destino, copia `.env.example` a `.env`, completa `DOMAIN`, propietario y contacto de soporte.
+2. Apunta el dominio al servidor y habilita los puertos 80 y 443.
+3. Ejecuta `docker compose config --quiet` para validar sin imprimir la configuración resuelta, que puede contener secretos.
+4. Ejecuta `docker compose up -d --build`. Caddy proporciona HTTPS y Compose inyecta las variables al contenedor.
+5. Comprueba acceso desde los equipos, permisos, persistencia y restauración con datos ficticios antes del uso operativo.
 
-La vigencia incluye todo el día final en Colombia. El servidor impide operar antes del inicio, después del vencimiento y durante una suspensión manual. Registrar un pago permite confirmar la nueva fecha: una renovación anticipada conserva los días pagados y una vencida propone comenzar en la fecha de pago elegida. La suspensión manual se mantiene hasta retirarla expresamente.
+El volumen `inventory` conserva los datos. **`docker compose down -v` elimina los volúmenes.** Preparar archivos Docker o superar CI no constituye un despliegue ni una prueba de certificado real. Servidor definitivo, destino externo de respaldo y piloto con el personal requieren validación en ese entorno.
 
-El propietario puede acceder como soporte dejando motivo; los cambios se identifican con su identidad y «Soporte» en el historial del cliente. No se revelan contraseñas. Restablecer o cambiar una contraseña revoca las sesiones anteriores.
+## Uso diario
 
-## Sesión recordada y privacidad
+- **Propietario:** crea empresas y sus cuentas, define contacto, mensualidad y contrato, registra pagos/renovaciones y atiende tickets. Puede entrar a una empresa como soporte dejando un motivo, con su identidad en auditoría.
+- **Administrador:** administra productos, referencias/códigos, compras, existencias, ventas, devoluciones, taller, mecánicos, reportes y cierres. No crea cuentas ni modifica contratos.
+- **Vendedor:** trabaja en Nueva venta, Inventario y Taller. Consulta existencias y sus propias ventas; no recibe compras, costos ni operaciones ajenas.
 
-La sesión de plataforma tiene un plazo absoluto de **30 días desde el login**, no un vencimiento diario. La cookie es HttpOnly, SameSite Strict y Secure en producción. El navegador real conserva el token de sesión; datos comerciales, usuarios y contraseñas con hash permanecen en SQLite del servidor. Apagar el equipo o reiniciar el servidor no cierra una sesión todavía válida.
+Las compras agregan unidades; las ventas y los repuestos del taller las descuentan al confirmar el cobro. Un carrito no reserva inventario. Una devolución parcial devuelve los artículos seleccionados; anular revierte lo pendiente, sin duplicar unidades previamente devueltas. Los ajustes registran cantidad y motivo. Las operaciones conservan usuario e historial.
 
-Cada solicitud vuelve a comprobar empresa, contrato y cuenta. Cerrar sesión, restablecer o cambiar contraseña, revocar una cuenta o restaurar un respaldo impiden reutilizar los accesos anteriores según corresponda. Conservar una cookie no permite trabajar con contrato vencido o durante suspensión manual. Al vencer los 30 días se requiere un nuevo ingreso.
+Nueva venta admite productos, mano de obra o ambos. El trabajo de taller se agrega al carrito con placa, descripción y mecánico activo; el servidor fija su nombre y porcentaje en ese momento. Los servicios y la venta están vinculados para evitar un cobro doble. Cliente y teléfono son opcionales para venta anónima; una venta con mano de obra requiere placa.
 
-La demo estática es una excepción explícita: IndexedDB guarda únicamente datos ficticios por navegador y localStorage recuerda un token opaco de demostración. No es una instalación compartida del negocio. El cierre de sesión o reinicio de la demo elimina su acceso recordado.
+Inventario permite búsqueda y filtros; las fichas reúnen referencias, compatibilidad, existencias e historial. Las importaciones Excel/CSV requieren vista previa y validación antes de confirmar; comprueba correspondencias, unidades y precios. El documento se aplica completo o se rechaza sin cambios parciales.
 
-## Vendedor y administrador de empresa
+## Venta pendiente, sesión y soporte
 
-El vendedor abre Nueva venta y ve tres pestañas: **Nueva venta**, **Inventario** y **Taller**. Inventario permite consultar por categorías o búsqueda y agregar productos al carrito; Taller permite cargar placa, trabajo, mecánico y valor de mano de obra al mismo carrito. Nueva venta queda dedicada al resumen, cliente, medio de pago y cobro. Desde ella también consulta sus propias ventas. No accede a costos, compras ni ventas ajenas. El administrador gestiona todos los módulos de su empresa, sin crear usuarios o cambiar roles.
+La venta pendiente se guarda por usuario y empresa en el servidor; la demo utiliza IndexedDB ficticio. Espera **«Venta pendiente guardada»** antes de cerrar. Si se pierde una respuesta de cobro, utiliza el reintento de esa misma operación; no registres otra venta para comprobarla. Los identificadores conservados evitan confirmar dos veces el mismo cobro.
 
-Nueva venta admite productos, solo mano de obra o ambos. La mano de obra se agrega desde Taller con placa, trabajo, mecánico e importe editable. Cliente y teléfono son campos distintos; de la moto solo se registra la placa. El carrito conserva los datos al navegar y las existencias se descuentan únicamente al guardar. La venta y el trabajo de taller se vinculan para evitar un cobro duplicado. Los historiales por cliente y placa descuentan devoluciones y excluyen anulaciones.
+Si otra pestaña cambia un borrador, se informa el conflicto: carga la copia guardada o revisa las diferencias antes de continuar. Los formularios administrativos aún sin confirmar no equivalen a una venta pendiente guardada. Los cambios de contrato o inventario concurrentes deben revisarse con los datos actualizados, sin sobrescribir silenciosamente lo que guardó otra persona.
 
-Los medios de pago son efectivo, transferencia y tarjeta; se registra el método, sin procesar pagos bancarios. El comprobante se puede imprimir o guardar en PDF. El envío opcional abre WhatsApp con el número y el enlace; el vendedor confirma el envío. Omitirlo o cancelarlo no revierte la venta. Los enlaces reales del comprobante son opacos y vencen. No es facturación electrónica DIAN.
+La sesión de plataforma vence 30 días después del login y se conserva al reiniciar navegador y servidor. El navegador de la instalación real conserva una cookie HttpOnly —Secure en producción—; contraseñas con hash y datos comerciales permanecen en el servidor. Cada solicitud comprueba nuevamente cuenta, permisos y contrato. Cambiar/restablecer contraseña, cerrar sesión, revocar una cuenta o restaurar un respaldo invalida los accesos correspondientes.
 
-Las fotos de producto y logos permiten archivos PNG/JPEG/WebP/GIF hasta 500 KB. Los vendedores solo consultan las fotos. Los filtros permanecen plegados para mantener la pantalla simple.
+La vigencia incluye todo el día final de Colombia; el acceso se bloquea al día siguiente. Una renovación anticipada conserva los días pagados; una vencida propone un período desde la fecha de pago elegida. Una suspensión manual se conserva hasta retirarla expresamente. La URL `/c/codigo-de-empresa` preselecciona la empresa; no concede acceso.
 
-## Revisión 2: avisos, recuperación y documentos
+Desde Perfil se crean y consultan tickets. El propietario los responde y cambia su estado; las lecturas y avisos son independientes por usuario. Las conversaciones de una empresa no son públicas. El soporte mantiene la identidad del propietario y el motivo de intervención.
 
-En la tarjeta de empresa, **Registrar pago y renovar** aparece únicamente en Pagos y renovaciones. Esa sección muestra vistas previas del recordatorio tres días antes del vencimiento y de la confirmación del pago con su nueva vigencia. Si se renueva, el recordatorio se calcula sobre la fecha nueva; el día final sigue incluido y el bloqueo comenzaría al día siguiente, con hora de Colombia. **No se envían avisos automáticos:** WhatsApp Business sigue pendiente de conectar. Este recordatorio de contrato es distinto del envío manual del comprobante de una venta.
+Si el propietario cambia la empresa de soporte en otra pestaña, una pantalla anterior debe recargar la sesión antes de continuar. El servidor rechaza acciones enviadas con una empresa distinta a la que esa pantalla había confirmado; no las aplica silenciosamente a la empresa nueva.
 
-El ingreso incluye **¿Olvidaste tu contraseña?**. Es una vista previa del flujo por empresa/usuario y correo verificado, enlace de 30 minutos y un solo uso, y nueva contraseña. El envío, la verificación del correo y la recuperación real están pendientes. La pantalla lo indica y no cambia credenciales. El propietario puede registrar un correo por cuenta y `SCORTA_OWNER_EMAIL` permite indicar el suyo inicialmente; guardar un correo no lo verifica. El restablecimiento administrativo existente sigue disponible.
+## Reportes, importes y comprobantes
 
-**Términos y privacidad** muestra borradores y una simulación de aceptación para persona autorizada. No es una firma, no guarda aceptación contractual y no fuerza un bloqueo legal real del primer login. El contenido final, su revisión jurídica y la aceptación central con versión/fecha/persona quedan pendientes de la fase interna posterior.
+Resumen general permite consultar fechas, ventas netas, productos, mano de obra, rankings y utilidad. Los reportes usan costos históricos y, para mano de obra, el reparto fijado en cada venta. Un costo o porcentaje histórico ausente se indica como incompleto; no se supone cero para inventar una ganancia.
 
-La paleta de interfaz es blanca, negra y amarilla. El logo oficial original con transparencia, recibido en el último ZIP, está incorporado sin alterar sus bytes como `src/assets/fragola-scorta-logo.png`. Brand.jsx solo ajusta tamaño proporcional mediante CSS en login y paneles. Procedencia y huella del archivo: [LEEME-LOGO.md](src/assets/LEEME-LOGO.md).
+Los importes admiten hasta dos decimales y se muestran en COP con esa precisión cuando corresponde. Cobros, comprobantes, repartos y reportes comparten redondeo decimal. Dejar el costo de compra vacío significa «desconocido»; escribir cero significa costo conocido de cero. Anular una compra recalcula el costo vigente desde sus fuentes verificables sin reescribir las ventas anteriores.
 
-## Datos existentes y respaldo
+Las devoluciones corrigen el documento en su fecha original de venta. Cierre de caja concilia ventas netas de ese día por efectivo, transferencia y tarjeta con los valores registrados; no incluye saldo inicial, gastos o retiros ni reconstruye el día efectivo del movimiento de dinero de cada devolución. El cierre confirmado es inmutable y avisa si las ventas que lo sustentan cambian después.
 
-La base de plataforma se almacena en `DATA_DIR`, separada de la base anterior `motoshop.sqlite`. La preparación de la plataforma conserva la base anterior y copia sus datos comerciales a «Almacén principal». Las cuentas anteriores deben recrearse o restablecerse desde el propietario; no se convierte su contraseña a texto ni se mezclan algoritmos de contraseñas.
+El comprobante comercial admite impresión/PDF desde el navegador y HTML imprimible de 80/58 mm, con logo y datos del negocio. WhatsApp abre un enlace para envío manual; quien atiende confirma el mensaje. Omitir ese envío no revierte la venta. Los enlaces del servidor son opacos y vencen; se pueden renovar desde una venta autorizada. No se procesan pagos bancarios ni se emite facturación electrónica DIAN.
 
-Para respaldar la base de plataforma completa:
+## Respaldo y restauración
+
+La plataforma guarda empresas, cuentas, sesiones y operaciones en **`DATA_DIR/platform.sqlite`**. La primera preparación puede copiar los datos comerciales anteriores a «Almacén principal» sin alterar `motoshop.sqlite`; las cuentas anteriores deben recrearse o restablecerse desde el propietario.
+
+Para crear un respaldo completo y consistente:
 
 ```sh
 node platform-backup.mjs save /ruta/data/platform.sqlite /ruta/respaldos
 ```
 
-Para restaurar, detener primero el servidor y ejecutar:
+Copia los respaldos fuera del servidor y define su programación y retención. Para restaurar en una instalación aislada o en el destino detenido:
 
 ```sh
 node platform-backup.mjs restore /ruta/respaldo.sqlite /ruta/data/platform.sqlite --offline
 ```
 
-La restauración conserva una copia anterior y elimina las sesiones del respaldo. El comando se niega a restaurar mientras la instancia esté abierta. Consultar [la guía de plataforma](docs/PLATFORM-API.md). Los comandos antiguos `backup.mjs` y `restore.mjs` siguen correspondiendo a la base anterior: no deben usarse para afirmar un respaldo de todas las nuevas empresas. Programar una copia externa y ensayar la restauración en una instalación aislada antes del uso real.
+La restauración valida el respaldo, conserva una copia anterior y elimina las sesiones recuperadas. No restaures sobre una instancia en uso. Ensaya la recuperación y comprueba cuentas, empresas y operaciones antes de depender del sistema. Los comandos antiguos `backup.mjs`/`restore.mjs` pertenecen a `motoshop.sqlite`; **no respaldan la plataforma multiempresa**.
 
-## Validación
+## Demo y marca
 
 ```sh
+npm run build:demo
+npm run preview:demo
+```
+
+Abre `http://127.0.0.1:4173`. Los accesos públicos de demostración son ficticios; IndexedDB conserva datos separados por navegador. Los enlaces de comprobantes de la demo funcionan donde existen esos datos, no en el navegador de un cliente externo. Las cuentas privadas de ensayo no forman parte de los accesos públicos de «Datos de prueba».
+
+El logo original con transparencia está incorporado; ver [procedencia del archivo](src/assets/LEEME-LOGO.md). Los informes anteriores de revisión describen entregas históricas y no sustituyen el comportamiento o las comprobaciones actuales.
+
+## Comprobaciones y CI
+
+```sh
+npm ci
+npm audit --audit-level=moderate
 npm test
 npm run build
 npm run build:demo
 ```
 
-La comprobación final de revisión 2 aprobó **86/86 pruebas** y las compilaciones de aplicación y demo. Las pruebas usan datos temporales. La revisión visual y en dispositivos físicos se documenta por separado; una compilación correcta no la sustituye. Los antiguos recorridos de interfaz bajo `browser-checks/` corresponden a la interfaz anterior y no acreditan la nueva plataforma. Ver [QA-REVISION2.md](docs/QA-REVISION2.md) para esta revisión y [QA-PLATAFORMA.md](docs/QA-PLATAFORMA.md) para la entrega anterior.
+La [configuración de GitHub Actions](../.github/workflows/scorta-ci.yml) ejecuta estos comandos desde `SCORTA` con Node.js 24 y las suites actuales de aplicación (`npm run test:ui`) y demo (`npm run test:demo:ui`). El runner instala Chromium, prueba escritorio/móvil y conserva diagnósticos de fallos. El workflow no despliega.
 
-El despliegue definitivo, dominio, HTTPS, copia externa, inventario inicial conciliado y piloto con el personal continúan en [PENDIENTES.md](docs/PENDIENTES.md). Los borradores no se recuperan automáticamente después de cerrar o recargar la página.
+La prueba de la credencial privada JE se omite explícitamente cuando no existe `SCORTA_JE_TEST_PASSWORD`; CI no recibe esa contraseña. El resto de los casos utiliza datos ficticios. Compilaciones, pruebas Node y listado de casos Playwright no acreditan por sí solos una ejecución de navegador; CI tampoco sustituye dispositivos físicos, impresión real, lectores ni piloto con el almacén.
 
-La venta pendiente se guarda automáticamente por usuario y empresa en el servidor; el demo usa su base ficticia local. Espera «Venta pendiente guardada» antes de cerrar. Si se informa un error o conflicto, reintenta o carga expresamente la versión guardada. El carrito no reserva existencias. Guion de recuperación, cobro y revisión móvil: [REVISION4-CARRITO.md](docs/REVISION4-CARRITO.md).
+ExcelJS se conserva en 4.4.0; su dependencia `uuid` se fija mediante override en 11.1.1, compatible con su uso CommonJS de `v4`. `fflate` se fija en 0.8.3 para validar ZIP sin incorporar el aviso conocido de ZIP64 de 0.8.2. La auditoría npm debe repetirse: ausencia de avisos conocidos no equivale a garantía de seguridad y las advertencias de deprecación transitiva son una categoría distinta.
 
-## Interfaz y soporte · revisión 5
-
-En celular, la barra inferior tiene Venta, Inventario, Taller y Más; en PC se mantiene la navegación lateral. La identidad de la empresa domina su panel. Cliente y teléfono se despliegan opcionalmente en el carrito y el cobro muestra una sola suma total con medio de pago. Los errores, recuperación de borradores y reintentos permanecen accesibles.
-
-Administrador y vendedor pueden operar ventas y mano de obra; el administrador conserva gestión de catálogo, compras, movimientos y seguimiento. Desde Perfil se crea un ticket de soporte. El propietario atiende la campana de la empresa, responde y cambia el estado; la respuesta aparece como notificación sin leer en Perfil. El servidor aplica aislamiento y conserva conversaciones/lecturas en SQLite. La copia ficticia del demo usa IndexedDB.
-
-El ticket comercial de venta admite 80/58 mm con logo de empresa y datos de contacto/fiscales suministrados. Imprimir/PDF usa el diálogo del navegador; la descarga es HTML imprimible y WhatsApp comparte un enlace para envío manual. No se conecta facturación electrónica ni envío automático. Consulte [REVISION5-ENTREGA.md](docs/REVISION5-ENTREGA.md).
-
-## Herramientas administrativas · revisión 6
-
-En Dashboard → Administración se encuentran Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Inventario también enlaza reportes/reposición; Taller permite escoger el mecánico y conserva su nombre histórico. El administrador puede consultar Mi suscripción desde Perfil, sin cambiar pagos o contrato.
-
-Los reportes por período separan neto de productos/mano de obra y margen de productos con costo histórico; CSV incluye ventas/compras/existencias actuales. Cierre de caja concilia ventas netas por su fecha original, medio de pago y valores recibidos; no contabiliza saldo inicial/gastos/retiros ni reconstruye el día efectivo de cada devolución. El cierre confirmado es inmutable y avisa si esas ventas cambian después. Consultar [REVISION6-ADMINISTRADOR.md](docs/REVISION6-ADMINISTRADOR.md).
-
-## Resumen general · revisión 7
-
-La pestaña antes llamada Dashboard ahora es **Resumen general**. Permite ver cómo fue el negocio entre fechas: ventas netas de productos/mano de obra, unidades/servicios, detalle y rankings, con ganancia total de productos y margen agregado al final. Se usan costos históricos y correcciones del período por fecha original de venta. La mano de obra permanece como ingreso separado; costos faltantes no se suponen cero. Resumen general → Administración conserva los cierres, reportes, reposición y mecánicos. Consulte [REVISION7-RESUMEN.md](docs/REVISION7-RESUMEN.md).
-
-### Revisión 8 · interfaz compacta
-
-FECHA es el único filtro de fechas: abre Desde/Hasta, FILTRAR confirma el rango y LIMPIAR muestra todo el historial. Abre inicialmente el mes actual hasta hoy. Productos destacados incluye SIN VENTAS, sin lista separada. Se retiran los textos y la franja de indicadores secundarios indicados; títulos y encabezados quedan en mayúsculas. Los cálculos de neto y ganancia histórica no cambian. Guion vigente: [REVISION8-RESUMEN.md](docs/REVISION8-RESUMEN.md).
-
-### Administrador y Excel · revisión 9
-
-Resumen general suma ganancia de productos y parte del negocio en mano de obra; exporta sus tres tablas a Excel .xlsx. Mecánicos administra porcentajes y detalle de trabajos por fechas, fijando el porcentaje en cada venta nueva. Taller exige selección de un mecánico registrado/activo; históricos sin porcentaje o devoluciones sin desglose quedan incompletos explícitamente. Compras acepta varias líneas manuales o importadas desde plantilla Excel con vista previa. Reposición conserva tabla/Excel sin sugerencias y Reportes reúne balances/descargas, separado del historial de Movimientos. Guion, límites y configuración de porcentajes existentes: [REVISION9-ADMINISTRADOR.md](docs/REVISION9-ADMINISTRADOR.md).
+Contrato técnico: [PLATFORM-API.md](docs/PLATFORM-API.md). Recuperación automática por correo, WhatsApp automático, firma/aceptación legal real y facturación electrónica continúan sin conectar. Las pantallas de vista previa no realizan esas operaciones. Alojamiento/HTTPS definitivo, respaldos externos y aceptación del almacén siguen pendientes de la entrega operativa.

@@ -161,7 +161,9 @@ export function installPlatformDemoFetch(store,{target=globalThis}={}) {
         if(!body||Array.isArray(body)||typeof body!=='object')return json({error:'Datos inválidos: envía un objeto JSON.'},400);
       }
       const path=url.pathname.startsWith('/receipt/')?'/api/v2'+url.pathname:url.pathname;
-      const result=await store.request({method,path:url.search?path+url.search:path,body},{baseUrl:target.location.origin});
+      const headers=new Headers(init.headers||(input instanceof Request?input.headers:undefined));
+      const context=headers.get('X-SCORTA-Company');
+      const result=await store.request({method,path:url.search?path+url.search:path,body,enforceContext:true,...(context!==null?{expectedCompanyId:context}:{})},{baseUrl:target.location.origin});
       // Static hosting needs links that open the same index entry rather than a server route.
       const shape=structuredClone(result.body);
       if(shape?.companies)for(const company of shape.companies)company.url=target.location.origin+'/?empresa='+encodeURIComponent(company.slug);

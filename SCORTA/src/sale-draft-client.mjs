@@ -1,6 +1,7 @@
-export async function draftRequest(method='GET',body){
+export async function draftRequest(method='GET',body,companyId){
   let response;
-  try{response=await fetch('/api/v2/draft',{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:undefined,...(body?{body:JSON.stringify(body),keepalive:new TextEncoder().encode(JSON.stringify(body)).length<60000}:{})})}
+  const headers={...(body?{'Content-Type':'application/json'}:{}),...(companyId?{'X-SCORTA-Company':companyId}:{})};
+  try{response=await fetch('/api/v2/draft',{method,credentials:'same-origin',headers,...(body?{body:JSON.stringify(body),keepalive:new TextEncoder().encode(JSON.stringify(body)).length<60000}:{})})}
   catch{throw Error('No se pudo guardar la venta pendiente. Revisa la conexión y reintenta antes de cerrar.')}
   const value=await response.json();
   if(!response.ok)throw Object.assign(Error(value.error||'No se pudo recuperar la venta pendiente.'),{status:response.status,code:value.code});
@@ -25,7 +26,13 @@ export class SaleDraftSync{
         this.attempt??={version:this.version,draft:structuredClone(this.latest),writeId:crypto.randomUUID()};
         const sent=this.attempt;
         try{const value=await this.request('POST',sent);this.version=value.version;this.saved=JSON.stringify(sent.draft);this.attempt=null;}
-        catch(e){this.conflict=e.code==='DRAFT_CONFLICT';this.report(this.conflict?'conflict':'error',e.message);throw e}
+        catch(e){
+          this.conflict=e.code==='DRAFT_CONFLICT';
+          // A validation rejection did not apply this write. Keep the latest edits,
+          // but let their corrected payload use a fresh ID on the next save.
+          if(e.status===400&&!this.conflict)this.attempt=null;
+          this.report(this.conflict?'conflict':'error',e.message);throw e;
+        }
       }
       this.report('saved');
     })();

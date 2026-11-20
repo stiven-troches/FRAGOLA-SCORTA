@@ -265,3 +265,7 @@ Lista ejecutada por coordinación; sustituye la presentación y funciones anteri
 - Compra manual o Excel con plantilla, vista previa, validación completa y varias líneas en una compra atómica/idempotente. El importador de productos CSV de Inventario se conserva separado.
 
 181/181 pruebas aprobadas, sin omisiones. Aplicación/demo compilan. Pendiente revisión conjunta visual, Excel de escritorio y equipos/impresora reales; P05–P10 y conexiones externas mantienen su alcance previo. Configurar porcentajes en mecánicos ya existentes antes de nuevos servicios; no se modifica retroactivamente el reparto de ventas antiguas.
+
+## Correcciones de auditoría · cierre de implementación
+
+Implementados los27puntos autorizados; ver [CIERRE-CORRECCIONES-AUDITORIA.md](CIERRE-CORRECCIONES-AUDITORIA.md) para responsables, contratos, pruebas y límites de validación. GitHub recibió primero la instantánea de auditoría e9d6201. Suite local237/237sin omisiones; ambos builds y audit0 correctos. Los resultados de navegador se verifican en la CI nueva, sin afirmar QAvisual local.
