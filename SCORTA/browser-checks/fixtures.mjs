@@ -48,9 +48,9 @@ export async function navigate(page,name){
  const mobile=page.getByRole('navigation',{name:'Navegación móvil'});
  if(await mobile.isVisible()){
   const direct={"Nueva venta":'Venta',Inventario:'Inventario',Taller:'Taller'}[name];
-  if(direct)await mobile.getByRole('button',{name:direct,exact:true}).click();
+  if(direct)await mobile.getByRole('button',{name:direct==='Venta'?/^Venta(?: \d+)?$/:direct,exact:true}).click();
   else{await mobile.getByRole('button',{name:'Más',exact:true}).click();await page.getByRole('dialog',{name:'Más opciones'}).getByRole('button',{name,exact:true}).click()}
- }else await page.getByRole('navigation',{name:'Módulos de la empresa'}).getByRole('button',{name,exact:true}).click();
+ }else await page.getByRole('navigation',{name:'Módulos de la empresa'}).getByRole('button',{name:name==='Nueva venta'?/^Nueva venta(?: \d+)?$/:name,exact:true}).click();
 }
 export async function profile(page){
  const desktop=page.getByTitle(/^Mi perfil:/);
