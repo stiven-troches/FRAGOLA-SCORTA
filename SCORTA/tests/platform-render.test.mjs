@@ -16,7 +16,7 @@ before(async () => {
   mkdirSync(join(root, 'test-results'), {recursive: true});
   directory = mkdtempSync(join(root, 'test-results', 'qa-platform-render-'));
   const entry = join(directory, 'entry.mjs');
-  writeFileSync(entry, `export {default as OwnerWorkspace, billingMessagePreview} from ${JSON.stringify(join(root, 'src/OwnerWorkspace.jsx'))};\nexport {default as ClientWorkspace, Stock} from ${JSON.stringify(join(root, 'src/ClientWorkspace.jsx'))};\nexport {default as LegalDocuments} from ${JSON.stringify(join(root, 'src/LegalDocuments.jsx'))};\nexport {default as RecoveryDialog} from ${JSON.stringify(join(root, 'src/RecoveryDialog.jsx'))};\n`);
+  writeFileSync(entry, `export {default as OwnerWorkspace, billingMessagePreview} from ${JSON.stringify(join(root, 'src/OwnerWorkspace.jsx'))};\nexport {default as ClientWorkspace, Stock, MobileMoreMenu} from ${JSON.stringify(join(root, 'src/ClientWorkspace.jsx'))};\nexport {default as LegalDocuments} from ${JSON.stringify(join(root, 'src/LegalDocuments.jsx'))};\nexport {default as RecoveryDialog} from ${JSON.stringify(join(root, 'src/RecoveryDialog.jsx'))};\n`);
   const result = await build({root, logLevel: 'silent', build: {ssr: entry, write: false, minify: false}});
   const output = Array.isArray(result) ? result[0].output : result.output;
   const chunk = output.find(item => item.type === 'chunk' && item.isEntry);
@@ -121,4 +121,37 @@ test('SSR: inventario distingue agotados, mínimo alcanzado y existencias sufici
     assert.match(html,stock===0?/Agotado/:new RegExp(stock+' '+(stock===1?'unidad':'unidades')));
     if(status==='empty') assert.doesNotMatch(html,/cw-stock-low/);
   }
+});
+
+test('SSR: venta simple prioriza la marca del cliente y no repite el resumen superior', async () => {
+  const data=await envelope('vendedor');
+  const logo='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+  data.company={...data.session.company,logo};
+  const html=render(components.ClientWorkspace,data);
+  const sidebar=html.match(/<aside class="cw-sidebar">([\s\S]*?)<\/aside>/)?.[1];
+  assert.ok(sidebar);assert.ok(sidebar.includes(logo));assert.match(sidebar,/Logo de Moto Norte/);
+  assert.doesNotMatch(sidebar,/scorta-brand-original/);assert.match(sidebar,/class="cw-powered-by">SCORTA</);
+  assert.match(html,/<h2>Cobro<\/h2>/);assert.match(html,/<h2>Carrito<\/h2>/);
+  assert.match(html,/<details class="cw-customer-panel">/);assert.match(html,/Agregar cliente \(opcional\)/);
+  assert.doesNotMatch(html,/class="cw-live-cart"/);assert.doesNotMatch(html,/Resumen de venta/);
+  assert.match(html,/Más opciones/);assert.match(html,/Vaciar carrito/);
+});
+
+test('SSR: navegación móvil tiene cuatro opciones y conserva las notificaciones del perfil', async () => {
+  const data=await envelope('vendedor');data.tickets=[{unreadCount:2}];
+  const html=render(components.ClientWorkspace,data);
+  const mobile=html.match(/<nav class="cw-bottom-nav"[\s\S]*?<\/nav>/)?.[0];
+  assert.ok(mobile);assert.equal((mobile.match(/<button\b/g)||[]).length,4);
+  const labels=['Venta','Inventario','Taller','Más'].map(label=>mobile.indexOf('>'+label+'<'));
+  assert.ok(labels.every(index=>index>=0));assert.deepEqual([...labels].sort((a,b)=>a-b),labels);
+  for(const label of ['Compras','Movimientos','Dashboard'])assert.ok(!mobile.includes(label));
+  assert.match(html,/Mi perfil, 2 respuestas sin leer/);assert.match(mobile,/aria-label="2 respuestas sin leer"/);
+});
+
+
+test('SSR: Más reserva compras, movimientos y dashboard para administradores', () => {
+  const more=admin=>renderToStaticMarkup(React.createElement(components.MobileMoreMenu,{admin,unreadTickets:1,onNavigate(){},onProfile(){},onLogout(){}}));
+  const seller=more(false),admin=more(true);
+  for(const label of ['Compras','Movimientos','Dashboard']){assert.ok(!seller.includes(label));assert.ok(admin.includes(label));}
+  for(const html of [seller,admin]){assert.match(html,/Perfil y soporte/);assert.match(html,/Cerrar sesión/);}
 });

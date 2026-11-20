@@ -2,7 +2,7 @@
 
 Actualización: 19 de noviembre de 2026 (America/Bogota).
 
-Esta demo utiliza la interfaz nueva y el mismo motor de plataforma que el servidor. Incluye dos empresas ficticias: **Moto Norte**, con 24 productos y operaciones de ejemplo, y **Moto Sur**, con un catálogo pequeño separado. Hay productos disponibles, con pocas unidades y agotados, además de ventas y servicios de taller. Los importes están expresados en COP.
+Esta demo utiliza la interfaz nueva y el mismo motor de plataforma que el servidor. Incluye **Moto Norte**, con 24 productos y operaciones de ejemplo, **Moto Sur**, con un catálogo pequeño separado, y **JE Accesorios y Repuestos**, preparada para las pruebas del primer cliente con inventario vacío. Hay productos disponibles, con pocas unidades y agotados, además de ventas y servicios de taller. Los importes están expresados en COP.
 
 La dirección privada existente es [https://fragola-scorta-demo.safeturnip2.chatgpt.site](https://fragola-scorta-demo.safeturnip2.chatgpt.site). La primera versión multiempresa fue publicada y confirmada. **Revisión 2 publicada y confirmada por Sites el 19 de noviembre de 2026.** La versión anterior publicada y sus pruebas históricas no constituyen una validación de esta actualización.
 
@@ -37,7 +37,7 @@ Estas contraseñas son públicas y exclusivas de la demostración. No son la con
 
 9. **Pagos y avisos:** abrir Pagos y renovaciones. El botón de registrar pago aparece una sola vez. Revisar las vistas previas de recordatorio/confirmación; no se envían mensajes automáticos reales.
 10. **Recuperación y legales:** abrir ¿Olvidaste tu contraseña? y Términos y privacidad desde el login/perfil. Los flujos indican que son vistas previas: no envían correos, no cambian contraseñas por correo y no registran firmas.
-11. **Marca:** comprobar la paleta blanca, negra y amarilla. El PNG oficial FRAGOLA SCORTA se muestra en el login y los paneles del propietario, administrador y vendedor, conservando el archivo original.
+11. **Marca:** comprobar la paleta blanca, negra y amarilla. El PNG oficial FRAGOLA SCORTA se conserva en login y propietario. En las empresas predominan su logo/nombre y SCORTA queda como texto discreto.
 
 ## Almacenamiento y límites de la demo
 
@@ -64,3 +64,13 @@ No se ha ejecutado una revisión visual de esta interfaz en la sesión actual: e
 ## Revisión 4
 
 Logo oficial original con transparencia. El carrito comparte cantidades e importe entre Inventario, Taller y Nueva venta y recupera su copia ficticia al reabrir el demo. Espera «Venta pendiente guardada» antes de cerrar. Guion y límites: [REVISION4-CARRITO.md](REVISION4-CARRITO.md).
+
+## Revisión 5
+
+El celular usa Venta, Inventario, Taller y Más en una barra inferior fija. La venta se simplifica y mantiene borradores. El administrador puede registrar mano de obra desde el mismo formulario del vendedor, además de revisar su historial. El ticket de venta usa el logo del negocio y formato 80/58 mm para imprimir o guardar PDF; WhatsApp abre un enlace para envío humano, no adjunta un PDF automáticamente.
+
+En el perfil se pueden crear tickets de soporte. El propietario los abre en la campana de cada empresa, responde y cambia el estado. Las respuestas generan un contador sin leer en el perfil del cliente. Los vendedores solo ven sus propios tickets y los administradores los de su empresa.
+
+JE aparece automáticamente en la primera apertura de esta actualización, conservando la copia anterior del navegador. Acceso manual: empresa **JE Accesorios y Repuestos**, usuario **joan**, contraseña comunicada por el propietario; no se publica en Datos de prueba. La prueba dura 30 días inclusivos desde su preparación y no se renueva al recargar. Su perfil de administrador inicia con inventario vacío y el logo original proporcionado. Correo, NIT y dirección no se han inventado.
+
+JE es todavía una cuenta de demostración por navegador: no representa una base compartida real entre equipos. El stock real del almacén y la instalación definitiva siguen pendientes. Revisión y guion: [REVISION5-ENTREGA.md](REVISION5-ENTREGA.md).

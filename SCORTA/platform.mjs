@@ -1,4 +1,5 @@
 import {passwordPolicyError} from './password-policy.mjs';
+import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
 import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 
@@ -106,7 +107,7 @@ function aggregates(business) {
 function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra'].includes(key))next[key]=removeCosts(item);return next;}return value;}
 function envelope(state, actor, now, baseUrl) {
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact};
-  if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
+  if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>publicCompany(c,now,baseUrl)),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit)};
   const business=structuredClone(state.businesses[actor.companyId]||estadoVacio());
   const aggregate=aggregates(business);Object.assign(business,aggregate);
   if(actor.role==='vendedor'){
@@ -115,16 +116,16 @@ function envelope(state, actor, now, baseUrl) {
     const own=new Set(business.ventas.map(s=>s.id));
     business.servs=business.servs.filter(s=>s.userId===actor.id||own.has(s.venta_id)||!s.userId&&s.usuario===actor.username);
     business.movimientos=[];business.auditoria=(business.auditoria||[]).filter(a=>a.userId===actor.id);
-    return {session,revision:business.revision,draftVersion:readDraft(state,actor).version,state:removeCosts(business)};
+    return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:removeCosts(business)};
   }
-  return {session,revision:business.revision,draftVersion:readDraft(state,actor).version,state:business};
+  return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:business};
 }
 function uniqueUser(state,companyId,username,exceptId) {if(state.users.some(u=>u.companyId===companyId&&norm(u.username)===norm(username)&&u.id!==exceptId))fail('Ese usuario ya existe en esta empresa');}
 function companyForm(state,form,old,now) {
   const name=text(form.name??old?.name,'Nombre de empresa',100);
   if(norm(name)===norm(state.ownerCompany)||state.companies.some(c=>c.id!==old?.id&&(norm(c.name)===norm(name)||norm(c.slug)===norm(name))))fail('Ya existe una empresa con ese nombre');
   const email=optionalText(form.email??old?.email,254);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo inválido');
-  const fields={name,contact:optionalText(form.contact??old?.contact),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:number(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
+  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:number(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
   if(old)return {...old,...fields};
   const base=norm(name).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,50)||'empresa';let slug=base;while(state.companies.some(c=>c.slug===slug||norm(c.name)===slug))slug=base+'-'+id().slice(0,6);
   return {id:id(),slug,...fields,enabled:true,createdAt:iso(now)};
@@ -140,11 +141,13 @@ function customerFor(business,form) {
 function validatePlate(v) {const plate=optionalText(v,12).toUpperCase().replace(/[\s-]/g,'');if(plate&&!/^[A-Z0-9]{3,10}$/.test(plate))fail('Placa inválida');return plate;}
 function businessContext(state, actor) {if(!actor.companyId)fail('Ingresa como soporte para operar en una empresa',403,'FORBIDDEN');return state.businesses[actor.companyId];}
 async function applyAction(state,actor,session,a,now,baseUrl) {
-  const form=a.form||{};let company;
+  const form=a.form||{};let company,documentId;
   if(a.type.startsWith('company.')||a.type.startsWith('user.'))owner(actor);
   if(a.type.startsWith('company.')&&a.type!=='company.create')company=companyFor(state,a.companyId);
   const before=a.companyId?structuredClone(state.companies.find(c=>c.id===a.companyId)):null;
-  if(a.type==='company.create'){
+  if(a.type.startsWith('ticket.')){
+    const ticket=applyTicketAction(state,actor,a,iso(now));company=companyFor(state,ticket.companyId);documentId=ticket.id;
+  }else if(a.type==='company.create'){
     company=companyForm(state,form,null,now);uniqueUser(state,company.id,form.username);
     const user=await makeUser({username:form.username,password:form.password,name:form.adminName||form.username,email:form.adminEmail},company.id,'admin',now);
     state.companies.push(company);state.users.push(user);state.businesses[company.id]=estadoVacio();
@@ -155,7 +158,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
   }else if(a.type==='company.delete'){
     if(form.confirmation!==company.name)fail('Escribe el nombre exacto de la empresa para confirmar la eliminación');
     const ids=new Set(state.users.filter(u=>u.companyId===company.id).map(u=>u.id));
-    state.companies=state.companies.filter(c=>c.id!==company.id);state.users=state.users.filter(u=>!ids.has(u.id));delete state.businesses[company.id];for(const key of Object.keys(state.saleDrafts||{}))if(JSON.parse(key)[0]===company.id)delete state.saleDrafts[key];state.payments=state.payments.filter(p=>p.companyId!==company.id);
+    state.companies=state.companies.filter(c=>c.id!==company.id);state.users=state.users.filter(u=>!ids.has(u.id));delete state.businesses[company.id];for(const key of Object.keys(state.saleDrafts||{}))if(JSON.parse(key)[0]===company.id)delete state.saleDrafts[key];state.payments=state.payments.filter(p=>p.companyId!==company.id);state.supportTickets=(state.supportTickets||[]).filter(t=>t.companyId!==company.id);
     for(const [key,s]of Object.entries(state.sessions))if(ids.has(s.userId)||s.support?.companyId===company.id)delete state.sessions[key];
     for(const [key,r]of Object.entries(state.receipts))if(r.companyId===company.id)delete state.receipts[key];
   }else if(a.type==='company.renew'){
@@ -229,7 +232,7 @@ async function applyAction(state,actor,session,a,now,baseUrl) {
     const log=next.auditoria?.[0];if(log){log.userId=actor.id;log.motivo=motivo;log.autorizadoPor=actor.label;}
     state.businesses[actor.companyId]=next;
   }else fail('Acción desconocida',404,'NOT_FOUND');
-  audit(state,actor,a.type,company?.id||actor.companyId||a.companyId,{documento:a.userId||a.id||company?.id||'',motivo:actor.support?.reason||form.motivo||'',antes:before?{name:before.name,startDate:before.startDate,endDate:before.endDate,enabled:before.enabled}:null,despues:company?{name:company.name,startDate:company.startDate,endDate:company.endDate,enabled:company.enabled}:null},now);
+  audit(state,actor,a.type,company?.id||actor.companyId||a.companyId,{documento:documentId||a.userId||a.id||company?.id||'',motivo:actor.support?.reason||form.motivo||'',antes:before?{name:before.name,startDate:before.startDate,endDate:before.endDate,enabled:before.enabled}:null,despues:company?{name:company.name,startDate:company.startDate,endDate:company.endDate,enabled:company.enabled}:null},now);
   state.revision++;
 }
 
@@ -241,7 +244,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     if(!input)fail('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',503,'SETUP_REQUIRED');
     const method=(request.method||'GET').toUpperCase(),path=new URL(request.path,'https://scorta.example').pathname,body=request.body||{};
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
-    if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp},sale:removeCosts(structuredClone(sale)),expiresAt:new Date(ref.expires).toISOString()});}
+    if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:removeCosts(structuredClone(sale)),expiresAt:new Date(ref.expires).toISOString()});}
     if(method==='POST'){
       if(!body||typeof body!=='object'||Array.isArray(body))fail('Datos inválidos');
       state=structuredClone(input);
@@ -282,7 +285,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const requestKey=body.requestId?actor.id+'|'+text(body.requestId,'Identificador',150):null;
       if(requestKey&&state.requests[requestKey]){if(state.requests[requestKey].fingerprint!==fingerprint)fail('El identificador de operación ya fue usado con otros datos');return response(200,envelope(state,actor,now,baseUrl));}
       const expected=actor.companyId?state.businesses[actor.companyId].revision:state.revision;
-      if(body.revision!=null&&body.revision!==expected)fail('Otro usuario modificó los datos. Actualiza y vuelve a intentar.',409,'REVISION_CONFLICT');
+      if(!body.type.startsWith('ticket.')&&body.revision!=null&&body.revision!==expected)fail('Otro usuario modificó los datos. Actualiza y vuelve a intentar.',409,'REVISION_CONFLICT');
       await applyAction(state,actor,session,body,now,baseUrl);
       if(requestKey)state.requests[requestKey]={fingerprint,createdAt:iso(now)};
       return response(200,envelope(state,resolveActor(state,session,now),now,baseUrl));

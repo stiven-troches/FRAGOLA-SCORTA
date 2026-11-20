@@ -181,8 +181,25 @@ Las últimas ediciones se guardan tras 400 ms de pausa. «Venta pendiente guarda
 
 Mínimo 8 y máximo 200 caracteres, con al menos un número, una mayúscula, una minúscula y un símbolo. Implementado en creación de empresas/usuarios, restablecimiento por propietario y cambio de clave propio; formularios, ayuda y backend comparten la regla. El login verifica los hashes existentes sin exigir retroactivamente la nueva composición. El cifrado/hash, límites de intentos y revocación de sesiones se conservan.
 
-La empresa solicitada JE Accesorios y Repuestos continúa pendiente de una contraseña válida. Ficha acordada: Jhoan Monsalve, usuario joan, 30 días de prueba y mensualidad posterior de 80.000 COP. La clave numérica indicada no cumple la composición aprobada. No se creó una cuenta con otra contraseña ni se publicaron credenciales del cliente.
+Estado histórico de la actualización de contraseñas: JE estaba pendiente de una clave válida. Resuelto en revisión 5: el propietario proporcionó una clave que cumple la regla y la cuenta se preparó solo en el demo, con hash y sin publicar su contraseña.
 
-Los cambios de jerarquía de marca (empresa protagonista y SCORTA discreto), Nueva venta simplificada, igualdad de pantallas de operación para administrador/vendedor y ticket compacto con logo de empresa están anotados, todavía sin ejecutar. Esta actualización solo modifica la regla de contraseñas.
+Los cambios de marca de empresa, Nueva venta, operación compartida y ticket estaban anotados en esa actualización. Se ejecutaron posteriormente, junto con soporte y navegación móvil, en la revisión 5 descrita abajo.
 
 Validación de la regla: 99/99 pruebas Node aprobadas, incluidas longitud/composición, creación/restablecimiento/cambio y acceso con hash anterior. Compilaciones de aplicación y demo aprobadas. Revisión visual pendiente.
+
+## Revisión 5 · ajustes autorizados y ejecutados
+
+| Ajuste | Responsable | Resultado |
+| --- | --- | --- |
+| Identidad de cada cliente | client_ui; coordinación | Logo y nombre de empresa predominan en su panel. SCORTA queda como texto discreto; login y propietario conservan la marca grande. |
+| Nueva venta sencilla | client_ui | Carrito y cobro sin total superior duplicado; cliente opcional plegable; consultas y vaciado en Más opciones. Borradores y reintentos se conservan. |
+| Navegación móvil | client_ui | Barra inferior fija Venta, Inventario, Taller y Más. Módulos adicionales por permisos; computador conserva su barra lateral. |
+| Operación compartida | client_ui | Administrador y vendedor usan el mismo carrito, inventario y registro de mano de obra. El administrador mantiene herramientas y seguimiento adicionales. |
+| Ticket de venta | receipts | Formatos térmicos 80/58 mm, logo y datos reales de empresa, productos/servicios/pago. Imprimir/PDF, descarga HTML y WhatsApp manual por enlace. |
+| Soporte desde perfil | support_backend; owner_support_ui | Crear ticket, campana por empresa, conversación, respuesta y notificación por usuario; abierto/en atención/resuelto, con permisos y lectura persistente. |
+| JE Accesorios y Repuestos | je_trial; coordinación | Empresa en el demo, usuario joan, Jhoan Monsalve, +573205878749, mensualidad 80.000 COP, 30 días inclusivos desde primera preparación e inventario vacío. Logo JPEG original. Email/NIT/dirección vacíos hasta recibirlos. Solo hash de la contraseña; no se imprime ni incluye en accesos públicos. |
+| Datos del ticket | support_backend; owner_support_ui | Campos NIT y dirección opcionales en creación/edición de empresa; se muestran en el ticket cuando existen. |
+
+**Validación:** 122/122 pruebas aprobadas, sin omisiones, incluida la prueba del acceso de JE con la clave entregada por entrada oculta. Compilaciones de aplicación y demo aprobadas; git diff --check limpio. No se declara revisión visual, prueba de impresora térmica ni aceptación de celular real: el entorno no tiene cua_repl.js. El aviso de tamaño del chunk del demo no impide compilar.
+
+La migración del demo agrega JE sin borrar empresas, sesiones, inventario, borradores o tickets existentes y sin restablecer contraseñas. Una JE ya creada se conserva; una eliminación manual no se deshace al recargar. El demo sigue siendo una copia por navegador. No se creó una instalación compartida real ni se conectaron WhatsApp automático/correo/firma. Quedan revisión conjunta de administrador, pruebas en dispositivos/impresora y P05–P10. Guion: [REVISION5-ENTREGA.md](REVISION5-ENTREGA.md).

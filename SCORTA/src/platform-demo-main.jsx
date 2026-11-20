@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import PlatformApp from './PlatformApp.jsx';
 import {createPlatformDemoStore,installPlatformDemoFetch,exportPlatformDemoData,DEMO_ACCOUNTS} from './platform-demo.mjs';
 import './platform.css';
+import {JE_TRIAL_PROFILE} from './je-trial-demo.mjs';
 
 function Demo() {
   const [store,setStore]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[generation,setGeneration]=useState(0),[work,setWork]=useState({busy:false,pending:false,dirty:false});
@@ -41,9 +42,9 @@ function Demo() {
         <button style={buttonStyle} disabled={changing} onClick={()=>login('admin')}>Administrador</button>
         <button style={buttonStyle} disabled={changing} onClick={()=>login('vendedor')}>Vendedor</button>
         <details style={{position:'relative'}}><summary style={{...buttonStyle,listStyle:'none'}}>Datos de prueba</summary><div style={{position:'absolute',zIndex:1000,right:0,top:'100%',background:'#fff',border:'1px solid #b5a457',padding:16,width:'min(360px,90vw)',borderRadius:8,boxShadow:'0 8px 24px #0002'}}>
-          <p style={{marginTop:0}}>Accesos públicos exclusivos de esta demo:</p>
+          <p style={{marginTop:0}}>Accesos públicos exclusivos de las empresas ficticias:</p>
           {Object.entries(DEMO_ACCOUNTS).map(([role,account])=><div key={role} style={{marginBottom:12}}><strong>{({owner:'Propietario',admin:'Administrador',vendedor:'Vendedor'})[role]}</strong><div>{account.company} · {account.username}</div><code style={{overflowWrap:'anywhere'}}>{account.password}</code></div>)}
-          <p>Los enlaces de comprobante de esta demo funcionan solo en este navegador. La instalación real comparte los datos desde el servidor.</p>
+          <p><strong>{JE_TRIAL_PROFILE.name}</strong> está preparada con su cuenta propia; entra desde el formulario de ingreso. Sus credenciales no aparecen en estos accesos públicos.</p><p>Los enlaces de comprobante de esta demo funcionan solo en este navegador. La instalación real comparte los datos desde el servidor.</p>
           <button style={buttonStyle} onClick={download}>Exportar datos ficticios</button>
         </div></details>
         <button style={buttonStyle} disabled={changing} onClick={reset}>{busy?'Procesando…':'Reiniciar demo'}</button>

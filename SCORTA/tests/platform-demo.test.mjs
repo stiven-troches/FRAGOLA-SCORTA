@@ -20,7 +20,7 @@ const sale=(product,extra={})=>({type:'sale.create',form:{fecha:today(),cliente:
 test('demo usa empresas y perfiles aislados con credenciales exclusivamente ficticias',()=>fixture(async({store})=>{
   const initial=await store.request({method:'GET',path:'/api/v2/session'});assert.equal(initial.status,401);
   let data=await store.loginAs('owner');
-  assert.equal(data.session.role,'owner');assert.equal(data.companies.length,2);
+  assert.equal(data.session.role,'owner');assert.equal(data.companies.length,3);
   const serialized=JSON.stringify(data);
   assert.ok(!serialized.includes(DEMO_ACCOUNTS.owner.password));assert.ok(!serialized.includes('digest'));assert.ok(!serialized.includes('salt'));
   data=await store.loginAs('admin');assert.equal(data.session.company.name,'Moto Norte');assert.equal(data.state.prods.length,24);
@@ -103,7 +103,7 @@ test('reset concurrente no permite resucitar un estado anterior durante un cálc
 
 test('exportar la demo excluye contraseñas, hashes, sesiones y tokens de recibo',()=>fixture(async({store})=>{
   await store.loginAs('vendedor');const view=await store.request({method:'GET',path:'/api/v2/data'});const privateLinks=view.body.state.ventas.flatMap(s=>[s.receiptToken,s.receiptUrl]).filter(Boolean);await store.loginAs('owner');const exported=await store.exportData();
-  assert.equal(exported.demostracion,true);assert.equal(exported.companies.length,2);
+  assert.equal(exported.demostracion,true);assert.equal(exported.companies.length,3);
   const text=JSON.stringify(exported);for(const value of privateLinks)assert.ok(!text.includes(value),'El export no debe incluir tokens o enlaces privados de recibos');
   for(const account of Object.values(DEMO_ACCOUNTS))assert.ok(!text.includes(account.password));
   assert.ok(!/"(?:sessions|requests|password|salt|digest|hash|receiptToken)"\s*:/i.test(text));

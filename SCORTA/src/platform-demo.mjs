@@ -1,3 +1,4 @@
+import {installJETrial} from './je-trial-demo.mjs';
 import {createPlatform, platformRequest} from '../platform.mjs';
 import {crearSemillaDemo} from './demo-seed.mjs';
 import {aplicarCambio, estadoVacio} from '../inventory.mjs';
@@ -48,7 +49,7 @@ export async function createPlatformDemoSeed({now=Date.now()}={}) {
   await perform('POST','/api/v2/action',{type:'sale.create',requestId:'seed-sale-labor',form:{fecha:date(timestamp),cliente:'Ana Torres',telefono:'+573001112233',placa:'ABC12D',paymentMethod:'transferencia'},items:[],labor:[{descripcion:'Revisión y ajuste de frenos',mecanico:'Carlos Ramírez',importe:20000}]});
   await perform('POST','/api/v2/logout',{});
   // No signed-in session is shipped in the prepared seed.
-  return state;
+  return installJETrial(state,{now:timestamp});
 }
 
 function publicExport(state) {
@@ -100,8 +101,15 @@ export async function createPlatformDemoStore({indexedDBFactory=globalThis.index
     };
   });
   try{
-    const existing=await read();
-    if(!existing){const seed=await seedFactory();await compareAndSet(null,seed)}
+    // Add the approved trial company without resetting an existing demo or session.
+    let prepared=false;
+    for(let attempt=0;attempt<12;attempt++){
+      const existing=await read();
+      if(!existing){await compareAndSet(null,await seedFactory());continue;}
+      const next=installJETrial(existing.state);
+      if(next===existing.state||await compareAndSet(existing.storageVersion,next)){prepared=true;break;}
+    }
+    if(!prepared)throw Object.assign(Error('La demo cambió en otra pestaña. Recarga para preparar la empresa de prueba.'),{storage:true,status:409});
   }catch(error){db.close();throw error}
 
   const request=(input,{baseUrl=globalThis.location?.origin||'https://demo.example',now}={})=>serial(async()=>{

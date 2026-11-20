@@ -103,3 +103,11 @@ La comprobación final de revisión 2 aprobó **86/86 pruebas** y las compilacio
 El despliegue definitivo, dominio, HTTPS, copia externa, inventario inicial conciliado y piloto con el personal continúan en [PENDIENTES.md](docs/PENDIENTES.md). Los borradores no se recuperan automáticamente después de cerrar o recargar la página.
 
 La venta pendiente se guarda automáticamente por usuario y empresa en el servidor; el demo usa su base ficticia local. Espera «Venta pendiente guardada» antes de cerrar. Si se informa un error o conflicto, reintenta o carga expresamente la versión guardada. El carrito no reserva existencias. Guion de recuperación, cobro y revisión móvil: [REVISION4-CARRITO.md](docs/REVISION4-CARRITO.md).
+
+## Interfaz y soporte · revisión 5
+
+En celular, la barra inferior tiene Venta, Inventario, Taller y Más; en PC se mantiene la navegación lateral. La identidad de la empresa domina su panel. Cliente y teléfono se despliegan opcionalmente en el carrito y el cobro muestra una sola suma total con medio de pago. Los errores, recuperación de borradores y reintentos permanecen accesibles.
+
+Administrador y vendedor pueden operar ventas y mano de obra; el administrador conserva gestión de catálogo, compras, movimientos y seguimiento. Desde Perfil se crea un ticket de soporte. El propietario atiende la campana de la empresa, responde y cambia el estado; la respuesta aparece como notificación sin leer en Perfil. El servidor aplica aislamiento y conserva conversaciones/lecturas en SQLite. La copia ficticia del demo usa IndexedDB.
+
+El ticket comercial de venta admite 80/58 mm con logo de empresa y datos de contacto/fiscales suministrados. Imprimir/PDF usa el diálogo del navegador; la descarga es HTML imprimible y WhatsApp comparte un enlace para envío manual. No se conecta facturación electrónica ni envío automático. Consulte [REVISION5-ENTREGA.md](docs/REVISION5-ENTREGA.md).

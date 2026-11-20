@@ -58,3 +58,11 @@ La sesión de plataforma tiene vigencia absoluta de 30 días (`PLATFORM_SESSION_
 `GET /api/v2/draft` devuelve `{version,draft,updatedAt?,saleId?}` del usuario y empresa activos. `POST /api/v2/draft` acepta `{version,writeId,draft}`. `draft:null` vacía el borrador conservando versión creciente; `409 DRAFT_CONFLICT` impide sobrescribir cambios de otra pestaña/equipo. Repetir el mismo writeId con los mismos datos devuelve el guardado previo. La revisión de inventario no cambia al guardar. Requiere sesión vigente y empresa accesible; soporte tiene su propia copia.
 
 El frontend guarda `pendingSale` con type sale.create, requestId y draftRequestId iguales y el payload de cobro. La acción correspondiente solo confirma ese borrador; confirma venta y limpia la copia de trabajo atómicamente. La respuesta de datos incluye draftVersion. La protección de requestId existente permite comprobar la operación después de una respuesta perdida. Borradores incompletos no reservan ni modifican existencias.
+
+## Tickets de soporte
+
+Los envelopes incluyen `tickets` con visibilidad por actor: owner todas las empresas, admin su empresa, vendedor solo su creador. Ticket: id, companyId, createdBy, creatorName, title, description, status, createdAt, updatedAt, messages y unreadCount por lector; no se expone el registro privado de lectores.
+
+En POST /api/v2/action: `ticket.create` con form.title/description; `ticket.reply` con id y form.message; `ticket.read` con id; `ticket.status` con id/form.status (open|in_progress|resolved), exclusivo del propietario. Las lecturas son independientes por usuario y los cambios son idempotentes mediante requestId. Las operaciones de soporte no modifican la revisión del negocio, inventario o borradores; la persistencia global mantiene CAS. Al eliminar empresa se retiran sus tickets.
+
+La empresa acepta `nit` y `address` opcionales; la respuesta pública del comprobante incluye ambos si existen. No sustituye facturación electrónica.
