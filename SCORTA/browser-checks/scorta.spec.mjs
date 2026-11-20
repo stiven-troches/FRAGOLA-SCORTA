@@ -1,4 +1,4 @@
-import {test,expect,login,navigate,profile,addProduct,noOverflow,waitSaved,request,OWNER,action,day} from './fixtures.mjs';
+import {test,expect,login,navigate,profile,addProduct,noOverflow,waitSaved,request,OWNER,ORIGIN,action,day} from './fixtures.mjs';
 
 test('propietario administra empresa y credenciales sin exponerlas en tarjetas',async({page,scenario})=>{
  await login(page,OWNER);await expect(page.getByRole('button',{name:'Administrar '+scenario.company.name,exact:true})).toBeVisible();
@@ -15,7 +15,7 @@ for(const role of ['admin','seller'])test(`${role}: inventario y taller alimenta
  await expect(page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true})).toHaveValue('3');
  await navigate(page,'Taller');await page.getByLabel('Placa de la moto',{exact:true}).fill('QA123D');
  await page.getByLabel('Trabajo realizado',{exact:true}).fill('Cambio de aceite QA');
- await page.getByLabel('Mecánico',{exact:true}).selectOption(scenario.mechanic.id);await page.getByLabel('Valor de mano de obra (COP)',{exact:true}).fill('15000');
+ await page.getByRole('combobox',{name:'Mecánico',exact:true}).selectOption(scenario.mechanic.id);await page.getByLabel('Valor de mano de obra (COP)',{exact:true}).fill('15000');
  await page.getByRole('button',{name:'Agregar al carrito',exact:true}).click();await navigate(page,'Nueva venta');
  await waitSaved(page);await page.reload();await expect(page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true})).toHaveValue('3');
  await expect(page.getByText('Cambio de aceite QA',{exact:true})).toBeVisible();await noOverflow(page);
@@ -57,7 +57,7 @@ test('reintento de cobro tras respuesta perdida registra una sola venta',async({
 test('compra pendiente bloquea cambios hasta confirmar el POST',async({page,scenario})=>{
  await login(page,scenario.admin);await navigate(page,'Compras');await page.getByRole('button',{name:'Ingresar mercancía',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Ingresar mercancía',exact:true});await dialog.getByLabel('Proveedor',{exact:true}).fill('Proveedor QA');
- await dialog.getByLabel('Producto',{exact:true}).selectOption(scenario.product.id);await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('2');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('20000');await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();
+ await dialog.getByRole('combobox',{name:'Producto',exact:true}).selectOption(scenario.product.id);await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('2');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('20000');await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();
  let release;const blocked=new Promise(resolve=>{release=resolve});await page.route('**/api/v2/action',async route=>{if(route.request().postDataJSON()?.payload?.kind==='compra'){await blocked;await route.continue()}else await route.continue()});
  await dialog.getByRole('button',{name:'Registrar compra',exact:true}).click();
  await expect(dialog.getByLabel('Proveedor',{exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'Agregar a la compra',exact:true})).toBeDisabled();
@@ -68,7 +68,7 @@ test('ticket y respuesta llegan al perfil del solicitante y a la campana del pro
  await login(page,scenario.seller);await profile(page);await page.getByRole('button',{name:'Crear ticket',exact:true}).click();
  const support=page.getByRole('dialog',{name:'Tickets de soporte'});await support.getByLabel('Asunto',{exact:true}).fill('Problema QA '+scenario.suffix);await support.getByLabel('Descripción del problema',{exact:true}).fill('Descripción ficticia para comprobar respuestas de soporte');await support.getByRole('button',{name:'Enviar ticket',exact:true}).click();
  await expect(support.getByRole('button',{name:new RegExp('Problema QA '+scenario.suffix)})).toBeVisible();
- const ownerContext=await browser.newContext();const ownerPage=await ownerContext.newPage();
+ const ownerContext=await browser.newContext({baseURL:ORIGIN});const ownerPage=await ownerContext.newPage();
  try{
   await login(ownerPage,OWNER);await ownerPage.getByRole('button',{name:new RegExp('Tickets de soporte de '+scenario.company.name+':')}).click();
   const ownerSupport=ownerPage.getByRole('dialog',{name:'Tickets de soporte'});await ownerSupport.getByRole('button',{name:new RegExp('Problema QA '+scenario.suffix)}).click();
