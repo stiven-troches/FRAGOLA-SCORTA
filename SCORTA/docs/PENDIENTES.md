@@ -222,3 +222,19 @@ Se ejecutaron los seis ajustes aprobados sin agregar pestañas principales. Dash
 El cierre es una conciliación de ventas: devoluciones/anulaciones se atribuyen a la fecha original de venta, según su estado actual. No reconstruye flujos históricos por fecha de devolución ni agrega saldo inicial, gastos o retiros. Un cierre guardado no se recalcula; si las ventas de esa fecha cambian, se avisa al compararlo con el estado actual. Si hay cobros con medio de pago desconocido, se pide revisarlos antes de cerrar.
 
 Las nuevas consultas y mutaciones requieren administrador; el vendedor recibe solo el catálogo activo de mecánicos y no recibe cierres. Continúan revisión conjunta, dispositivos/impresora reales y P05–P10. Guion: [REVISION6-ADMINISTRADOR.md](REVISION6-ADMINISTRADOR.md).
+
+## Revisión 7 · Resumen general por período
+
+Ejecutado lo aprobado: Dashboard pasa a llamarse **Resumen general** en PC y menú Más del celular. Responsables: overview_data (cálculos), overview_ui (interfaz), coordinación (integración/API/verificación/publicación).
+
+- Rango Desde/Hasta obligatorio, inclusivo en Bogotá; atajos Hoy, Ayer, Esta semana (lunes) y Este mes. Abre con el mes actual hasta hoy.
+- Ventas netas totales, venta de productos, mano de obra facturada y servicios registrados. Cantidad de ventas con ingreso neto, venta promedio, devoluciones y anulaciones.
+- Qué vendimos: unidades netas, importes y ganancia de cada producto; diez filas iniciales y Ver más, calculando los totales sobre todos los registros.
+- Ranking seleccionable: cinco más/menos vendidos entre los de unidades netas positivas y cinco con mayor/menor ganancia en dinero entre los de costo completo. Las pérdidas son valores válidos; los productos sin costo no se ordenan como si tuvieran ganancia cero.
+- Lista plegable del catálogo actual sin ventas netas en el rango. No afirma qué catálogo existía históricamente. Los productos retirados que se vendieron conservan su detalle, sin enlazar una ficha inexistente.
+- Bloque final **Ganancia total de productos del período**, importe y porcentaje agregado. Usa costos históricos de las líneas, no costo actual ni promedio de márgenes individuales. Si faltan costos, el total queda incompleto; sin venta neta de productos el porcentaje no tiene base y muestra —.
+- Mano de obra separada como ingreso, sin inventar su ganancia porque sus costos no están registrados. Correcciones se atribuyen a la fecha original de venta y al estado neto actual, igual que los reportes existentes.
+
+**Verificación:** 161/161 pruebas aprobadas sin omisiones, incluidas seis de cálculo, tres de API y siete de SSR. Compilaciones aplicación/demo correctas; diff limpio. GET /api/v2/overview exige administrador de su empresa o propietario en soporte y no modifica datos. Se conserva la consulta /api/v2/reports. Los accesos de Administración y Ver ventas permanecen; este último abre el mismo rango seleccionado.
+
+Pendientes: revisión conjunta en dispositivos/impresora reales y P05–P10. El entorno no tiene cua_repl.js, por lo que no se declara QA visual. Guion: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).

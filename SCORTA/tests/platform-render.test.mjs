@@ -53,19 +53,19 @@ test('SSR: vendedor inicia en venta y la navegación no expone módulos administ
   const navigation = html.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/)?.[1];
   assert.ok(navigation, 'La navegación debe existir desde el primer render');
   const sellerOrder=['Nueva venta','Inventario','Taller'].map(label=>navigation.indexOf(label));assert.ok(sellerOrder.every(index=>index>=0));assert.deepEqual([...sellerOrder].sort((a,b)=>a-b),sellerOrder);
-  for (const label of ['Compras', 'Movimientos', 'Dashboard']) assert.ok(!navigation.includes(label), label);
+  for (const label of ['Compras', 'Movimientos', 'Resumen general']) assert.ok(!navigation.includes(label), label);
   assert.ok(!/>Mi perfil</.test(html), 'El nombre debe ser el único acceso al perfil');
   assert.ok(!html.includes('Costo de compra'));
   assert.ok(!html.includes('Nombre, referencia o código de barras'),'La búsqueda y carga de productos pertenece a Inventario');
   assert.ok(!html.includes('Trabajo realizado'),'El formulario de mano de obra pertenece a Taller');
 });
 
-test('SSR: administrador ve dashboard y el orden completo de navegación acordado', async () => {
+test('SSR: administrador ve resumen general y el orden completo de navegación acordado', async () => {
   const data = await envelope('admin');const html = render(components.ClientWorkspace, data);
-  assert.match(html, /Dashboard/);assert.match(html, /Laura Gómez/);
+  assert.match(html, /Resumen general/);assert.match(html, /Laura Gómez/);
   const navigation = html.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/)?.[1];
   assert.ok(navigation);
-  const order = ['Nueva venta', 'Taller', 'Inventario', 'Compras', 'Movimientos', 'Dashboard'].map(label => navigation.indexOf(label));
+  const order = ['Nueva venta', 'Taller', 'Inventario', 'Compras', 'Movimientos', 'Resumen general'].map(label => navigation.indexOf(label));
   assert.ok(order.every(index => index >= 0));
   assert.deepEqual([...order].sort((a,b) => a-b), order);
   assert.ok(!/>Mi perfil</.test(html));
@@ -144,15 +144,15 @@ test('SSR: navegación móvil tiene cuatro opciones y conserva las notificacione
   assert.ok(mobile);assert.equal((mobile.match(/<button\b/g)||[]).length,4);
   const labels=['Venta','Inventario','Taller','Más'].map(label=>mobile.indexOf('>'+label+'<'));
   assert.ok(labels.every(index=>index>=0));assert.deepEqual([...labels].sort((a,b)=>a-b),labels);
-  for(const label of ['Compras','Movimientos','Dashboard'])assert.ok(!mobile.includes(label));
+  for(const label of ['Compras','Movimientos','Resumen general'])assert.ok(!mobile.includes(label));
   assert.match(html,/Mi perfil, 2 respuestas sin leer/);assert.match(mobile,/aria-label="2 respuestas sin leer"/);
 });
 
 
-test('SSR: Más reserva compras, movimientos y dashboard para administradores', () => {
+test('SSR: Más reserva compras, movimientos y resumen general para administradores', () => {
   const more=admin=>renderToStaticMarkup(React.createElement(components.MobileMoreMenu,{admin,unreadTickets:1,onNavigate(){},onProfile(){},onLogout(){}}));
   const seller=more(false),admin=more(true);
-  for(const label of ['Compras','Movimientos','Dashboard']){assert.ok(!seller.includes(label));assert.ok(admin.includes(label));}
+  for(const label of ['Compras','Movimientos','Resumen general']){assert.ok(!seller.includes(label));assert.ok(admin.includes(label));}
   for(const html of [seller,admin]){assert.match(html,/Perfil y soporte/);assert.match(html,/Cerrar sesión/);}
 });
 

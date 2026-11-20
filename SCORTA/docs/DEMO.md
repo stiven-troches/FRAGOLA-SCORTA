@@ -80,3 +80,7 @@ JE es todavía una cuenta de demostración por navegador: no representa una base
 Dashboard → Administración reúne Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Taller permite seleccionar mecánico; el administrador gestiona su lista e históricos. Perfil → Mi suscripción muestra la vigencia y el contacto disponible, sin habilitar pagos o cambios de contrato. El demo conserva empresas, credenciales y datos; no requiere reinicio.
 
 Los cierres concilian ventas netas por la fecha original de venta y el medio de pago, sin reconstruir flujos de devoluciones por día ni contabilizar saldos iniciales/gastos/retiros. El registro confirmado se conserva. Exportaciones CSV y reportes distinguen datos actuales de inventario y período de ventas/compras. Guion y límites: [REVISION6-ADMINISTRADOR.md](REVISION6-ADMINISTRADOR.md).
+
+## Revisión 7 · Resumen general
+
+Dashboard se renombra a **Resumen general**. Filtra Desde/Hasta con Hoy, Ayer, Esta semana o Este mes; abre el mes actual. Muestra ventas/productos/mano de obra, qué se vendió, rankings y ganancia total de productos al final, con costos históricos y devoluciones. La lista sin ventas netas corresponde al catálogo actual. Las herramientas previas están en Resumen general → Administración. Ver ventas usa el mismo rango. No se necesita Reiniciar demo. Guion y límites: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).

@@ -117,3 +117,7 @@ El ticket comercial de venta admite 80/58 mm con logo de empresa y datos de cont
 En Dashboard → Administración se encuentran Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Inventario también enlaza reportes/reposición; Taller permite escoger el mecánico y conserva su nombre histórico. El administrador puede consultar Mi suscripción desde Perfil, sin cambiar pagos o contrato.
 
 Los reportes por período separan neto de productos/mano de obra y margen de productos con costo histórico; CSV incluye ventas/compras/existencias actuales. Cierre de caja concilia ventas netas por su fecha original, medio de pago y valores recibidos; no contabiliza saldo inicial/gastos/retiros ni reconstruye el día efectivo de cada devolución. El cierre confirmado es inmutable y avisa si esas ventas cambian después. Consultar [REVISION6-ADMINISTRADOR.md](docs/REVISION6-ADMINISTRADOR.md).
+
+## Resumen general · revisión 7
+
+La pestaña antes llamada Dashboard ahora es **Resumen general**. Permite ver cómo fue el negocio entre fechas: ventas netas de productos/mano de obra, unidades/servicios, detalle y rankings, con ganancia total de productos y margen agregado al final. Se usan costos históricos y correcciones del período por fecha original de venta. La mano de obra permanece como ingreso separado; costos faltantes no se suponen cero. Resumen general → Administración conserva los cierres, reportes, reposición y mecánicos. Consulte [REVISION7-RESUMEN.md](docs/REVISION7-RESUMEN.md).

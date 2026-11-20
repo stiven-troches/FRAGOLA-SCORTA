@@ -1,3 +1,4 @@
+import {overviewReport} from './overview-report.mjs';
 import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './admin-controls.mjs';
 import {salesReport} from './admin-reports.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
@@ -274,10 +275,10 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     const actor=resolveActor(state,session,now);
-    if(method==='GET'&&path==='/api/v2/reports'){
+    if(method==='GET'&&(path==='/api/v2/reports'||path==='/api/v2/overview')){
       if(!admin(actor))fail('Los reportes requieren un administrador de la empresa.',403,'FORBIDDEN');
       const business=businessContext(state,actor),period=reportDates(url.searchParams.get('from'),url.searchParams.get('to'),dateBogota(now));
-      return response(200,{...period,report:salesReport(business,period)});
+      return response(200,{...period,report:path==='/api/v2/overview'?overviewReport(business,period):salesReport(business,period)});
     }
     if(path==='/api/v2/draft'&&method==='GET')return response(200,readDraft(state,actor));
     if(path==='/api/v2/draft'&&method==='POST')return response(200,writeDraft(state,actor,body,stamp(now).getTime()));

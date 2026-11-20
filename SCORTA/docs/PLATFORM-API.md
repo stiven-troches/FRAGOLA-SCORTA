@@ -74,3 +74,9 @@ La empresa acepta `nit` y `address` opcionales; la respuesta pública del compro
 Acciones administrativas en `/api/v2/action`: `mechanic.create` (form.name), `mechanic.update` (id y form.name/active), `mechanic.archive` (id), `cash.close` (form.date, form.actual con efectivo/transferencia/tarjeta, form.note opcional). Mantienen revisión, auditoría e idempotencia. Cierres únicos por fecha/empresa, inmutables, snapshot del cobro esperado y registrado. No modifican stock. `state.mechanics` es completo para administrador y limitado a id/name activos para vendedor; `state.cashClosures` no se entrega al vendedor.
 
 Las líneas de mano de obra admiten mecanicoId opcional: se verifica activo/pertenencia y el servidor fija el nombre de ese momento. Borradores y pendingSale conservan el campo; texto libre anterior sigue válido. Los reportes y exports usan `admin-reports.mjs` como cálculo compartido, con costos históricos y columnas permitidas.
+
+## Resumen general por período
+
+`GET /api/v2/overview?from=YYYY-MM-DD&to=YYYY-MM-DD` es de solo lectura, exige administrador o propietario en soporte y consulta únicamente el negocio del actor. Fechas omitidas usan el día de Bogotá. La interfaz exige un rango completo y utiliza el mismo cálculo compartido sobre los datos autorizados. Devuelve `{from,to,report}` calculado con `overviewReport` en overview-report.mjs, compartido con la vista.
+
+report incluye totals, products, rankings, noSales, bases de conteo, costos incompletos y medios de pago. Ganancia = venta neta de productos menos costo_unitario histórico retenido. productMarginPercent es agregado por venta neta; null sin base o con costo incompleto. La mano de obra no se suma como ganancia. No se exponen sesiones, tokens de comprobantes ni credenciales. No altera inventario, ventas, revisiones, borradores o cierres; /api/v2/reports sigue disponible.
