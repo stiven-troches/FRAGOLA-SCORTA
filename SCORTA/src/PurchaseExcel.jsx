@@ -1,0 +1,15 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {readPurchaseExcel} from './excel.mjs';
+import {parsePurchaseRows,purchaseColumns,purchaseTemplate} from '../purchase-import.mjs';
+import ExcelButton from './ExcelButton.jsx';
+const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n);
+export default function PurchaseExcel({products,onApply,disabled=false,hasItems=false}){
+ const [preview,setPreview]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(false),[applied,setApplied]=useState(false),generation=useRef(0),mounted=useRef(true);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++}},[]);
+ const read=async file=>{const current=++generation.current;setPreview([]);setError('');setApplied(false);if(!file)return;setLoading(true);try{
+  if(!/\.xlsx$/i.test(file.name)||file.size>5000000)throw Error('Selecciona un archivo .xlsx de hasta 5 MB.');
+  const rows=parsePurchaseRows(await readPurchaseExcel(await file.arrayBuffer()),products);
+  if(mounted.current&&current===generation.current)setPreview(rows);
+ }catch(failure){if(mounted.current&&current===generation.current)setError(failure.message||'No se pudo leer el Excel.')}finally{if(mounted.current&&current===generation.current)setLoading(false)}};
+ return <details className="cw-purchase-excel"><summary>CARGAR COMPRA DESDE EXCEL</summary><p>Completa cantidades y costos en la plantilla. Los productos deben existir en Inventario.</p><ExcelButton className="cw-btn cw-btn-secondary" disabled={disabled} options={{title:'COMPRA',columns:purchaseColumns,rows:purchaseTemplate(products)}} name="SCORTA-plantilla-compra">DESCARGAR PLANTILLA EXCEL</ExcelButton><label className="cw-field"><span>ARCHIVO EXCEL (.xlsx)</span><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={disabled||loading} onChange={e=>read(e.target.files[0])}/></label>{loading&&<p role="status">Leyendo Excel…</p>}{error&&<p className="cw-error cw-import-errors" role="alert">{error}</p>}{preview.length>0&&<><h3>VISTA PREVIA · {preview.length} PRODUCTOS</h3><div className="cw-table-wrap"><table className="cw-table"><thead><tr><th>PRODUCTO</th><th>CANTIDAD</th><th>COSTO UNITARIO</th><th>SUBTOTAL</th></tr></thead><tbody>{preview.slice(0,10).map(row=><tr key={row.producto_id}><td>{row.nombre}</td><td>{row.cantidad}</td><td>{money(row.precio_unitario)}</td><td>{money(row.cantidad*row.precio_unitario)}</td></tr>)}</tbody></table></div>{preview.length>10&&<p>Vista previa de 10 filas. Se cargarán los {preview.length} productos.</p>}<p><strong>TOTAL: {money(preview.reduce((n,row)=>n+row.cantidad*row.precio_unitario,0))}</strong></p><button type="button" className="cw-btn cw-btn-primary" disabled={disabled||applied} onClick={()=>{if(hasItems&&!window.confirm('¿Reemplazar los productos de esta compra por los del Excel?'))return;onApply(preview);setApplied(true)}}>{applied?'PRODUCTOS CARGADOS':'USAR PRODUCTOS DEL EXCEL'}</button></>}</details>;
+}

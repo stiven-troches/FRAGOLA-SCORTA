@@ -1,5 +1,4 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.jsx';
-import './style.css';
-createRoot(document.getElementById('root')).render(<App/>);
+import PlatformApp from './PlatformApp.jsx';
+createRoot(document.getElementById('root')).render(<PlatformApp/>);
