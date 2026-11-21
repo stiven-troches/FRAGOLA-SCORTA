@@ -1,4 +1,5 @@
 import React,{useId,useMemo,useReducer,useState} from 'react';
+import {formatCOP,formatNumber,formatPercent} from './format.mjs';
 import {overviewReport} from '../overview-report.mjs';
 import OverviewDateFilter from './OverviewDateFilter.jsx';
 import {initialOverviewDates,overviewDatesReducer,overviewRankingRows} from './overview-filters.mjs';
@@ -6,9 +7,7 @@ import ExcelButton from './ExcelButton.jsx';
 import LaborTable from './LaborTable.jsx';
 import './overview-panel.css';
 
-const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:2,minimumFractionDigits:0}).format(Number(value)||0);
-const amount=value=>new Intl.NumberFormat('es-CO',{maximumFractionDigits:2}).format(Number(value)||0);
-const percent=value=>value==null?'—':new Intl.NumberFormat('es-CO',{maximumFractionDigits:2}).format(value)+' %';
+const money=formatCOP,amount=formatNumber,percent=formatPercent;
 const dateLabel=value=>{const date=new Date(value+'T12:00:00Z');return Number.isNaN(date.getTime())?'':date.toLocaleDateString('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric'})};
 const rankingNames={mostSold:'Más vendidos',leastSold:'Menos vendidos',mostProfit:'Mayor ganancia',leastProfit:'Menor ganancia',noSales:'SIN VENTAS'};
 const tools=[['cash','Cierre de caja'],['reports','Reportes y exportaciones'],['replenishment','Preparar reposición'],['mechanics','Mecánicos']];

@@ -30,6 +30,9 @@ test('revisión2: recordar sesión no permite operar vencido; pago tardío react
   f.setNow('2026-11-20T05:00:00.000Z');
   const expired=await f.request('admin');assert.equal(expired.status,403);assert.equal(expired.body.code,'CONTRACT_EXPIRED');assert.ok(!expired.body.state);
   f.setNow('2026-11-25T15:00:00.000Z');
+  // The owner's session lasts 12 hours, so the owner signs in again days later.
+  assert.equal((await f.request('owner')).status,401);
+  f.ok(await f.request('owner','/api/v2/login',{company:'Fragola',username:'Steven',password:OWNER_PASSWORD}));
   const proposal=renewalProposal(f.company,'2026-11-25T15:00:00.000Z');
   assert.equal(proposal.startDate,'2026-11-25');assert.equal(proposal.endDate,'2026-12-25');
   await f.act({type:'company.renew',companyId:f.company.id,form:{...proposal,date:'2026-11-25'}});

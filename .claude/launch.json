@@ -1,0 +1,1 @@
+{"version":"0.0.1","configurations":[{"name":"scorta-demo","runtimeExecutable":"npm","runtimeArgs":["--prefix","SCORTA","run","preview:demo"],"port":4173}]}

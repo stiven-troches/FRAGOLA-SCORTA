@@ -2,6 +2,7 @@
 const fail=(message,status=400,code='INVALID_TICKET')=>{throw Object.assign(Error(message),{status,code})};
 const text=(value,label,max)=>{if(typeof value!=='string'||!value.trim()||value.length>max)fail(`${label}: escribe entre 1 y ${max} caracteres.`);return value.trim()};
 const roles=new Set(['admin','vendedor']);
+const MAX_OPEN_TICKETS=50;
 const statuses={open:'Abierto',in_progress:'En atención',resolved:'Resuelto'};
 const canSee=(ticket,actor)=>actor.role==='owner'||actor.companyId===ticket.companyId&&(actor.role==='admin'||actor.role==='vendedor'&&ticket.createdBy===actor.id);
 const count=ticket=>1+(ticket.messages?.length||0);
@@ -35,6 +36,8 @@ export function applyTicketAction(state,actor,action,now){
   const form=action.form||{};
   if(action.type==='ticket.create'){
     if(!actor.companyId||!roles.has(actor.role))fail('Solo los usuarios de la empresa pueden crear un ticket.',403,'FORBIDDEN');
+    // Bound the shared platform state: a company keeps at most 50 unresolved tickets.
+    if((state.supportTickets||[]).filter(item=>item.companyId===actor.companyId&&item.status!=='resolved').length>=MAX_OPEN_TICKETS)fail(`Tu empresa tiene ${MAX_OPEN_TICKETS} tickets sin resolver. Espera a que el propietario resuelva alguno antes de crear otro.`,429,'TICKET_LIMIT');
     const ticket={id:crypto.randomUUID(),companyId:actor.companyId,createdBy:actor.id,creatorName:actor.name||actor.username,
       title:text(form.title,'Asunto',160),description:text(form.description,'Descripción',5000),status:'open',
       createdAt:now,updatedAt:now,messages:[],readers:{[actor.id]:1}};

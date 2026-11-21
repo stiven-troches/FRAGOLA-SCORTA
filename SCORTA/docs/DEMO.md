@@ -57,13 +57,13 @@ npm run build
 npm run build:demo
 ```
 
-La demo tiene pruebas Node con el motor compartido, IndexedDB simulado, persistencia, concurrencia, aislamiento, sesiones, reinicio y exportación sin secretos. La ejecución final aprobó **86/86 pruebas** y ambas compilaciones. Los comandos y límites se registran en [QA-REVISION2.md](QA-REVISION2.md). La entrega previa está documentada en [QA-PLATAFORMA.md](QA-PLATAFORMA.md).
+La demo tiene pruebas Node con el motor compartido, IndexedDB simulado, persistencia, concurrencia, aislamiento, sesiones, reinicio y exportación sin secretos. La ejecución final aprobó **86/86 pruebas** y ambas compilaciones. Los comandos y límites se registran en [QA-REVISION2.md](historico/QA-REVISION2.md). La entrega previa está documentada en [QA-PLATAFORMA.md](historico/QA-PLATAFORMA.md).
 
 No se ha ejecutado una revisión visual de esta interfaz en la sesión actual: el entorno administrado de Sites no dispone de la herramienta de navegador requerida. Los antiguos comandos y escenarios en `browser-demo-checks/` corresponden a la demo anterior. Quedan pendientes la revisión conjunta de la nueva demo, los recorridos de navegador y la comprobación con celulares y equipos físicos.
 
 ## Revisión 4
 
-Logo oficial original con transparencia. El carrito comparte cantidades e importe entre Inventario, Taller y Nueva venta y recupera su copia ficticia al reabrir el demo. Espera «Venta pendiente guardada» antes de cerrar. Guion y límites: [REVISION4-CARRITO.md](REVISION4-CARRITO.md).
+Logo oficial original con transparencia. El carrito comparte cantidades e importe entre Inventario, Taller y Nueva venta y recupera su copia ficticia al reabrir el demo. Espera «Venta pendiente guardada» antes de cerrar. Guion y límites: [REVISION4-CARRITO.md](historico/REVISION4-CARRITO.md).
 
 ## Revisión 5
 
@@ -73,22 +73,22 @@ En el perfil se pueden crear tickets de soporte. El propietario los abre en la c
 
 JE aparece automáticamente en la primera apertura de esta actualización, conservando la copia anterior del navegador. Acceso manual: empresa **JE Accesorios y Repuestos**, usuario **joan**, contraseña comunicada por el propietario; no se publica en Datos de prueba. La prueba dura 30 días inclusivos desde su preparación y no se renueva al recargar. Su perfil de administrador inicia con inventario vacío y el logo original proporcionado. Correo, NIT y dirección no se han inventado.
 
-JE es todavía una cuenta de demostración por navegador: no representa una base compartida real entre equipos. El stock real del almacén y la instalación definitiva siguen pendientes. Revisión y guion: [REVISION5-ENTREGA.md](REVISION5-ENTREGA.md).
+JE es todavía una cuenta de demostración por navegador: no representa una base compartida real entre equipos. El stock real del almacén y la instalación definitiva siguen pendientes. Revisión y guion: [REVISION5-ENTREGA.md](historico/REVISION5-ENTREGA.md).
 
 ## Revisión 6 · administrador
 
 Dashboard → Administración reúne Cierre de caja, Reportes y exportaciones, Preparar reposición y Mecánicos. Taller permite seleccionar mecánico; el administrador gestiona su lista e históricos. Perfil → Mi suscripción muestra la vigencia y el contacto disponible, sin habilitar pagos o cambios de contrato. El demo conserva empresas, credenciales y datos; no requiere reinicio.
 
-Los cierres concilian ventas netas por la fecha original de venta y el medio de pago, sin reconstruir flujos de devoluciones por día ni contabilizar saldos iniciales/gastos/retiros. El registro confirmado se conserva. Exportaciones CSV y reportes distinguen datos actuales de inventario y período de ventas/compras. Guion y límites: [REVISION6-ADMINISTRADOR.md](REVISION6-ADMINISTRADOR.md).
+Los cierres concilian ventas netas por la fecha original de venta y el medio de pago, sin reconstruir flujos de devoluciones por día ni contabilizar saldos iniciales/gastos/retiros. El registro confirmado se conserva. Exportaciones CSV y reportes distinguen datos actuales de inventario y período de ventas/compras. Guion y límites: [REVISION6-ADMINISTRADOR.md](historico/REVISION6-ADMINISTRADOR.md).
 
 ## Revisión 7 · Resumen general
 
-Dashboard se renombra a **Resumen general**. Abre con el mes actual. FECHA despliega Desde/Hasta; FILTRAR aplica el rango y LIMPIAR muestra todo el historial, sin atajos. Muestra ventas/productos/mano de obra, qué se vendió, rankings y ganancia total de productos al final, con costos históricos y devoluciones. SIN VENTAS se consulta en el selector de Productos destacados y corresponde al catálogo actual, sin un bloque separado. Las herramientas previas están en Resumen general → Administración. Ver ventas usa el mismo rango. No se necesita Reiniciar demo. Guion y límites: [REVISION7-RESUMEN.md](REVISION7-RESUMEN.md).
+Dashboard se renombra a **Resumen general**. Abre con el mes actual. FECHA despliega Desde/Hasta; FILTRAR aplica el rango y LIMPIAR muestra todo el historial, sin atajos. Muestra ventas/productos/mano de obra, qué se vendió, rankings y ganancia total de productos al final, con costos históricos y devoluciones. SIN VENTAS se consulta en el selector de Productos destacados y corresponde al catálogo actual, sin un bloque separado. Las herramientas previas están en Resumen general → Administración. Ver ventas usa el mismo rango. No se necesita Reiniciar demo. Guion y límites: [REVISION7-RESUMEN.md](historico/REVISION7-RESUMEN.md).
 
 ## Revisión 8 · pantalla simplificada
 
-Títulos y encabezados en mayúsculas. Se retiran los cuatro textos explicativos indicados y la franja de ventas con ingreso neto, promedio, devoluciones y anulaciones. Los cálculos históricos y el tratamiento de correcciones se conservan. 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan. Ver [REVISION8-RESUMEN.md](REVISION8-RESUMEN.md). Recargar el demo conserva los datos; no usar Reiniciar demo.
+Títulos y encabezados en mayúsculas. Se retiran los cuatro textos explicativos indicados y la franja de ventas con ingreso neto, promedio, devoluciones y anulaciones. Los cálculos históricos y el tratamiento de correcciones se conservan. 166/166 pruebas aprobadas sin omisiones; aplicación y demo compilan. Ver [REVISION8-RESUMEN.md](historico/REVISION8-RESUMEN.md). Recargar el demo conserva los datos; no usar Reiniciar demo.
 
 ## Revisión 9 · porcentajes y Excel
 
-Resumen general incorpora tabla de mano de obra, tres descargas .xlsx y ganancia final de productos + parte del negocio en mano de obra. Mecánicos permite porcentaje y Ver trabajos por fechas. Nuevos servicios exigen un mecánico registrado/activo; los antiguos sin porcentaje se señalan sin inventarlo. Reposición y Administración se simplifican; Compras incorpora plantilla Excel, vista previa y varios productos por documento. Títulos/encabezados en mayúsculas, bordes más visibles y sin referencias en las dos tablas de productos del resumen. La copia existente conserva datos; configurar porcentajes antes de vender servicios, sin usar Reiniciar demo. Guion vigente: [REVISION9-ADMINISTRADOR.md](REVISION9-ADMINISTRADOR.md).
+Resumen general incorpora tabla de mano de obra, tres descargas .xlsx y ganancia final de productos + parte del negocio en mano de obra. Mecánicos permite porcentaje y Ver trabajos por fechas. Nuevos servicios exigen un mecánico registrado/activo; los antiguos sin porcentaje se señalan sin inventarlo. Reposición y Administración se simplifican; Compras incorpora plantilla Excel, vista previa y varios productos por documento. Títulos/encabezados en mayúsculas, bordes más visibles y sin referencias en las dos tablas de productos del resumen. La copia existente conserva datos; configurar porcentajes antes de vender servicios, sin usar Reiniciar demo. Guion vigente: [REVISION9-ADMINISTRADOR.md](historico/REVISION9-ADMINISTRADOR.md).

@@ -96,7 +96,7 @@ test('aceptación: empresas aisladas, varios administradores y permisos limitado
   const ownerData = (await f.call('owner')).body;
   assert.equal(ownerData.users.filter(u => u.companyId === company.id && u.role === 'admin').length, 2);
   const crossSale = await f.call('seller', '/api/v2/action', sale(privateProduct, {companyId: south.id}));
-  assert.ok(crossSale.status >= 400);
+  assert.equal(crossSale.status, 400, JSON.stringify(crossSale.body)); assert.match(crossSale.body.error, /Producto inexistente/);
   assert.equal((await f.call('south')).body.state.prods[0].stock, 3);
   assert.equal((await f.call('admin')).body.state.prods[0].stock, 5);
   for (const password of [OWNER_PASSWORD, EMPLOYEE_PASSWORD]) assert.ok(!JSON.stringify(ownerData).includes(password));
@@ -200,7 +200,7 @@ test('aceptación: errores de venta no mutan saldos, el reintento no duplica y l
     sale(product, {items: [], labor: [{descripcion: 'Trabajo', mecanico: 'Carlos', importe: -1}]}),
     sale(product, {items: [], labor: [{descripcion: 'Trabajo', mecanico: 'Carlos', importe: 5000}],
       form: {fecha: '2026-11-19', placa: '', paymentMethod: 'efectivo'}}),
-  ]) {const result = await f.call('seller', '/api/v2/action', invalid); assert.ok(result.status >= 400);}
+  ]) {const result = await f.call('seller', '/api/v2/action', invalid); assert.equal(result.status, invalid.items[0]?.precio_unitario === 1 ? 403 : 400, JSON.stringify(result.body));}
   assert.deepEqual((await f.call('admin')).body.state, before);
   const payload = {...sale(product), requestId: 'qa-unique-sale', revision: before.revision};
   success(await f.call('seller', '/api/v2/action', payload));
@@ -208,7 +208,7 @@ test('aceptación: errores de venta no mutan saldos, el reintento no duplica y l
   const state = (await f.call('admin')).body.state;
   assert.equal(state.ventas.length, 1); assert.equal(state.prods[0].stock, 4);
   const reused = await f.call('seller', '/api/v2/action', {...payload, items: [{...payload.items[0], cantidad: 2}]});
-  assert.ok(reused.status >= 400);
+  assert.equal(reused.status, 400); assert.match(reused.body.error, /identificador de operación/);
   const stale = await f.call('seller', '/api/v2/action', {...sale(product), revision: before.revision, requestId: randomId()});
   assert.equal(stale.status, 409);
   assert.equal((await f.call('admin')).body.state.prods[0].stock, 4);
@@ -240,9 +240,9 @@ test('aceptación: comprobante comparte sólo datos de venta, tokens inválidos 
   const printable = JSON.stringify(receipt.body);
   for (const key of ['precio_compra', 'costo_unitario', 'digest', 'passwordHash', 'sessions']) assert.ok(!printable.includes('"' + key + '"'), key);
   const unknown = await f.call(null, '/api/v2/receipt/' + 'a'.repeat(43));
-  assert.ok([404, 410].includes(unknown.status));
+  assert.equal(unknown.status, 404); assert.equal(unknown.body.code, 'RECEIPT_EXPIRED');
   const expired = await f.call(null, '/api/v2/receipt/' + document.receiptToken, undefined, {now: '2026-11-27T15:00:00.000Z'});
-  assert.ok([404, 410].includes(expired.status)); assert.ok(!expired.body.sale);
+  assert.equal(expired.status, 404); assert.equal(expired.body.code, 'RECEIPT_EXPIRED'); assert.ok(!expired.body.sale);
 });
 
 test('aceptación: vendedor no obtiene ventas de otro vendedor de la misma empresa', async () => {
@@ -268,7 +268,7 @@ test('aceptación: un servicio con venta vinculada no permite una reversión leg
   const before = (await f.call('admin')).body.state;
   const bypass = await f.call('admin', '/api/v2/action', {type: 'business.change',
     payload: {kind: 'reversion', id: service.id, form: {tipo: 'servicio', motivo: 'Reversión por ruta equivocada'}}});
-  assert.ok(bypass.status >= 400, 'El servicio vinculado se debe revertir desde su venta');
+  assert.equal(bypass.status, 400, 'El servicio vinculado se debe revertir desde su venta'); assert.match(bypass.body.error, /vinculado a una venta/);
   assert.deepEqual((await f.call('admin')).body.state, before);
 });
 

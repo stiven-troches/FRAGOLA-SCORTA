@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Dependencias npm de SCORTA (OPS-12).
+  - package-ecosystem: npm
+    directory: /SCORTA
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+
+  # Acciones de GitHub fijadas por SHA en .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+
+  # Imagen base del Dockerfile (fijada por digest).
+  - package-ecosystem: docker
+    directory: /SCORTA
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: docker

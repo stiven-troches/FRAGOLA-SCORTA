@@ -93,11 +93,12 @@ test('vista previa de cobro: pago anticipado elimina el aviso anterior y confirm
 });
 
 
-test('SSR: recuperación de contraseña distingue la vista previa del envío por correo no conectado', () => {
-  const html=renderToStaticMarkup(React.createElement(components.RecoveryDialog,{initialCompany:'Moto Norte',onClose(){}}));
-  assert.match(html,/Recuperar contraseña/);assert.match(html,/role="dialog"/);
-  assert.match(html,/envío por correo está pendiente de conectar/);
-  assert.match(html,/no se envían enlaces ni se cambian contraseñas reales/);
+// SEG-13: el diálogo ya es real; consulta si el correo está configurado antes de pedir datos.
+test('SSR: recuperación de contraseña consulta la configuración y luego pide empresa y usuario', () => {
+  const loading=renderToStaticMarkup(React.createElement(components.RecoveryDialog,{initialCompany:'Moto Norte',onClose(){}}));
+  assert.match(loading,/Recuperar contraseña/);assert.match(loading,/role="dialog"/);assert.match(loading,/Comprobando el servicio de correo/);
+  assert.doesNotMatch(loading,/Vista previa/);
+  const html=renderToStaticMarkup(React.createElement(components.RecoveryDialog,{initialCompany:'Moto Norte',initialStatus:{emailRecovery:true},onClose(){}}));
   assert.match(html,/30 minutos/);assert.match(html,/una sola vez/);
   assert.match(html,/Moto Norte/);assert.match(html,/Usuario/);
 });

@@ -18,7 +18,7 @@ test('resumen: neto y ganancia histórica concilian con el reporte, mano de obra
   assert.equal(result.totals.net,80000);assert.equal(result.totals.products,45000);assert.equal(result.totals.labor,35000);
   assert.equal(result.totals.productProfit,17500);assert.equal(result.totals.productProfit,shared.totals.productMargin);
   assert.equal(result.totals.productMarginPercent,17500/45000*100);
-  assert.equal(result.totals.salesCount,3);assert.equal(result.totals.averageSale,80000/3);assert.equal(result.totals.laborServices,2);
+  assert.equal(result.totals.salesCount,3);assert.equal(result.totals.averageSale,26666.67);// BE-22: redondeado a centavosassert.equal(result.totals.laborServices,2);
   assert.equal(result.totals.productUnits,5);assert.equal(result.totals.returns,10000);assert.equal(result.totals.cancellations,50000);
   assert.deepEqual(result.noSales.map(p=>p.id),['none']);
   const oil=result.products.find(p=>p.id==='a');assert.equal(oil.netUnits,4);assert.equal(oil.historicalCost,24500);assert.equal(oil.profit,15500);

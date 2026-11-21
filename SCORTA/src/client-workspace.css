@@ -64,3 +64,76 @@
 
 /* Keep the submitted form intact until its result is known. */
 .cw-modal-fields{border:0;margin:0;padding:0;min-width:0}.cw-modal-fields[disabled]{opacity:.78}.cw-modal-operation{padding:13px 15px;margin:0 0 18px;border:1px solid #e1c68c;border-radius:9px;background:#fff6df;color:#63491e;font-size:.9375rem}.cw-modal-operation p{margin:0 0 12px}.cw-checkout-plate{padding:16px 0;border-top:1px solid #dce2e9;margin-top:12px}.cw-checkout-plate .cw-field{max-width:400px}.cw-checkout-plate>.cw-text-button{margin-top:5px}
+
+/* Buscador rápido de Nueva venta */
+.cw-sale-search{margin:12px 0 4px;position:relative}
+.cw-sale-search .cw-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;min-height:44px}
+.cw-sale-results{list-style:none;margin:6px 0 0;padding:4px;border:1px solid var(--cw-line);border-radius:10px;background:#fff;max-height:320px;overflow:auto}
+.cw-sale-results button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer;color:var(--cw-ink)}
+.cw-sale-results button:hover:not(:disabled),.cw-sale-results button:focus-visible{background:#f3f3f3}
+.cw-sale-results button:disabled{opacity:.55;cursor:not-allowed}
+.cw-sale-results span{display:flex;flex-direction:column;min-width:0}
+.cw-sale-results small{color:var(--cw-muted)}
+.cw-sale-empty{padding:10px;color:var(--cw-muted)}
+.cw-show-more{display:flex;justify-content:center;padding:14px}
+
+/* FE-05 · FE-14 · FE-03 · FE-08 · FE-20 */
+.cw-draft-blocked{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:14px 16px;border:1px solid #e0b4b4;background:#fff4f4;border-radius:10px;color:#5c1717}.cw-draft-blocked>div{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 260px}.cw-draft-blocked small{color:#7a2a2a}
+.cw-undo{position:sticky;top:8px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:8px 8px 8px 16px;background:#1f1f1f;color:#fff;border-radius:10px;box-shadow:0 6px 18px #0003}.cw-undo .cw-text-button{color:var(--brand-yellow,#f4cf32);font-weight:700;min-height:40px;padding:0 12px}
+.cw-privacy-note{margin:10px 0 0;font-size:.8125rem;line-height:1.4;color:#555}
+.cw-shortcuts{margin:12px 0 0;font-size:.75rem;color:#6b6b6b;line-height:1.4}
+.cw-setup{margin-bottom:20px;display:block}.cw-setup-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.cw-setup-heading h2{margin:2px 0 4px;font-size:1.15rem}.cw-setup-heading p{margin:0}
+.cw-setup-steps{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}.cw-setup-steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e4e4e4;border-radius:10px;background:#fafafa}.cw-setup-steps li>div{display:flex;flex-direction:column;gap:2px;min-width:0}.cw-setup-steps small{color:#5c5c5c}.cw-setup-steps li.is-done{background:#f6fbf3;border-color:#cfe5c3}.cw-setup-steps li.is-done strong{text-decoration:line-through;text-decoration-color:#8bb27a}
+.cw-setup-check{width:24px;height:24px;border:2px solid #9a9a9a;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:#fff}.is-done .cw-setup-check{border-color:#3d7a2a;background:#3d7a2a;color:#fff}
+.cw-lazy-loading{padding:24px;text-align:center}
+@media(max-width:760px){.cw-setup-steps li{grid-template-columns:28px minmax(0,1fr)}.cw-setup-steps li>.cw-btn{grid-column:2;justify-self:start}}
+/* Integración: consentimiento de datos, soporte activo y datos de clientes */
+.cw-consent{display:grid;gap:8px;margin:12px 0;padding:12px;border:1px solid var(--cw-line);border-radius:10px;background:#fffdf3}.cw-consent .cw-field:first-child{display:flex;flex-direction:row-reverse;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap}.cw-consent .cw-field:first-child>span{font-weight:700}.cw-consent .cw-field:first-child input{width:22px;height:22px;min-height:0;flex:none}.cw-consent .cw-field:first-child small{flex-basis:100%}.cw-consent>small{color:var(--cw-muted);font-size:.8125rem}.cw-consent-error{border-color:#b3261e;background:#fff5f4}
+.cw-support-active{background:#eef4ff;border-color:#9db8e8}
+.cw-customer-records{list-style:none;margin:12px 0;padding:0;display:grid;gap:8px}.cw-customer-records li{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--cw-line);border-radius:10px;background:#fff}.cw-customer-records li>span:first-child{display:grid}.cw-customer-records small{color:var(--cw-muted)}
+.cw-danger-actions{display:flex;gap:10px;flex-wrap:wrap}
+
+/* BE-04 · FE-06 · FE-07 · BE-19: descuentos, pago dividido, ventas en espera y ficha del cliente. */
+.cw-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cw-line-adjust{margin-top:6px;font-size:.875rem}
+.cw-line-adjust summary{cursor:pointer;font-weight:650;color:var(--cw-ink);min-height:32px;display:inline-flex;align-items:center}
+.cw-line-adjust-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px;margin-top:6px;background:#f7f7f7;border-radius:8px}
+.cw-line-discount{color:#8a5a00;font-weight:700}
+.cw-held-sales{border:1px solid #d6c579;background:#fffbea;border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.cw-held-heading{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.cw-held-sales ul{list-style:none;margin:0;padding:0}
+.cw-held-sales li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid #eadfae}
+.cw-held-sales li>span:first-child{display:flex;flex-direction:column;min-width:0}
+.cw-sale-adjust{margin-bottom:14px;font-size:.9375rem}
+.cw-sale-adjust summary{cursor:pointer;font-weight:650;min-height:36px;display:flex;align-items:center}
+.cw-sale-breakdown{margin:0 0 10px;font-size:.9375rem}
+.cw-sale-breakdown>div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.cw-sale-breakdown dt{color:var(--cw-muted)}
+.cw-sale-breakdown dd{margin:0;font-weight:650;white-space:nowrap}
+.cw-split-payments{border:1px solid var(--cw-line);border-radius:10px;padding:10px 12px;margin:0 0 8px;min-width:0}
+.cw-split-payments legend{font-weight:700;padding:0 4px}
+.cw-split-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:end;padding-bottom:8px;border-bottom:1px dashed var(--cw-line);margin-bottom:8px}
+.cw-split-row>label:first-child{grid-column:1/-1}
+.cw-split-status{margin:6px 0;font-size:.875rem;font-weight:650}
+.cw-cash-received{margin:10px 0;padding:10px 12px;background:#f3f8f1;border-radius:10px}
+.cw-change{margin:6px 0 0;font-size:1.05rem}
+.cw-selected-customer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;margin-bottom:12px;background:#f3f3f3;border-radius:10px}
+.cw-selected-customer>span:first-child{display:flex;flex-direction:column}
+.cw-customer-results{margin-bottom:12px}
+@media (max-width:760px){.cw-held-sales li .cw-actions{width:100%}.cw-held-sales li .cw-actions .cw-btn{flex:1;min-height:44px}.cw-line-adjust summary,.cw-sale-adjust summary{min-height:44px}}
+/* FE-19: lector de códigos con la cámara */
+.cw-scan-button{flex-shrink:0;border:0;background:#f2f2f2;color:#191919;border-radius:8px;min-width:44px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;margin-right:-6px}
+.cw-scan-button:hover{background:#e6e6e6}
+.cw-scanner-body{display:flex;flex-direction:column;gap:12px}
+.cw-scanner-view{position:relative;background:#080808;border-radius:12px;overflow:hidden;aspect-ratio:4/3;max-height:60dvh}
+.cw-scanner-view video{width:100%;height:100%;object-fit:cover;display:block}
+.cw-scanner-frame{position:absolute;left:12%;right:12%;top:32%;bottom:32%;border:3px solid var(--brand-yellow,#f4cf32);border-radius:10px;box-shadow:0 0 0 999px #0006}
+.cw-scanner-hint{position:absolute;inset:auto 0 12px;margin:0;text-align:center;color:#fff;font-size:.9rem}
+.cw-scanner-ok{background:#eef8ee;border:1px solid #8fc28f;border-radius:9px;padding:10px 12px;margin:0;font-weight:600}
+.cw-scanner-body .cw-error,.cw-scanner-body .cw-muted{margin:0}
+.cw-scanner-sound{display:flex;align-items:center;gap:8px;font-size:.95rem;min-height:40px}
+.cw-scanner-done{width:100%}
+/* FE-18: aviso sin conexión */
+.cw-offline-banner{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;gap:2px;padding:12px 16px;margin-bottom:16px;border-radius:9px;background:#191919;color:#fff;font-size:.9rem}
+.cw-offline-banner strong{color:var(--brand-yellow,#f4cf32);font-size:1rem}
+@media(max-width:760px){.cw-scanner-view{aspect-ratio:3/4}.cw-offline-banner{font-size:.875rem;padding:10px 12px}}

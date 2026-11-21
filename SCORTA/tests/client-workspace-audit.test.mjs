@@ -5,6 +5,10 @@ import React from 'react';
 import Papa from 'papaparse';
 import {transformWithOxc} from 'vite';
 import {moneyAmount,roundMoney,sumMoney} from '../money.mjs';
+import {money} from '../src/format.mjs';
+import * as venta from '../sale-pricing.mjs';
+import {matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE} from '../src/barcode-scanner.mjs';
+import {OFFLINE_SALE_MESSAGE} from '../src/connectivity.mjs';
 
 // This harness runs the actual JSX callbacks and effects in Node. It does not
 // start a server, emulate a browser layout, or substitute a copy of the handlers.
@@ -49,8 +53,8 @@ function harness({role='vendedor',initialDraft=null,onAction=async()=>baseData()
   dispose(){this.disposed=true}
  }
  const mockReact={...React,useId:()=>`field-${cursor++}`};
- const components=new Function('React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney',compiled+';return {ClientWorkspace,Modal};')(
-  mockReact,useCallback,useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney);
+ const components=new Function('React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace,Modal};')(
+  mockReact,useCallback,useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE);
  function render(next){if(next)props={...props,...next};cursor=0;changed=false;tree=components[kind](props);while(pendingEffects.length)pendingEffects.shift()();return tree}
  async function settle(){for(let i=0;i<10;i++){await Promise.resolve();if(changed)render();await Promise.resolve()}return tree}
  function dispose(){for(const slot of slots)slot?.cleanup?.();}
@@ -63,6 +67,7 @@ const field=(h,label)=>nodes(h.tree,node=>node.type?.name==='Field'&&node.props.
 const modal=h=>nodes(h.tree,node=>node.type?.name==='Modal')[0];
 const click=(h,label)=>{const node=named(h,label);assert.ok(node,`Control ${label}`);assert.ok(!node.props.disabled,`${label} no está deshabilitado`);return node.props.onClick?.({currentTarget:{closest:()=>({open:true})},preventDefault(){}})};
 const edit=(h,label,value)=>{const node=field(h,label);assert.ok(node,`Campo ${label}`);return node.props.onChange({target:{value}})};
+const consent=(h,checked=true)=>{const node=field(h,'El cliente autorizó el tratamiento de sus datos');assert.ok(node,'Casilla de consentimiento');return node.props.onChange({target:{checked}})};
 const submit=h=>{const form=nodes(h.tree,node=>node.type==='form').at(-1);assert.ok(form);return form.props.onSubmit({preventDefault(){}})};
 async function openInventory(h){click(h,'Inventario');await h.settle()}
 async function openProduct(h){await openInventory(h);click(h,'Nuevo producto');await h.settle()}
@@ -120,7 +125,7 @@ test('H18: validación definitiva conserva el producto y permite corregirlo, sin
 test('H19: la placa recuperada en venta de productos queda visible y se puede corregir antes de cobrar',async()=>{
  let action;const oldSale={id:'old',fecha:'2026-11-19',cliente:'Ana Torres',telefono:'3001234567',placa:'OLD12D',detalles:[],total:1};
  const h=harness({initialDraft:draft({saleForm:{...baseForm(),cliente:'Ana'}}),data:baseData({ventas:[oldSale]}),onAction:async value=>{action=clone(value);return successSale(value)}});
- try{await h.settle();click(h,'Usar datos');await h.settle();assert.equal(field(h,'Placa asociada a esta venta').props.value,'OLD12D');edit(h,'Placa asociada a esta venta','NEW12D');await h.settle();await submit(h);await h.settle();assert.equal(action.form.placa,'NEW12D');assert.equal(action.form.cliente,'Ana Torres')}finally{h.dispose()}
+ try{await h.settle();click(h,'Usar datos');await h.settle();assert.equal(field(h,'Placa asociada a esta venta').props.value,'OLD12D');edit(h,'Placa asociada a esta venta','NEW12D');await h.settle();consent(h);await h.settle();await submit(h);await h.settle();assert.equal(action.form.placa,'NEW12D');assert.equal(action.form.cliente,'Ana Torres')}finally{h.dispose()}
 });
 
 test('H19: al retirar la última mano de obra sigue visible la placa y puede quitarse explícitamente',async()=>{
@@ -145,4 +150,29 @@ test('costo legado de tres decimales se conserva al editar el nombre; un costo c
  try{await h.settle();await openInventory(h);const row=nodes(h.tree,n=>n.type==='button'&&n.props.className==='cw-product-link')[0];assert.ok(row);row.props.onClick();await h.settle();click(h,'Editar producto');await h.settle();assert.equal(field(h,'Precio de compra (COP)').props.step,'any');edit(h,'Nombre del producto','Pastillas renombradas');await h.settle();await submit(h);await h.settle();assert.equal(captured.payload.form.precio_compra,1.005);assert.equal(captured.payload.form.nombre,'Pastillas renombradas');
   await openInventory(h);const again=nodes(h.tree,n=>n.type==='button'&&n.props.className==='cw-product-link')[0];again.props.onClick();await h.settle();click(h,'Editar producto');await h.settle();captured=null;edit(h,'Precio de compra (COP)','1.006');await h.settle();await submit(h);await h.settle();assert.equal(captured,null);assert.match(text(h.tree),/hasta dos decimales/);
  }finally{h.dispose()}
+});
+
+test('INT-06: teléfono o placa exigen la casilla de consentimiento y la venta envía dataConsent y consentMedium',async()=>{
+ let action=null;const h=harness({initialDraft:draft({saleForm:{...baseForm(),telefono:'3001234567'}}),onAction:async value=>{action=clone(value);return successSale(value)}});
+ try{await h.settle();await submit(h);await h.settle();assert.equal(action,null,'sin casilla no se envía');assert.match(nodes(h.tree,n=>n.type?.name==='Field'&&n.props.label==='El cliente autorizó el tratamiento de sus datos')[0].props.error,/Confirma que el cliente autorizó/);
+  consent(h);edit(h,'Medio de la autorización','escrito');await h.settle();await submit(h);await h.settle();assert.equal(action.form.dataConsent,true);assert.equal(action.form.consentMedium,'escrito');assert.equal(action.form.telefono,'3001234567');
+ }finally{h.dispose()}
+ const plain=harness({initialDraft:draft(),onAction:async value=>{action=clone(value);return successSale(value)}});
+ try{await plain.settle();assert.equal(field(plain,'El cliente autorizó el tratamiento de sus datos'),undefined);await submit(plain);await plain.settle();assert.ok(!('dataConsent' in action.form),'sin datos personales no se envía consentimiento')}finally{plain.dispose()}
+});
+
+test('INT-07/09: el admin revoca el enlace del comprobante y corrige o borra los datos de un cliente',async()=>{
+ const actions=[];confirmations=[];confirmResult=true;
+ const sale={id:'sale-9',fecha:'2026-11-20',cliente:'Ana Torres',telefono:'3001234567',placa:'ABC12D',customerId:'c1',usuario:'admin',detalles:[],total:1000,receiptExpiresAt:new Date(Date.now()+86400000).toISOString()};
+ const data=baseData({ventas:[sale],customers:[{id:'c1',nombre:'Ana Torres',telefono:'3001234567',placas:['ABC12D'],purchaseCount:1,totalSpent:1000}],customerRecords:[{id:'c1',nombre:'Ana Torres',telefono:'3001234567',consentAt:'2026-11-20T10:00:00Z',consentMedium:'verbal'}]});
+ const h=harness({role:'admin',data,onAction:async action=>{actions.push(clone(action));return data}});
+ try{
+  await h.settle();click(h,'Nueva venta');await h.settle();click(h,'Consultar ventas');await h.settle();click(h,'Ver venta');await h.settle();assert.equal(modal(h).props.title,'Detalle de venta');
+  await click(h,'Revocar enlace');await h.settle();assert.equal(actions.at(-1).type,'sale.receipt.revoke');assert.equal(actions.at(-1).id,'sale-9');assert.match(confirmations.at(-1),/Revocar el enlace/);
+  h.render();await h.settle();click(h,'Buscar cliente o placa');await h.settle();edit(h,'Nombre o teléfono','Ana');await h.settle();
+  click(h,'Corregir datos');await h.settle();assert.equal(modal(h).props.title,'Corregir datos del cliente');edit(h,'Nombre del cliente','Ana María Torres');await h.settle();await submit(h);await h.settle();
+  assert.deepEqual({type:actions.at(-1).type,id:actions.at(-1).id,form:actions.at(-1).form},{type:'customer.update',id:'c1',form:{nombre:'Ana María Torres',telefono:'3001234567'}});
+  await h.settle();edit(h,'Nombre o teléfono','Ana');await h.settle();await click(h,'Eliminar datos personales');await h.settle();assert.equal(actions.at(-1).type,'customer.erase');assert.match(confirmations.at(-1),/no se puede deshacer/);
+ }finally{h.dispose()}
+ const seller=harness({role:'vendedor',data});try{await seller.settle();click(seller,'Buscar cliente o placa');await seller.settle();edit(seller,'Nombre o teléfono','Ana');await seller.settle();assert.equal(named(seller,'Corregir datos'),undefined)}finally{seller.dispose()}
 });

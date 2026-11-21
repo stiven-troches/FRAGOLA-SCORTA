@@ -1,0 +1,44 @@
+name: SCORTA smoke test
+
+# OPS-10: prueba de humo contra un despliegue.
+# - Manual: Actions > SCORTA smoke test > Run workflow > URL.
+# - Automática: cuando un deployment de GitHub (p. ej. el que publica Render) termina en "success".
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL base del despliegue (p. ej. https://scorta.onrender.com)'
+        required: true
+        type: string
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: SCORTA
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            SCORTA/package.json
+            SCORTA/scripts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Run smoke test
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          ENV_URL: ${{ github.event.deployment_status.environment_url }}
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          url="${INPUT_URL:-${ENV_URL:-$TARGET_URL}}"
+          if [ -z "$url" ]; then echo "::error::No se recibió la URL del despliegue"; exit 1; fi
+          npm run smoke -- "$url"

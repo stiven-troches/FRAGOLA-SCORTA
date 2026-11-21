@@ -9,6 +9,6 @@ assert.throws(()=>send('compra',{fecha:'2026-11-09'},[{...line(1),precio_unitari
 assert.throws(()=>send('venta',{fecha:'2026-11-09'},[line(1.5)]),/inválido/);
 s=send('producto',{...s.prods[0],stock:999});assert.equal(s.prods[0].stock,5);assert.equal(s.prods[0].stock_minimo,0);
 assert.throws(()=>send('eliminar',{},[],{id}),/existencias/);
-s=send('compra',{fecha:'2026-11-09',proveedor:'Proveedor'},[{...line(2),precio_unitario:40}]);assert.equal(s.prods[0].stock,7);assert.equal(s.prods[0].precio_compra,40);
+s=send('compra',{fecha:'2026-11-09',proveedor:'Proveedor'},[{...line(2),precio_unitario:40}]);assert.equal(s.prods[0].stock,7);assert.equal(s.prods[0].precio_compra,47.14);
 db.close();db=openStore(file);assert.equal(db.read().prods[0].stock,7);
 }finally{db.close();rmSync(dir,{recursive:true,force:true})}});

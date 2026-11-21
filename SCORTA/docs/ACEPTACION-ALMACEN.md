@@ -2,7 +2,7 @@
 
 Preparado el 12 de noviembre de 2026 (America/Bogota). Responsable de la comprobación: QA, con una persona que atienda el almacén. Producto coordina la decisión de comenzar el piloto.
 
-**Estado: preparado; pendiente de ejecutar con el personal y los equipos reales.** Las 32 pruebas de servidor y 30 recorridos de interfaz ya registrados en [QA.md](QA.md) son automatizados. No acreditan el lector físico, los celulares del almacén, la aceptación del usuario ni el servidor definitivo.
+**Estado: preparado; pendiente de ejecutar con el personal y los equipos reales.** Las 32 pruebas de servidor y 30 recorridos de interfaz ya registrados en [QA.md](historico/QA.md) son automatizados. No acreditan el lector físico, los celulares del almacén, la aceptación del usuario ni el servidor definitivo.
 
 ## Antes de comenzar
 

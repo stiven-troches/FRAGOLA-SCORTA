@@ -1,94 +1,103 @@
-# Acceso y sesiones de SCORTA
+# Seguridad de SCORTA
 
-La aplicación presenta su propio formulario de entrada. Las API requieren una
-sesión válida; los archivos de la interfaz son públicos para poder mostrar ese
-formulario. Ya no se utiliza autenticación HTTP Basic.
+Actualizado: 21 de noviembre de 2026. Describe la plataforma multiempresa (`/api/v2`) tal como está en el código hoy. Lo que aún falta está en la sección [Pendientes](#pendientes).
 
-La sesión usa un identificador aleatorio de 256 bits. El servidor mantiene su
-huella en memoria y el navegador recibe únicamente una cookie `HttpOnly`,
-`SameSite=Strict`, con duración máxima de ocho horas. En producción también se
-marca `Secure`: el acceso debe pasar por HTTPS. No se guardan contraseñas ni
-tokens en localStorage. Reiniciar el servidor cierra todas las sesiones.
+Relacionados: [OPERACION.md](OPERACION.md) · [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) · [SECRETOS.md](SECRETOS.md)
 
-Entrar utiliza `POST /api/login`; salir, `POST /api/logout`. Cerrar sesión
-invalida la cookie en el servidor. `POST /api/password` exige la contraseña
-actual y una nueva de entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo, y cierra todas las sesiones
-de ese usuario. La aplicación solicita entrar de nuevo tras cambiarla.
+## Cuentas y roles
 
-Si vence la sesión durante una operación o un formulario sin guardar, la
-aplicación conserva ese trabajo solamente en memoria, con su identificador de
-reintento. Lo oculta, desactiva sus controles y pausa sus consultas hasta volver
-a entrar con la misma cuenta. Así se puede confirmar el resultado sin repetir
-una venta ya registrada. No permite trasladar el borrador a otra cuenta. Cerrar
-o recargar la página pierde ese estado; no se almacena en el navegador. El modo
-local de pruebas queda excluido de la retención al crear su primera cuenta.
+| Rol | Qué puede hacer |
+|---|---|
+| **Propietario** (dueño de SCORTA) | Crea empresas y cuentas, registra pagos, atiende tickets. No ve los datos de un almacén salvo que entre en **modo soporte**. |
+| **Administrador** (del almacén) | Todo lo de su empresa: productos, compras, ventas, devoluciones, taller, reportes y cierres. No crea cuentas. |
+| **Vendedor** | Nueva venta, Inventario y Taller. Solo ve sus propias ventas y los clientes de esas ventas. No ve costos ni compras. |
 
-Las solicitudes que cambian datos deben enviar JSON y un encabezado `Origin`
-que coincida con el protocolo y Host de la aplicación. En producción se espera
-`https://<Host>`; el proxy debe conservar el Host público. Las lecturas de las
-API también requieren sesión. Los permisos se verifican en el servidor y el rol
-se consulta de nuevo en cada solicitud.
+La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca de lo que envíe el navegador. Los permisos se revisan de nuevo en cada petición.
 
-Diez accesos fallidos bloquean temporalmente la combinación de dirección de red
-y nombre de usuario durante quince minutos. Este control es local al proceso;
-no sustituye los controles de tráfico de una instalación pública. Tras un proxy,
-la dirección observada es la del proxy. El servidor no confía en una dirección
-de origen enviada por el cliente mediante encabezados.
+## Contraseñas
 
-Sin cuentas, el modo de pruebas permite al usuario `local` actuar como
-administrador solamente en desarrollo y desde la interfaz de loopback. No se
-habilita este acceso en producción ni desde una dirección de red externa.
+- Entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo.
+- Se guardan con hash PBKDF2-SHA256 (120.000 iteraciones) y sal. El refuerzo a un hash más fuerte espera tu decisión (US-41).
+- Cambiar o restablecer una contraseña cierra todas las sesiones de esa cuenta.
+- Recuperación por correo (SEG-13): solo a correos verificados con código de 6 dígitos; enlace `/recuperar#<token>` de un solo uso que vence en 30 minutos, guardado solo como hash; respuesta idéntica exista o no la cuenta; límites por IP y por cuenta; al usarlo se cierran todas las sesiones. Sin proveedor de correo configurado queda apagada y el propietario o el administrador restablecen la contraseña desde su panel.
 
-El administrador puede crear usuarios. Esta iteración no añade recuperación de
-contraseña ni administración de desactivaciones. Los usuarios y sus contraseñas
-derivadas pertenecen al SQLite: el respaldo JSON de operaciones no los incluye.
-La copia y recuperación del volumen completo se documenta en `LEEME.md`.
+## Sesiones
 
-Verificación: `node tests/auth.test.mjs` cubre expiración, cambios de rol,
-cuentas inactivas, alcance del modo local, límite de intentos, cookie de
-producción, origen y cierre de sesiones al reiniciar. `tests/http.test.mjs`
-verifica el flujo HTTP integrado, permisos, salida y cambio de contraseña.
+| Cuenta | Duración máxima |
+|---|---|
+| Administrador y vendedor | **30 días** desde el login |
+| Propietario | **12 horas** |
+| Modo soporte del propietario | **2 horas**; se cierra solo |
 
-## Asignación para el uso real
+- El navegador recibe solo una cookie `HttpOnly`, `SameSite=Strict` y `Secure` (en producción). No se guarda nada en `localStorage`.
+- El identificador de sesión es aleatorio de 256 bits y en la base solo se guarda su hash.
+- Las sesiones **sobreviven** a reinicios y deploys. Se cierran al salir, al cambiar o restablecer la contraseña, al desactivar la cuenta o la empresa, y al restaurar un respaldo (la restauración borra todas las sesiones).
 
-Revisión de preparación: 12 de noviembre de 2026 (America/Bogota). Las cuentas
-y la base utilizadas en las pruebas son temporales. Esta revisión no crea
-cuentas del almacén ni acredita un despliegue de producción.
+## Modo soporte del propietario
 
-| Pendiente | Responsable principal | Estado y criterio de cierre |
-| --- | --- | --- |
-| Definir la dirección de acceso y HTTPS | Infraestructura, con decisión del propietario | Pendiente de definir alojamiento y URL. La aplicación debe abrirse por su dirección HTTPS definitiva, con certificado aceptado por los equipos que se usarán. |
-| Preparar la primera cuenta administradora | Seguridad y propietario del almacén | Código preparado y primera cuenta administradora comprobada. Falta identificar al custodio y crear la cuenta en la instalación definitiva mediante la configuración protegida de esa instalación. |
-| Crear las cuentas del personal | Administrador del almacén, con apoyo de seguridad | Pendiente de nombres y responsabilidades reales. Los operadores registran ventas y servicios; el administrador gestiona inventario, compras, ajustes, anulaciones y cuentas. |
-| Comprobar acceso y permisos en el destino | Seguridad y QA | Las pruebas locales cubren sesión, permisos, salida y cambio de contraseña. Falta repetir entrada, salida, rechazo de acceso sin sesión y restricciones del operador a través del dominio y proxy definitivos. |
-| Comprobar recuperación de cuentas desde respaldo | Infraestructura, con apoyo de seguridad | La recuperación SQLite se probó en un directorio aislado y conserva cuentas y reintentos. Falta ensayarla en la instalación definitiva y acordar quién custodia y recupera la copia. |
+- Para entrar a una empresa, el propietario escribe un **motivo** obligatorio.
+- El inicio y el fin quedan en la auditoría de esa empresa, con la identidad del propietario y el motivo.
+- Termina solo a las 2 horas.
+- Falta un aviso visible para el almacén mientras el propietario está dentro (SEG-09).
 
-La primera contraseña se proporciona fuera del código y del chat, usando la
-configuración del servidor. `SCORTA_ADMIN_PASSWORD` solo crea la primera cuenta
-cuando no existen usuarios; cambiar esa variable después no cambia la
-contraseña de una cuenta existente. El administrador puede cambiar su propia
-contraseña dentro de la aplicación.
+## Verificación en dos pasos (2FA) del propietario
 
-El modo de producción exige `Origin: https://<Host>` y emite la cookie con
-`Secure`. El `Caddyfile` preparado envía las solicitudes a `app:3000`; el proxy
-debe conservar el Host público. La compatibilidad se revisó por código; no se
-probó aquí un certificado ni un dominio reales. La validación de destino debe
-comprobar ambos sin publicar el puerto interno de la aplicación.
+**En curso (SEG-01).** Como la cuenta del propietario controla todas las empresas, tendrá un segundo factor. Mientras tanto: contraseña larga y única, sesión de 12 horas y 2FA activado en Render, Cloudflare, GitHub, R2 y el correo (US-09).
 
-Estas condiciones también se deben resolver si se elige un solo computador o
-una red interna. La configuración actual de producción no ofrece un acceso
-por HTTP sin TLS. El modo `development` sin cuentas sirve para demostraciones
-locales y no cierra el pendiente de acceso real.
+## Límite de intentos e IP real
 
-Una recuperación completa devuelve las contraseñas que existían en la fecha
-del respaldo. El reinicio obliga a entrar de nuevo; después de recuperar se
-debe comprobar el acceso de una cuenta administradora y de un operador en la
-copia de ensayo antes de volver a atender al almacén. El JSON de operaciones
-no sustituye ese respaldo completo.
+- **Por cuenta:** 10 intentos fallidos con la misma empresa, usuario y dirección IP bloquean esa combinación **15 minutos**.
+- **Por dirección IP:** máximo 60 intentos de login por minuto desde la misma IP.
+- La IP real se toma de la cabecera definida en `SCORTA_CLIENT_IP_HEADER` (`cf-connecting-ip` con Cloudflare, `x-forwarded-for` en Render). Con `x-forwarded-for` se cuenta desde la derecha según `SCORTA_TRUSTED_PROXY_HOPS`, porque la parte izquierda la puede falsificar el cliente.
+- Si la variable está vacía, se usa la IP de la conexión. Detrás de un proxy esa IP es la del proxy, y el límite se volvería un bloqueo para todos. Por eso hay que configurarla en Render (ver [OPERACION.md](OPERACION.md#ip-real-del-cliente-límite-de-intentos)).
 
-Validación dirigida de esta revisión:
-`node --test tests/auth.test.mjs tests/bootstrap.test.mjs tests/backup.test.mjs`
-terminó correctamente: **3/3 archivos de pruebas aprobados**, sin fallos. No se
-repitió la batería completa ni se modificó código de autenticación. La
-recuperación de contraseña y la interfaz de desactivación de cuentas siguen
-como mejoras futuras por priorizar, no como trabajo terminado.
+## Protección de las peticiones
+
+- **CSRF:** las peticiones que cambian datos deben ser JSON y traer un `Origin` igual a `SCORTA_PUBLIC_URL`.
+- **Tamaño:** máximo 8 KB en el login y 2 MB en las demás.
+- **Errores:** los errores 500 no muestran detalles internos al navegador; el detalle va al log.
+- **Logs:** una línea JSON por petición a la API. Los enlaces de comprobante aparecen enmascarados (`/receipt/[token]`). No se registran cookies ni contraseñas.
+
+## Cabeceras de seguridad
+
+| Cabecera | Valor |
+|---|---|
+| `Content-Security-Policy` | `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'` |
+| `Strict-Transport-Security` (HSTS) | `max-age=31536000` (solo en producción) |
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `no-referrer` |
+| `Cache-Control` | `no-store` |
+
+La CSP no permite scripts en línea ni de otros dominios.
+
+## Comprobantes públicos
+
+El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 días; se puede renovar desde la venta. Pendiente (SEG-03): enmascarar el teléfono, poder revocar el enlace y no guardar el token en claro.
+
+## Datos y respaldos
+
+- Todos los datos están en `platform.sqlite`, en el disco de Render.
+- El respaldo externo va **cifrado** (AES-256-GCM) con `SCORTA_BACKUP_KEY` y se sube con una llave de solo escritura. Ver [OPERACION.md](OPERACION.md#3-respaldos).
+- Los secretos y su rotación están en [SECRETOS.md](SECRETOS.md).
+
+## Pendientes
+
+| ID | Tema |
+|---|---|
+| SEG-01 | 2FA del propietario (en curso) |
+| SEG-03 | Comprobante público: enmascarar teléfono, revocar enlace, token con hash |
+| SEG-06 | Mismo tiempo de respuesta para usuarios inexistentes |
+| SEG-07 | Límite de intentos en «cambiar contraseña» |
+| SEG-08 | Obligar a cambiar la contraseña tras un restablecimiento |
+| SEG-09 | Aviso visible cuando el propietario está en modo soporte |
+| BE-12 | Revocar todas las sesiones de una empresa o de la plataforma |
+| SEG-10 / SEG-11 | Revisión interna antes del 2.º cliente y prueba de intrusión antes de 10 |
+
+## Servidor heredado (`/api`)
+
+El modo antiguo «motoshop» (`/api/login`, `auth.mjs`, `motoshop.sqlite`) usa sesiones en memoria de 8 horas que se pierden al reiniciar. La plataforma no lo usa y se retirará (BE-38). No crees cuentas nuevas en él.
+
+## Pruebas
+
+`npm test` incluye, entre otras, `tests/auth.test.mjs`, `tests/audit-api-security.test.mjs`, `tests/platform-hardening.test.mjs` y `tests/correcciones-2026-11-20.test.mjs`, que cubren sesiones, permisos, origen, límite de intentos, cabeceras y aislamiento entre empresas.

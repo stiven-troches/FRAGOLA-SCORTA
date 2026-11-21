@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 45000,
   expect: {timeout: 8000},
   outputDir: 'test-results/demo',
-  reporter: process.env.CI ? [['list'], ['html', {open: 'never', outputFolder: 'playwright-report/demo'}]] : 'list',
+  reporter: process.env.CI ? [['list'], ['html', {open: 'never', outputFolder: 'playwright-report/demo'}], ['junit', {outputFile: 'playwright-report/demo-junit.xml'}]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:19440',
     timezoneId: 'America/Bogota',

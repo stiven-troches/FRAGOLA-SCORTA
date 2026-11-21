@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
 import {join,resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {build} from 'vite';
@@ -107,7 +107,7 @@ test('dinero: cambiar costo actual o editar producto histórico no reescribe cos
 });
 
 test('SSR caja: entradas permiten centavos y pago desconocido deshabilita el cierre',async()=>{
- const root=resolve(new URL('..',import.meta.url).pathname);mkdirSync(join(root,'test-results'),{recursive:true});
+ const root=resolve(fileURLToPath(new URL('..',import.meta.url)));mkdirSync(join(root,'test-results'),{recursive:true});
  const directory=mkdtempSync(join(root,'test-results','audit-finance-'));
  try{
   const entry=join(directory,'entry.mjs');writeFileSync(entry,`export {default} from ${JSON.stringify(join(root,'src/AdminTools.jsx'))};`);
@@ -116,7 +116,7 @@ test('SSR caja: entradas permiten centavos y pago desconocido deshabilita el cie
   const file=join(directory,'compiled.mjs');writeFileSync(file,chunk.code);const {default:AdminTools}=await import(pathToFileURL(file).href);
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const html=renderToStaticMarkup(React.createElement(AdminTools,{view:'cash',session:actor,data:{state:{servs:[service('legacy',100,{fecha_entrega:today,paymentMethod:''})]}},onAction:async()=>({})}));
-  const inputs=html.match(/<input\b[^>]*type="number"[^>]*>/g)||[];assert.equal(inputs.length,3);
+  const inputs=html.match(/<input\b[^>]*type="number"[^>]*>/g)||[];assert.equal(inputs.length,6,'FE-06: efectivo, transferencia, tarjeta, Nequi y Daviplata; BE-15: base inicial sin apertura');
   for(const input of inputs)assert.match(input,/step="0\.01"/);
   assert.match(html,/ventas sin medio de pago reconocido/);assert.match(html,/<button[^>]*disabled=""[^>]*>Registrar cierre<\/button>/);
  }finally{rmSync(directory,{recursive:true,force:true})}

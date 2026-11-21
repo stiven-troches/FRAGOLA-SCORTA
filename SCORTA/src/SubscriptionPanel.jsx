@@ -1,5 +1,6 @@
 import React from 'react';
 import './subscription-panel.css';
+import {formatCOPCode} from './format.mjs';
 
 const statusNames={active:'Activa',disabled:'Suspendida',expired:'Vencida',scheduled:'Aún no inicia'};
 const dateLabel=value=>{
@@ -9,7 +10,8 @@ const dateLabel=value=>{
 };
 const monthlyLabel=value=>{
  if(value==null||value===''||!Number.isFinite(Number(value))||Number(value)<0)return 'Sin configurar';
- return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value))+' COP';
+ // Un solo indicador de moneda: «COP 80.000» (antes «$ 80.000 COP»).
+ return formatCOPCode(value);
 };
 const contactLines=value=>{
  if(typeof value==='string')return value.trim()?[value.trim()]:[];

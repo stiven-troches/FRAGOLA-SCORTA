@@ -1,12 +1,13 @@
-import {cashExpected,salesReport} from './admin-reports.mjs';
+import {cashDay,salesReport} from './admin-reports.mjs';
+import {CASH_ROW_KEYS,rowExpected} from './caja-credito.mjs';
 import {moneyAmount,roundMoney,sumMoney} from './money.mjs';
+import {PAYMENT_KEYS,BASE_PAYMENT_KEYS,paymentLabel} from './sale-pricing.mjs';
 
 const fail=(message,status=400,code='INVALID_ADMIN_OPERATION')=>{throw Object.assign(Error(message),{status,code})};
 const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const name=value=>{if(typeof value!=='string'||!value.trim()||value.length>100)fail('Escribe el nombre del mecánico (hasta 100 caracteres).');return value.trim()};
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 const amount=(value,label)=>{try{return moneyAmount(value,label)}catch(error){fail(error.message)}};
-const methods=['efectivo','transferencia','tarjeta'];
 const rounded=roundMoney;
 const percentage=value=>{if(value==null||String(value).trim()===''||!['string','number'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>100||Math.abs(Math.round(Number(value)*100)-Number(value)*100)>1e-8)fail('Indica el porcentaje del mecánico entre 0 y 100, con hasta dos decimales.');return Number(value)};
 
@@ -54,18 +55,35 @@ export function applyAdminControl(business,actor,action,{now,today}){
     const records=business.cashClosures||[];
     if(records.some(item=>item.date===form.date))fail('Esta fecha ya tiene un cierre registrado. Puedes consultar su comprobación, pero no sobrescribirlo.',409,'CASH_ALREADY_CLOSED');
     if(!form.actual||typeof form.actual!=='object'||Array.isArray(form.actual))fail('Registra lo recibido por cada medio de pago.');
-    const actual=Object.fromEntries(methods.map(method=>[method,amount(form.actual[method],method)]));
+    // FE-06: concilia los cinco medios. Efectivo, transferencia y tarjeta son obligatorios;
+    // Nequi y Daviplata lo son cuando hubo ventas con ellos (si no, se registran si se envían).
+    // BE-15: esperado = base + ventas cobradas + abonos + separados + ingresos − gastos − retiros
+    // − devoluciones pagadas ese día. Si no hubo apertura, el cierre puede indicar la base.
+    const book=cashDay(business,form.date);
+    let baseOverride=0;
+    if(form.base!=null&&form.base!==''){
+      if(book.opening)fail('Este día ya tiene apertura de caja con su base. No la indiques de nuevo en el cierre.',409,'CASH_ALREADY_OPEN');
+      baseOverride=amount(form.base,'Base inicial');
+      book.rows.efectivo.base=rounded(book.rows.efectivo.base+baseOverride);book.expected.efectivo=rowExpected(book.rows.efectivo);
+    }
+    const expectedNow=book.expected;
+    const methods=PAYMENT_KEYS.filter(method=>BASE_PAYMENT_KEYS.includes(method)||Object.hasOwn(expectedNow,method)||Object.hasOwn(form.actual,method));
+    const actual=Object.fromEntries(methods.map(method=>[method,amount(form.actual[method],paymentLabel(method))]));
     if(form.note!=null&&(typeof form.note!=='string'||form.note.length>1000))fail('La observación puede tener hasta 1000 caracteres.');
     const report=salesReport(business,{from:form.date,to:form.date});
     if(Number(report.unknownPaymentCount||report.totals?.unknownPaymentCount||0)>0)fail('Hay ventas sin un medio de pago definido. Revisa el reporte antes de cerrar esta fecha.',400,'UNKNOWN_PAYMENT_METHOD');
-    const expected=cashExpected(business,form.date);
+    const expected=Object.fromEntries(methods.map(method=>[method,expectedNow[method]??0]));
     for(const method of methods)if(!Number.isFinite(expected[method]))fail('No se pudo calcular el importe esperado. Revisa el reporte.');
     const differences=Object.fromEntries(methods.map(method=>[method,rounded(actual[method]-expected[method])]));
     const sum=object=>sumMoney(methods.map(method=>Number(object[method]||0)));
     const summary=Object.fromEntries(['gross','returns','cancellations','net','products','labor','productMargin'].filter(key=>typeof report.totals?.[key]==='number').map(key=>[key,report.totals[key]]));
     const record={id:crypto.randomUUID(),date:form.date,createdAt:at,userId:actor.id,username:actor.username,name:actor.name||actor.username,
       expected:structuredClone(expected),actual,differences,totals:{expected:sum(expected),actual:sum(actual),difference:rounded(sum(actual)-sum(expected))},
-      note:(form.note||'').trim(),businessRevision:business.revision,summary};
+      note:(form.note||'').trim(),businessRevision:business.revision,summary,
+      // Versión 2 (BE-15): desglose por medio. Los cierres anteriores no lo tienen y se muestran como antes.
+      version:2,base:book.rows.efectivo.base,baseSource:book.opening?'apertura':baseOverride>0||form.base!=null&&form.base!==''?'cierre':'ninguna',
+      breakdown:Object.fromEntries(methods.map(method=>[method,{...(book.rows[method]||Object.fromEntries(CASH_ROW_KEYS.map(key=>[key,0]))),esperado:expected[method]}])),
+      creditSales:book.creditSales,layawaySales:book.layawaySales,movements:book.movements.length};
     business.cashClosures=[record,...records];business.revision++;
     return {id:record.id,before:null,after:structuredClone(record)};
   }

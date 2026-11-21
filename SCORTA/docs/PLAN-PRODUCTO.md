@@ -4,7 +4,7 @@
 
 SCORTA ayuda al personal de un almacén de accesorios y repuestos para motos a consultar existencias, recibir compras, registrar ventas y gestionar trabajos de taller. La mejora se centra en atender con menos pasos y entender el efecto de cada operación sobre el inventario.
 
-Este documento conserva los objetivos y criterios de aceptación; no sustituye la evidencia de pruebas. [ENTREGA.md](ENTREGA.md) describe los cambios observados y los pendientes de la iteración. No se amplía el producto a caja, contabilidad, facturación electrónica o integración DIAN.
+Este documento conserva los objetivos y criterios de aceptación; no sustituye la evidencia de pruebas. [ENTREGA.md](historico/ENTREGA.md) describe los cambios observados y los pendientes de la iteración. No se amplía el producto a caja, contabilidad, facturación electrónica o integración DIAN.
 
 ## Punto de partida verificado
 

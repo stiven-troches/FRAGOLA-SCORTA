@@ -28,7 +28,10 @@ test('cancelling the last purchase restores its baseline cost for future sales, 
   assert.equal(f.product.costHistory.some(entry=>entry.documentId===purchase),false);
 });
 test('cancelling earlier purchases preserves later purchases and excludes cancelled costs from subsequent fallbacks',()=>{
-  const f=fixture(),first=f.buy(200),second=f.buy(300);f.cancel(first);assert.equal(f.product.precio_compra,300);
+  // Weighted average: 10×100 + 2×200 → 116.67; + 2×300 → 142.86. Cancelling the
+  // first purchase replays the later one without it (BE-23): (10×100+600)/12 → 133.33.
+  const f=fixture(),first=f.buy(200);assert.equal(f.product.precio_compra,116.67);const second=f.buy(300);assert.equal(f.product.precio_compra,142.86);
+  f.cancel(first);assert.equal(f.product.precio_compra,133.33);
   f.cancel(second);assert.equal(f.product.precio_compra,100);assert.equal(f.product.stock,10);
 });
 test('a manual cost after a purchase remains authoritative when that purchase is cancelled',()=>{
@@ -40,8 +43,10 @@ test('multiple lines round the weighted unit cost to two decimals and cancellati
     {producto_id:f.productId,cantidad:2,precio_unitario:1},
     {producto_id:f.productId,cantidad:1,precio_unitario:2},
   ]);
-  const purchase=f.state.compras[0].id;assert.equal(f.state.compras[0].total,4);assert.equal(f.product.precio_compra,1.33);
-  f.change('producto',{...f.product,nombre:'Cambio ajeno al costo'});assert.equal(f.product.precio_compra,1.33);
+  // 10 units at 0 plus 3 units totalling 4 → weighted average 4/13 = 0.31.
+  const purchase=f.state.compras[0].id;assert.equal(f.state.compras[0].total,4);assert.equal(f.product.precio_compra,0.31);
+  assert.equal(f.product.costHistory.at(-1).costo_compra,1.33);
+  f.change('producto',{...f.product,nombre:'Cambio ajeno al costo'});assert.equal(f.product.precio_compra,0.31);
   f.cancel(purchase);assert.equal(f.product.precio_compra,0);assert.equal(f.product.stock,10);
 });
 test('cancelling a legacy purchase never invents its missing previous cost',()=>{
@@ -50,7 +55,7 @@ test('cancelling a legacy purchase never invents its missing previous cost',()=>
 });
 test('legacy cancellation preserves known later sources but invalidates a baseline that would revive the cancelled cost',()=>{
   const f=fixture(),legacy=f.buy(200);delete f.product.costHistory;const later=f.buy(300);
-  f.cancel(legacy);assert.equal(f.product.precio_compra,300);f.cancel(later);assert.equal(f.product.precio_compra,null);
+  f.cancel(legacy);assert.equal(f.product.precio_compra,142.86);f.cancel(later);assert.equal(f.product.precio_compra,null);
   const g=fixture(),old=g.buy(200);delete g.product.costHistory;g.manual(150);g.cancel(old);assert.equal(g.product.precio_compra,150);
 });
 test('money totals round consistently and excessive precision cannot enter inventory prices',()=>{

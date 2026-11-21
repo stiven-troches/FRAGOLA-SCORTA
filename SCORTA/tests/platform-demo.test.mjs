@@ -14,7 +14,7 @@ async function fixture(run){
 }
 async function getData(store){const result=await store.request({method:'GET',path:'/api/v2/data'});assert.equal(result.status,200,result.body?.error);return result.body}
 async function act(store,action){const before=await getData(store);const result=await store.request({method:'POST',path:'/api/v2/action',body:{revision:before.revision,requestId:crypto.randomUUID(),...action}});assert.equal(result.status,200,result.body?.error);return result.body}
-const sale=(product,extra={})=>({type:'sale.create',form:{fecha:today(),cliente:'Cliente ficticio de prueba',telefono:'+573001234500',placa:'QA123A',paymentMethod:'efectivo'},items:[{producto_id:product.id,cantidad:1,precio_unitario:product.precio_venta}],labor:[],...extra});
+const sale=(product,extra={})=>({type:'sale.create',form:{fecha:today(),cliente:'Cliente ficticio de prueba',telefono:'+573001234500',placa:'QA123A',paymentMethod:'efectivo',dataConsent:true,consentMedium:'verbal'},items:[{producto_id:product.id,cantidad:1,precio_unitario:product.precio_venta}],labor:[],...extra});
 
 
 test('demo usa empresas y perfiles aislados con credenciales exclusivamente ficticias',()=>fixture(async({store})=>{
@@ -42,7 +42,7 @@ test('IndexedDB conserva altas y ventas y los reintentos no duplican cantidades'
   assert.equal(repeated.body.state.prods.find(item=>item.id===product.id).stock,2);
   assert.equal(repeated.body.state.ventas.length,first.body.state.ventas.length);
   const changed=await store.request({method:'POST',path:'/api/v2/action',body:{...body,items:[{...body.items[0],cantidad:2}]}});
-  assert.ok(changed.status>=400);
+  assert.equal(changed.status,400);assert.match(changed.body.error,/identificador de operación/);
 }));
 
 test('dos conexiones CAS compiten por la última unidad sin sobrescribir ventas',()=>fixture(async({store,open})=>{
@@ -60,7 +60,7 @@ test('dos conexiones CAS compiten por la última unidad sin sobrescribir ventas'
       second.request({method:'POST',path:'/api/v2/action',body:{...body,requestId:'parallel-b'}}),
     ]);
     assert.equal(results.filter(result=>result.status===200).length,1);
-    assert.equal(results.filter(result=>result.status>=400).length,1);
+    assert.deepEqual(results.filter(result=>result.status!==200).map(result=>result.status),[409]);
     data=await getData(store);assert.equal(data.state.prods.find(item=>item.id===product.id).stock,0);
     assert.equal(data.state.ventas.length,beforeSales+1);
   }finally{second.close()}
@@ -95,7 +95,7 @@ test('reset concurrente no permite resucitar un estado anterior durante un cálc
     await delayed.loginAs('admin');let data=await getData(delayed);
     const pending=delayed.request({method:'POST',path:'/api/v2/action',body:{type:'business.change',revision:data.revision,requestId:'stale-after-reset',payload:{kind:'producto',form:makeProduct}}});
     await announced;await store.reset();release();
-    const result=await pending;assert.ok(result.status>=400);
+    const result=await pending;assert.equal(result.status,401,JSON.stringify(result.body));assert.equal(result.body.code,'UNAUTHORIZED');
     await store.loginAs('admin');data=await getData(store);
     assert.ok(!data.state.prods.some(product=>product.referencia===makeProduct.referencia));
   }finally{release();delayed.close()}
@@ -117,7 +117,10 @@ test('adaptador resuelve API y recibos en local, adapta enlaces estáticos y del
     let response=await target.fetch('/api/v2/login',{method:'POST',body:JSON.stringify(DEMO_ACCOUNTS.owner)});assert.equal(response.status,200);
     let data=await response.json();assert.ok(data.companies.every(company=>company.url.startsWith('https://demo.example/?empresa=')));
     response=await target.fetch('/api/v2/login',{method:'POST',body:JSON.stringify(DEMO_ACCOUNTS.vendedor)});assert.equal(response.status,200);data=await response.json();
-    const withReceipt=data.state.ventas.find(sale=>sale.receiptToken);assert.ok(withReceipt);
+    // SEG-03: receipt tokens are no longer stored; a fresh link comes back only in the sale.receipt response.
+    assert.ok(!data.state.ventas.some(sale=>sale.receiptToken));
+    response=await target.fetch('/api/v2/action',{method:'POST',headers:{'X-SCORTA-Company':data.session.companyId},body:JSON.stringify({type:'sale.receipt',id:data.state.ventas[0].id,requestId:'demo-receipt-link'})});assert.equal(response.status,200);data=await response.json();
+    const withReceipt=data.state.ventas.find(sale=>sale.receiptToken);assert.ok(withReceipt);assert.equal(data.receiptLink.saleId,withReceipt.id);
     assert.match(withReceipt.receiptUrl,/^https:\/\/demo\.example\/#\/receipt\//);
     response=await target.fetch('/receipt/'+withReceipt.receiptToken);assert.equal(response.status,200);
     assert.equal((await response.json()).sale.id,withReceipt.id);

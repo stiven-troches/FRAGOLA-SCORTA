@@ -13,7 +13,7 @@ const sale={id:'venta-123',fecha:'2026-11-20',usuario:'jhoan',cliente:'Andrea',t
 
 test('ticket comparte el logo y datos existentes con productos, mano de obra y total correcto',()=>{
  const markup=receiptMarkup({sale,company});
- for(const text of [company.name,company.logo,company.nit,company.address,company.whatsapp,company.email,sale.id,sale.usuario,sale.cliente,sale.placa,'Aceite 4T','Cambio de aceite','Carlos','85.000','Efectivo'])assert.ok(markup.includes(text),text);
+ assert.ok(markup.includes(`<img src="${company.logo}"`));assert.ok(markup.includes(`<h1>${company.name}</h1>`));for(const text of ['NIT: '+company.nit,company.address,'WhatsApp: '+company.whatsapp,company.email])assert.ok(markup.includes(`<p>${text}</p>`),text);for(const [label,value] of [['N.º',sale.id],['Vendedor',sale.usuario],['Cliente',sale.cliente],['Teléfono',sale.telefono],['Placa',sale.placa],['Medio de pago','Efectivo']])assert.ok(markup.includes(`<dt>${label}</dt><dd>${value}</dd>`),label);const plain=markup.replace(/\s/g,' ');for(const [label,amount] of [['Productos','70.000'],['Mano de obra','15.000'],['TOTAL','85.000']])assert.ok(plain.includes(`<dt>${label}</dt><dd>$ ${amount}</dd>`),label);assert.ok(plain.includes('<strong>Aceite 4T</strong><strong>$ 70.000</strong>'));assert.ok(plain.includes('<strong>Cambio de aceite</strong><strong>$ 15.000</strong>'));assert.ok(plain.includes('Mano de obra · Carlos'));
  assert.deepEqual(receiptTotals(sale),{products:70000,labor:15000,original:85000,returned:0,net:85000});
  const optional=receiptMarkup({sale:{id:'solo',fecha:'2026-11-20',labor:[],detalles:[],total:0},company:{name:'Sin datos fiscales'}});
  assert.ok(!optional.includes('<dt>Placa</dt>'));assert.ok(!optional.includes('NIT:'));assert.ok(!optional.includes('undefined'));
@@ -22,7 +22,7 @@ test('ticket comparte el logo y datos existentes con productos, mano de obra y t
 test('ticket conserva trazabilidad de devoluciones y anulación sin mostrar un total cobrado duplicado',()=>{
  const returned={...sale,detalles:[{...sale.detalles[0],devuelto:1}],laborRefund:5000};
  assert.equal(receiptTotals(returned).net,45000);
- const markup=receiptMarkup({sale:returned,company});assert.ok(markup.includes('Total original'));assert.ok(markup.includes('Total vigente'));assert.ok(markup.includes('45.000'));
+ const markup=receiptMarkup({sale:returned,company}),plain=markup.replace(/\s/g,' ');assert.ok(plain.includes('<dt>Total original</dt><dd>$ 85.000</dd>'));assert.ok(plain.includes('<dt>Devuelto</dt><dd>$ 40.000</dd>'));assert.ok(plain.includes('<div class="rt-total"><dt>Total vigente</dt><dd>$ 45.000</dd>'));assert.ok(markup.includes('<div class="rt-returned">Devuelto: 1 unidad</div>'));
  assert.equal(receiptTotals({...returned,anulada:true}).net,0);
  assert.ok(receiptMarkup({sale:{...returned,anulada:true},company}).includes('VENTA ANULADA'));
 });

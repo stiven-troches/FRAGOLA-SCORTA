@@ -1,0 +1,22 @@
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+# config.js de PRENOTA contiene la clave de Supabase (usa config.example.js como plantilla)
+config.js
+
+# Datos de la aplicación (bases SQLite y carpetas de datos)
+**/data/
+*.sqlite*
+
+# Dependencias, compilados y reportes
+node_modules/
+dist*/
+test-results/
+playwright-report/
+
+# Respaldos locales
+_respaldo-*/
+
+# Documentos comerciales y borradores legales privados del dueño
+NEGOCIO/

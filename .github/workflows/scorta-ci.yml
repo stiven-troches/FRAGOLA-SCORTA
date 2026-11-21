@@ -1,16 +1,13 @@
 name: SCORTA checks
 
+# OPS-05: corre en cada push y PR a main (y en la rama staging, que Render despliega con checksPass).
+# Sin filtros de rutas: si la rama está protegida con checks obligatorios, un filtro de rutas
+# dejaría PRs bloqueados esperando checks que nunca arrancan.
 on:
   push:
-    paths:
-      - 'SCORTA/**'
-      - '.github/workflows/scorta-ci.yml'
-      - 'README.md'
+    branches: [main, staging]
   pull_request:
-    paths:
-      - 'SCORTA/**'
-      - '.github/workflows/scorta-ci.yml'
-      - 'README.md'
+    branches: [main, staging]
   workflow_dispatch:
 
 permissions:
@@ -20,16 +17,62 @@ concurrency:
   group: scorta-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Acciones fijadas por SHA de commit (OPS-12). El comentario indica el tag; Dependabot las actualiza.
 jobs:
-  application:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (verified checksum)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan new commits for secrets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          # Escanea solo los commits nuevos (PR o push) para no fallar por historia antigua;
+          # en workflow_dispatch o en el primer push de una rama escanea el árbol actual.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="${PR_BASE}..${GITHUB_SHA}"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            range="${PUSH_BEFORE}..${GITHUB_SHA}"
+          else
+            range=""
+          fi
+          if [ -n "$range" ]; then
+            gitleaks git --redact --verbose --log-opts="$range" .
+          else
+            gitleaks dir --redact --verbose .
+          fi
+
+  node-tests:
+    name: Node tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]   # OPS-14
     defaults:
       run:
+        shell: bash
         working-directory: SCORTA
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -37,11 +80,52 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Audit dependencies
+        if: runner.os == 'Linux'
         run: npm audit --audit-level=moderate
       - name: Explain private fixture exclusion
         run: echo '::notice::The private JE credential test is intentionally skipped without SCORTA_JE_TEST_PASSWORD. CI uses fictional fixtures and does not receive that credential.'
+      - name: Prepare report folder
+        run: mkdir -p test-results
+      # OPS-20: umbral de cobertura (líneas 85 %, ramas 80 %) solo en Linux.
+      - name: Run Node tests with coverage threshold
+        if: runner.os == 'Linux'
+        run: npm run test:coverage
       - name: Run Node tests
-        run: npm test
+        if: runner.os != 'Linux'
+        run: npm run test:ci
+      - name: Upload Node test report (JUnit)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorta-node-junit-${{ matrix.os }}
+          path: SCORTA/test-results/node-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload coverage report (lcov)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorta-coverage
+          path: SCORTA/test-results/lcov.info
+          if-no-files-found: warn
+          retention-days: 14
+
+  browser-tests:
+    name: Build and browser tests (Playwright)
+    runs-on: ubuntu-latest   # Playwright solo en Linux.
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: SCORTA
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: SCORTA/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
       - name: Build application
         run: npm run build
       - name: Build static demo
@@ -49,7 +133,7 @@ jobs:
         run: npm run build:demo
       - name: Restore CI browser cache
         id: browser-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-scorta-playwright-${{ hashFiles('SCORTA/package-lock.json') }}
@@ -59,22 +143,81 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Save prepared browser
         if: steps.browser-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.browser-cache.outputs.cache-primary-key }}
+      # Los builds ya se hicieron arriba: test:ui y test:demo:ui no recompilan.
       - name: Test current platform through HTTP
         run: npm run test:ui
       - name: Test static demo
         if: ${{ !cancelled() && steps.demo-build.outcome == 'success' && steps.chromium.outcome == 'success' }}
         run: npm run test:demo:ui
-      - name: Keep failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - name: Upload browser test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: scorta-browser-failures
+          name: scorta-browser-reports
           path: |
-            SCORTA/test-results/
             SCORTA/playwright-report/
+            SCORTA/test-results/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
+
+  # OPS-17: preparado para la migración a Postgres. Se salta solo si aún no hay tests/pg-*.test.mjs.
+  postgres:
+    name: Postgres suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: scorta
+          POSTGRES_PASSWORD: scorta-ci   # Credencial efímera del contenedor de CI, no es un secreto.
+          POSTGRES_DB: scorta_test
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U scorta -d scorta_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SCORTA_TEST_DATABASE_URL: postgres://scorta:scorta-ci@localhost:5432/scorta_test
+    defaults:
+      run:
+        working-directory: SCORTA
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Detect Postgres tests
+        id: detect
+        run: |
+          if compgen -G "tests/pg-*.test.mjs" > /dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No hay tests/pg-*.test.mjs todavía; la suite Postgres se omite."
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.detect.outputs.present == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: SCORTA/package-lock.json
+      - name: Install locked dependencies
+        if: steps.detect.outputs.present == 'true'
+        run: npm ci
+      - name: Run Postgres tests
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          mkdir -p test-results
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/pg-junit.xml tests/pg-*.test.mjs
+      - name: Upload Postgres test report
+        if: ${{ !cancelled() && steps.detect.outputs.present == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorta-pg-junit
+          path: SCORTA/test-results/pg-junit.xml
+          if-no-files-found: warn
+          retention-days: 14

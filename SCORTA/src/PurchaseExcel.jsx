@@ -1,8 +1,9 @@
 import React,{useEffect,useRef,useState} from 'react';
+import {formatCOP} from './format.mjs';
 import {readPurchaseExcel} from './excel.mjs';
 import {parsePurchaseRows,purchaseColumns,purchaseTemplate} from '../purchase-import.mjs';
 import ExcelButton from './ExcelButton.jsx';
-const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n);
+const money=formatCOP;
 export default function PurchaseExcel({products,onApply,disabled=false,hasItems=false}){
  const [preview,setPreview]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(false),[applied,setApplied]=useState(false),generation=useRef(0),mounted=useRef(true);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++}},[]);

@@ -121,7 +121,7 @@ test('porcentaje: valida límites, no acepta blancos ni fórmulas y conserva nom
  r=await f.request('admin','GET',`/api/v2/overview?from=${day}&to=${day}`);assert.equal(r.status,200,r.body.error);
  const totals=r.body.report.totals;assert.equal(totals.laborProfit,22001);assert.equal(totals.mechanicAmount,17999);assert.equal(totals.totalProfit,22001);
  const seller=await f.data('seller');assert.ok(!Object.hasOwn(seller.state.ventas[0].labor[0],'mecanicoPorcentaje'));assert.deepEqual(seller.state.mechanics,[{id:mechanic.id,name:'Ana editada'}]);
- const receipt=await f.request('missing','GET','/api/v2'+new URL(first.receiptUrl).pathname);assert.equal(receipt.status,200);assert.ok(!Object.hasOwn(receipt.body.sale.labor[0],'mecanicoPorcentaje'));
+ const receipt=await f.request('missing','GET','/api/v2'+new URL(one.receiptUrl).pathname);assert.equal(receipt.status,200);assert.ok(!Object.hasOwn(receipt.body.sale.labor[0],'mecanicoPorcentaje'));
  await f.act('admin',{type:'sale.reverse',id:first.id,form:{motivo:'Anulación prueba',parcial:false},items:[]});
  r=await f.request('admin','GET',`/api/v2/overview?from=${day}&to=${day}`);assert.equal(r.body.report.totals.laborProfit,2000);
 });

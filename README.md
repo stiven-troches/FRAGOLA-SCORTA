@@ -20,9 +20,11 @@ Copia `.env.example` a `.env` y configura el propietario según [SCORTA/LEEME.md
 npm start
 ```
 
-`npm start` carga `.env`; `SCORTA/INICIAR.cmd` usa el mismo comando en Windows. La instalación compartida conserva los datos comerciales en SQLite del servidor y admite varios equipos por empresa. En producción requiere HTTPS y `SCORTA_PUBLIC_URL` con el origen definitivo. La sesión de plataforma dura hasta 30 días y se conserva al reiniciar el servidor; cada petición verifica de nuevo cuenta, permisos y contrato.
+`npm start` carga `.env`; `SCORTA/INICIAR.cmd` usa el mismo comando en Windows. La instalación compartida conserva los datos comerciales en SQLite del servidor y admite varios equipos por empresa. En producción requiere HTTPS y `SCORTA_PUBLIC_URL` con el origen definitivo. La sesión de plataforma dura hasta 30 días (12 horas para el propietario) y se conserva al reiniciar el servidor; cada petición verifica de nuevo cuenta, permisos y contrato.
 
-La [guía de instalación](SCORTA/LEEME.md) incluye Docker Compose, migración de datos anteriores y respaldo/restauración de `platform.sqlite`. Los comandos antiguos para `motoshop.sqlite` no respaldan la plataforma multiempresa.
+La [guía de instalación](SCORTA/LEEME.md) resume la puesta en Render, la migración de datos anteriores y el respaldo/restauración de `platform.sqlite`. La operación en Render (variables, respaldo cifrado cada hora, restauración, incidentes y monitoreo) está en [OPERACION.md](SCORTA/docs/OPERACION.md); el índice de toda la documentación, en [SCORTA/docs/README.md](SCORTA/docs/README.md). Los comandos antiguos para `motoshop.sqlite` no respaldan la plataforma multiempresa.
+
+Los documentos comerciales y legales del dueño (borradores para el abogado, guion de venta, alta de clientes, preguntas frecuentes) están en `NEGOCIO/`, fuera de `SCORTA/`.
 
 ## Demo con datos ficticios
 

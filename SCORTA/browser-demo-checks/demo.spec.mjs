@@ -11,7 +11,7 @@ async function navigate(page,name){
 async function demoData(page){await expect(page.getByRole('button',{name:'Propietario',exact:true})).toBeEnabled();return page.evaluate(async()=>{const session=await(await fetch('/api/v2/session')).json();const r=await fetch('/api/v2/data',{headers:{'X-SCORTA-Company':session.session.companyId||'@owner'}});if(!r.ok)throw Error('No se pudo leer la demo');return r.json()})}
 
 test.beforeEach(async({page})=>{
- await page.goto('/');await expect(page.getByText('Demo · Datos ficticios',{exact:true})).toBeVisible();
+ await page.goto('/');await expect(page.getByText('Demo con datos ficticios',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Propietario',exact:true})).toBeEnabled();
 });
 test.afterEach(async({page})=>{const r=await page.request.get('/__qa/network');expect((await r.json()).unexpectedApi).toEqual([])});

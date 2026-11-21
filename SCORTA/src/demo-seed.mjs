@@ -32,8 +32,10 @@ export function crearSemillaDemo() {
     ['Pastillas de freno delanteras','REP-001','Motor Uno','Repuestos',12,4,18000,34000,'Juego','Confirmar referencia de la moto'],
     ['Filtro de aire de ejemplo','REP-002','Motor Uno','Repuestos',0,2,16000,29000,'Elemento filtrante','Referencia de demostración'],
   ];
+  // BE-36: ejemplo de listas de precios para mecánicos y mayoristas.
+  const special = {'ACE-001':{mecanico:34000,mayorista:31000},'ACE-002':{mecanico:27000,mayorista:25000},'REP-001':{mecanico:30000,mayorista:27500},'BOM-001':{mecanico:10500,mayorista:9500},'LUB-001':{mecanico:32000}};
   for (const [index,[nombre,referencia,marca,categoria,stock,stock_minimo,precio_compra,precio_venta,modelo,compatibilidad]] of rows.entries()) {
-    state = aplicarCambio(state, {kind:'producto',revision:state.revision,form:{nombre,referencia,marca,categoria,stock,stock_minimo,precio_compra,precio_venta,modelo,compatibilidad,codigo_barras:String(7700000000000+index+1)}}, 'Demo');
+    state = aplicarCambio(state, {kind:'producto',revision:state.revision,form:{nombre,referencia,marca,categoria,stock,stock_minimo,precio_compra,precio_venta,modelo,compatibilidad,codigo_barras:String(7700000000000+index+1),...(special[referencia]?{precios:special[referencia]}:{})}}, 'Demo');
   }
   const line=(reference,cantidad,precio_unitario)=>({producto_id:state.prods.find(p=>p.referencia===reference).id,cantidad,precio_unitario});
   const send=(kind,form,items=[],extra={})=>{state=aplicarCambio(state,{kind,form,items,revision:state.revision,...extra},'Demo');};
@@ -44,5 +46,7 @@ export function crearSemillaDemo() {
   send('servicio',{fecha:date(0),placa:'DEMO01',marca_moto:'Moto de demostración',descripcion_trabajo:'Cambio de bombillo de ejemplo',costo_mano_obra:25000},[line('BOM-001',1,12000)]);
   send('servicio',{fecha:date(0),placa:'DEMO02',marca_moto:'Moto de demostración',descripcion_trabajo:'Instalación de luz LED de ejemplo',costo_mano_obra:35000},[line('LED-001',1,85000)]);
   send('estado',{},[],{id:state.servs[0].id});
+  // FE-06: las ventas de ejemplo registran su medio de pago para que el cierre de caja de la demo concilie.
+  for (const [index,sale] of state.ventas.entries()) sale.paymentMethod ??= ['efectivo','tarjeta'][index%2];
   return state;
 }

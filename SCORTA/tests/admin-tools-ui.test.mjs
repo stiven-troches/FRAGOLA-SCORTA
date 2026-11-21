@@ -2,12 +2,12 @@ import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {build} from 'vite';
 
-const root=resolve(new URL('..',import.meta.url).pathname),date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const root=resolve(fileURLToPath(new URL('..',import.meta.url))),date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let directory,components;
 before(async()=>{
  mkdirSync(join(root,'test-results'),{recursive:true});directory=mkdtempSync(join(root,'test-results','admin-tools-ui-'));
@@ -26,7 +26,7 @@ test('SSR administrador: reportes identifican costos incompletos y no llaman uti
 
 test('SSR cierre: conserva snapshot inmutable y avisa cambios por medio de pago aun con total idéntico',()=>{
  const html=render('cash',{ventas:[{id:'v1',fecha:date,total:100,paymentMethod:'transferencia',detalles:[],labor:[{descripcion:'Servicio',mecanico:'Ana',importe:100}]}],cashClosures:[{id:'c1',date,name:'Ana',createdAt:date+'T15:00:00Z',expected:{efectivo:100,transferencia:0,tarjeta:0},actual:{efectivo:90,transferencia:0,tarjeta:0},differences:{efectivo:-10,transferencia:0,tarjeta:0},totals:{expected:100,actual:90,difference:-10}}]});
- assert.match(html,/Cierre registrado/);assert.match(html,/Diferencia total/);assert.match(html,/Movimientos posteriores/);assert.match(html,/No incluye saldo inicial, gastos ni retiros/);assert.doesNotMatch(html,/>Registrar cierre</);
+ assert.match(html,/Cierre registrado/);assert.match(html,/Diferencia total/);assert.match(html,/Movimientos posteriores/);assert.match(html,/devoluciones pagadas ese día/);assert.doesNotMatch(html,/>Registrar cierre</);
 });
 
 test('SSR reposición: agotados y mínimos claros, sugerencias sin compra automática',()=>{

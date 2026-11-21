@@ -11,12 +11,14 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 let temporary,components;
 before(async()=>{
  mkdirSync(join(root,'test-results'),{recursive:true});temporary=mkdtempSync(join(root,'test-results','owner-concurrency-'));
- const hookFile=join(temporary,'hooks.mjs'),entry=join(temporary,'entry.mjs'),ownerFile=join(root,'src/OwnerWorkspace.jsx');
+ const entry=join(temporary,'entry.mjs'),ownerFile=join(root,'src/OwnerWorkspace.jsx');
  // Exercise the actual component handlers across renders/prop refreshes without
  // mounting a browser. Child dialogs remain React elements; DOM effects are not run.
- writeFileSync(hookFile,`import React from 'react';\nlet slots=[],cursor=0;\nexport default React;\nexport function reset(){slots=[];cursor=0}\nexport function begin(){cursor=0}\nexport function useState(initial){const at=cursor++;if(!(at in slots))slots[at]=typeof initial==='function'?initial():initial;return [slots[at],value=>{slots[at]=typeof value==='function'?value(slots[at]):value}]}\nexport function useRef(initial){const at=cursor++;if(!(at in slots))slots[at]={current:initial};return slots[at]}\nexport function useEffect(){cursor++}\n`);
- writeFileSync(entry,`export {default as OwnerWorkspace} from ${JSON.stringify(ownerFile)};\nexport {reset,begin} from ${JSON.stringify(hookFile)};\n`);
- const result=await build({root,logLevel:'silent',plugins:[{name:'owner-hooks-fixture',enforce:'pre',resolveId(source,importer){if(source==='react'&&importer===ownerFile)return hookFile}}],build:{ssr:entry,write:false,minify:false}});
+ // The hooks live in one virtual module so the component and the test share the
+ // same instance on every OS (a file path could be loaded twice with \ and / on Windows).
+ const hooksId='\0owner-hooks-fixture',hooksCode=`import React from 'react';\nlet slots=[],cursor=0;\nexport default React;\nexport function reset(){slots=[];cursor=0}\nexport function begin(){cursor=0}\nexport function useState(initial){const at=cursor++;if(!(at in slots))slots[at]=typeof initial==='function'?initial():initial;return [slots[at],value=>{slots[at]=typeof value==='function'?value(slots[at]):value}]}\nexport function useRef(initial){const at=cursor++;if(!(at in slots))slots[at]={current:initial};return slots[at]}\nexport function useEffect(){cursor++}\n`;
+ writeFileSync(entry,`export {default as OwnerWorkspace} from ${JSON.stringify(ownerFile)};\nexport {reset,begin} from 'owner-hooks-fixture';\n`);
+ const result=await build({root,logLevel:'silent',plugins:[{name:'owner-hooks-fixture',enforce:'pre',resolveId(source,importer){if(source==='owner-hooks-fixture')return hooksId;if(source==='react'&&importer&&importer!==hooksId&&resolve(importer)===resolve(ownerFile))return hooksId},load(id){if(id===hooksId)return hooksCode}}],build:{ssr:entry,write:false,minify:false}});
  const output=(Array.isArray(result)?result[0]:result).output,chunk=output.find(value=>value.type==='chunk'&&value.isEntry);
  const compiled=join(temporary,'components.mjs');writeFileSync(compiled,chunk.code);components=await import(pathToFileURL(compiled).href);
 });

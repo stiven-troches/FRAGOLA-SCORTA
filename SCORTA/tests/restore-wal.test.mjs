@@ -22,10 +22,12 @@ test('platform restore snapshots committed WAL, preserves the old target and rem
     assert.ok(statSync(source+'-wal').size>0);
     const old=new DatabaseSync(target);old.exec('CREATE TABLE platform(id INTEGER PRIMARY KEY,data TEXT,storage_version INTEGER)');old.prepare('INSERT INTO platform VALUES(1,?,0)').run(JSON.stringify(initial));old.close();
     const result=restorePlatformBackup(source,target,{offline:true});
-    assert.deepEqual(validatePlatformDatabase(target),{...changed,sessions:{}});
+    // BE-03: restore also empties pending sale drafts (their requestId may have been charged after the backup).
+    assert.deepEqual(validatePlatformDatabase(target),{...changed,sessions:{},saleDrafts:{}});
     assert.deepEqual(validatePlatformDatabase(source),changed,'Source sessions and committed changes stay intact');
     assert.deepEqual(validatePlatformDatabase(result.previous),initial);
-    assert.equal(statSync(target).mode&0o777,0o600);
+    // POSIX permissions are not enforced by chmod on Windows.
+    if(process.platform!=='win32')assert.equal(statSync(target).mode&0o777,0o600);
     assert.throws(()=>restorePlatformBackup(source,source,{offline:true}),/diferentes/);
     assert.equal(existsSync(target+'-wal'),false);
   }finally{db?.close();rmSync(dir,{recursive:true,force:true});}

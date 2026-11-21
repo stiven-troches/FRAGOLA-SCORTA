@@ -5,3 +5,11 @@
 .sp-email-state{display:block;color:#626262;margin-top:5px;font-size:.875rem}
 
 h1,h2,h3,h4,h5,h6,thead th{text-transform:uppercase}
+
+.sp-privacy-note{margin:14px 0 0;font-size:.8125rem;line-height:1.45;color:inherit;opacity:.85;text-align:center}.sp-privacy-note .sp-login-link{display:inline-block;padding:0 4px;margin:0;width:auto;min-height:44px}
+.sp-lazy-loading{padding:32px 16px;text-align:center}
+/* Integración: 2FA, términos y cambio obligatorio de contraseña */
+.sp-totp-help{display:block;margin:-6px 0 12px;color:#555;font-size:.8125rem}
+.sp-twofa{margin:18px 0;padding:16px;border:1px solid #dedede;border-radius:12px;background:#fff}.sp-twofa h3{margin:0 0 6px;font-size:1rem}.sp-twofa-state{margin:0 0 12px;color:#555}.sp-twofa-state.is-on{color:#17602f;font-weight:600}.sp-twofa-setup ol{padding-left:20px;margin:0 0 12px}.sp-twofa-qr{width:min(220px,70vw);margin:0 auto 12px;background:#fff;padding:6px;border:1px solid #e3e3e3;border-radius:8px}.sp-twofa-qr svg{display:block;width:100%;height:auto}.sp-twofa-secret{display:grid;gap:4px;margin:0 0 10px}.sp-twofa-secret span{font-size:.8125rem;color:#555}.sp-twofa-secret code{font-size:1.05rem;letter-spacing:.06em;word-break:break-all;background:#f6f6f6;padding:8px 10px;border-radius:6px}.sp-twofa-uri{margin:0 0 12px;font-size:.8125rem}.sp-twofa-uri code{display:block;word-break:break-all;margin-top:6px}.sp-twofa-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.sp-check{display:flex;gap:10px;align-items:flex-start;margin:14px 0 6px;font-size:.9375rem;line-height:1.4;cursor:pointer}.sp-check input{width:22px;height:22px;flex:none;margin-top:1px}
+.sp-terms-card>p{margin:0 0 12px}
