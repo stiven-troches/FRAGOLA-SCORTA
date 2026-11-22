@@ -50,7 +50,7 @@ function harness({initialDraft=null,online={value:true},camera='none',onAction=a
   dispose(){this.disposed=true}
  }
  const Scanner=()=>null;
- const made=new Function('React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace};')(
+ const made=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace};')(()=>null,
   {...React,useId:()=>`field-${cursor++}`},(callback,deps)=>useMemo(()=>callback,deps),useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,Scanner,()=>camera,matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>online.value,OFFLINE_SALE_MESSAGE);
  function render(){cursor=0;changed=false;tree=made.ClientWorkspace(props);while(effects.length)effects.shift()();return tree}
  async function settle(){for(let i=0;i<10;i++){await Promise.resolve();if(changed)render();await Promise.resolve()}return tree}
