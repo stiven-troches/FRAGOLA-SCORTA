@@ -60,7 +60,7 @@ export function aplicarCambio(state, a, actor = 'local', now) {
  const cost=old&&(!suppliedCost||unchangedCost)?old.precio_compra??null:optionalCost(f.precio_compra);
  const costHistory=old?historyFor(old):[{kind:'baseline',costo_unitario:cost}];
  if(old&&suppliedCost&&!unchangedCost)costHistory.push({kind:'manual',costo_unitario:cost});
- const p={id:old?.id||id,nombre:text(f.nombre),categoria:text(f.categoria||'General'),referencia:String(f.referencia||'').trim().slice(0,100),marca:String(f.marca||'').trim().slice(0,100),modelo:String(f.modelo||'').trim().slice(0,100),compatibilidad:String(f.compatibilidad||'').trim().slice(0,300),codigo_barras:String(f.codigo_barras||'').trim().slice(0,100),precio_compra:cost,costHistory,precio_venta:moneyAmount(f.precio_venta,'Precio de venta'),stock:old?old.stock:optionalNum(f.stock,0,true),stock_minimo:optionalNum(f.stock_minimo,5,true)};
+ const p={id:old?.id||id,nombre:text(f.nombre),categoria:text(f.categoria||'General'),referencia:String(f.referencia||'').trim().slice(0,100),marca:String(f.marca||'').trim().slice(0,100),descripcion:String(f.descripcion??old?.descripcion??'').trim().slice(0,3000),modelo:String(f.modelo||'').trim().slice(0,100),compatibilidad:String(f.compatibilidad||'').trim().slice(0,300),codigo_barras:String(f.codigo_barras||'').trim().slice(0,100),precio_compra:cost,costHistory,precio_venta:moneyAmount(f.precio_venta,'Precio de venta'),stock:old?old.stock:optionalNum(f.stock,0,true),stock_minimo:optionalNum(f.stock_minimo,5,true)};
  pricing(p,f,old);
  // BE-34: las unidades separadas se conservan al editar la ficha.
  if(old?.stock_reservado)p.stock_reservado=old.stock_reservado;

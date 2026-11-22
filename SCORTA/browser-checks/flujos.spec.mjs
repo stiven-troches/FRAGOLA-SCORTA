@@ -29,7 +29,7 @@ test('venta → cobro → comprobante con formatos 80/58 mm',async({page,scenari
  await expect(receipt.getByText(scenario.product.nombre,{exact:true}).first()).toBeVisible();
  await expect(receipt.getByText(/70\.000/).first()).toBeVisible();
  await expect(receipt.getByText('Transferencia',{exact:true}).first()).toBeVisible();
- for(const label of ['80 mm','58 mm'])await expect(receipt.getByText(label,{exact:true}).first()).toBeVisible();
+ for(const width of ['80','58']){await expect(receipt.getByRole('option',{name:'Ticket · '+width+' mm',exact:true})).toHaveCount(1);await receipt.locator('.rt-options select').selectOption(width);await expect(receipt.locator('.rt-options select')).toHaveValue(width)}
  await expect(receipt.getByRole('button',{name:/Imprimir/}).first()).toBeVisible();
  await noOverflow(page);
  const data=await scenario.data();const sale=data.state.ventas[0];
@@ -101,6 +101,6 @@ test('cierre de caja del día cuadra con las ventas por medio de pago',async({pa
  await expect(cash.getByText('Cierre registrado',{exact:true}).first()).toBeVisible();
  const data=await scenario.data();const closure=data.state.cashClosures[0];
  expect(data.state.cashClosures).toHaveLength(1);
- expect(closure.expected).toEqual({efectivo:35000,transferencia:0,tarjeta:70000});
+ expect(closure.expected).toEqual({efectivo:35000,transferencia:0,tarjeta:70000,nequi:0,daviplata:0});
  expect(closure.totals.difference).toBe(0);
 });

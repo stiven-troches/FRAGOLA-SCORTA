@@ -53,7 +53,7 @@ function harness({role='vendedor',initialDraft=null,onAction=async()=>baseData()
   dispose(){this.disposed=true}
  }
  const mockReact={...React,useId:()=>`field-${cursor++}`};
- const components=new Function('React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace,Modal};')(
+ const components=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace,Modal};')(()=>null,
   mockReact,useCallback,useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE);
  function render(next){if(next)props={...props,...next};cursor=0;changed=false;tree=components[kind](props);while(pendingEffects.length)pendingEffects.shift()();return tree}
  async function settle(){for(let i=0;i<10;i++){await Promise.resolve();if(changed)render();await Promise.resolve()}return tree}

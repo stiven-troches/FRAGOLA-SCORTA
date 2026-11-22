@@ -116,6 +116,11 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
       if(result.status===429&&Number.isFinite(result.body?.retryAfterSeconds))res.setHeader('Retry-After',String(result.body.retryAfterSeconds));
+      if(req.method==='GET'&&/^\/api\/v2\/catalog\/[^/]+\/photo\/[^/]+$/.test(path)&&result.status===200){
+        const image=result.body.image?.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/);
+        if(!image){json(res,404,{error:'Imagen no disponible'});return true;}
+        res.setHeader('Content-Type',image[1]);res.end(Buffer.from(image[2],'base64'));return true;
+      }
       json(res,result.status,result.body);return true;
     }catch(error){
       // Expected failures carry a status; anything else is an internal fault: log it

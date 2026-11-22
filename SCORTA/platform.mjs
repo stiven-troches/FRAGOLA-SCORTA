@@ -1,3 +1,4 @@
+import {catalogCompany,catalogProducts,publicCatalog,catalogCheckout,cleanCatalog,whatsappNumber} from './catalog.mjs';
 import {overviewReport} from './overview-report.mjs';
 import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './admin-controls.mjs';
 import {salesReport} from './admin-reports.mjs';
@@ -490,6 +491,15 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
     const user=await makeUser({username:form.username,password:form.password,name:form.adminName||form.username,email:form.adminEmail},company.id,'admin',now);
     if(form.plan!=null)company.plan=cleanPlan(form.plan);
     state.companies.push(company);state.users.push(user);state.businesses[company.id]=estadoVacio();
+  }else if(a.type==='catalog.update'){
+    if(!admin(actor))fail('Solo el administrador puede configurar el catálogo',403,'FORBIDDEN');
+    const companyId=actor.role==='owner'&&!actor.support?a.companyId:actor.companyId;
+    if(a.companyId&&a.companyId!==companyId)fail('No puedes configurar otra empresa',403,'FORBIDDEN');
+    company=companyFor(state,companyId);company.catalog=cleanCatalog(form,company.catalog);
+    if(Object.hasOwn(form,'whatsapp'))company.whatsapp=phone(form.whatsapp);
+    if(company.catalog.enabled&&!whatsappNumber(company.whatsapp))fail('Registra un WhatsApp con indicativo del país antes de publicar.');
+    if(actor.companyId)state.businesses[companyId].revision++;
+    auditExtra={catalog:company.catalog};
   }else if(a.type==='company.update'){
     const next=companyForm(state,form,company,now);if(form.plan!=null)next.plan=cleanPlan(form.plan);state.companies[state.companies.indexOf(company)]=next;company=next;
   }else if(a.type==='company.access'){
@@ -775,6 +785,14 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
   try{
     if(!input)fail('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',503,'SETUP_REQUIRED');
     const method=(request.method||'GET').toUpperCase(),url=new URL(request.path,'https://scorta.example'),path=url.pathname,body=request.body||{};
+    const catalog=path.match(/^\/api\/v2\/catalog\/([^/]+)(?:\/photo\/([^/]+)|(\/checkout))?$/);
+    if(catalog){
+      const company=catalogCompany(state,decodeURIComponent(catalog[1]),stamp(now));
+      if(method==='GET'&&catalog[2]){const product=catalogProducts(state,company).find(p=>p.id===decodeURIComponent(catalog[2]));if(!product?.foto)fail('Imagen no disponible',404);return response(200,{image:product.foto});}
+      if(method==='GET'&&!catalog[3])return response(200,publicCatalog(state,company));
+      if(method==='POST'&&catalog[3])return response(200,catalogCheckout(state,company,body.items));
+      fail('Método no permitido',405);
+    }
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
     if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:publicReceiptSale(sale),expiresAt:new Date(ref.expires).toISOString()});}
     if(method==='POST'){
@@ -869,7 +887,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const expected=actor.companyId?state.businesses[actor.companyId].revision:state.revision;
       if(!body.type.startsWith('ticket.')&&body.revision!=null&&body.revision!==expected)fail('Otro usuario modificó los datos. Actualiza y vuelve a intentar.',409,'REVISION_CONFLICT');
       // BE-13: company.update from browser/HTTP adapters must carry the edited revision.
-      if(request.enforceContext&&body.type==='company.update'&&body.revision==null)fail('Recarga los datos antes de guardar este cambio.',428,'REVISION_REQUIRED');
+      if(request.enforceContext&&['company.update','catalog.update'].includes(body.type)&&body.revision==null)fail('Recarga los datos antes de guardar este cambio.',428,'REVISION_REQUIRED');
       const extra=await applyAction(state,actor,session,body,now,baseUrl,{enforceContext:!!request.enforceContext,requireDataConsent,mailEnabled});
       if(extra.failure)return response(extra.failure.status,{error:extra.failure.error,code:extra.failure.code});
       if(requestKey)state.requests[requestKey]={fingerprint,createdAt:iso(now)};
