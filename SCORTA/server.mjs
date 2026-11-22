@@ -138,7 +138,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1000000)throw Error('Solicitud demasiado grande')};let payload;try{payload=JSON.parse(body)}catch{throw Error('Datos inválidos: envía un objeto JSON')}if(!payload||Array.isArray(payload)||typeof payload!=='object')throw Error('Datos inválidos: envía un objeto JSON');if(path==='/api/users'){if(actor.role!=='admin')throw Object.assign(Error('Acceso restringido'),{status:403});store.addUser(payload.username,payload.password,payload.role);return res.end(JSON.stringify(store.listUsers()))}if(actor.role!=='admin'&&!['venta','servicio','estado'].includes(payload.kind))throw Object.assign(Error('No tienes permiso para esta operación'),{status:403});return res.end(JSON.stringify(store.change(payload,actor.username)));
  }res.statusCode=404;return res.end('{}');}
  if(req.method!=='GET'){res.statusCode=405;return res.end()}
- const spa=path==='/'||path==='/recuperar'||/^\/c\/[^/]+\/?$/.test(path)||/^\/receipt\/[A-Za-z0-9_-]{43}$/.test(path);
+ const spa=/^\/catalogo\/[^/]+\/?$/.test(path)||path==='/'||path==='/recuperar'||/^\/c\/[^/]+\/?$/.test(path)||/^\/receipt\/[A-Za-z0-9_-]{43}$/.test(path);
  const landing=path==='/inicio'||path==='/inicio/';
  const file=resolve(root,'dist','.'+(spa?'/index.html':landing?'/landing.html':decodeURIComponent(path)));
  if(!file.startsWith(resolve(root,'dist')+'/')&&!file.startsWith(resolve(root,'dist')+'\\'))throw Error('Ruta inválida');

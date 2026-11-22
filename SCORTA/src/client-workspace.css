@@ -137,3 +137,5 @@
 .cw-offline-banner{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;gap:2px;padding:12px 16px;margin-bottom:16px;border-radius:9px;background:#191919;color:#fff;font-size:.9rem}
 .cw-offline-banner strong{color:var(--brand-yellow,#f4cf32);font-size:1rem}
 @media(max-width:760px){.cw-scanner-view{aspect-ratio:3/4}.cw-offline-banner{font-size:.875rem;padding:10px 12px}}
+
+.cw-product-photo-input{margin-top:18px;min-width:0}.cw-product-photo-input>span{font-weight:650}.cw-product-photo-input input[hidden]{display:none}.cw-product-camera{margin-top:14px}.cw-product-camera video,.cw-product-camera>img{display:block;width:100%;max-width:480px;max-height:45vh;object-fit:contain;border-radius:10px;background:#111;margin-bottom:12px}
