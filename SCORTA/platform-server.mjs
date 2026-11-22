@@ -1,3 +1,4 @@
+import {seedTestCompany} from './test-company.mjs';
 import {DatabaseSync, backup} from 'node:sqlite';
 import {mkdirSync,existsSync,readFileSync,writeFileSync,rmSync,chmodSync,mkdtempSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
@@ -18,7 +19,7 @@ function lockHolderRunning(pid){
   try{process.kill(pid,0);}catch(error){if(error.code!=='EPERM')return false;}
   try{return /node/i.test(readFileSync(`/proc/${pid}/cmdline`,'utf8'));}catch{return true;}
 }
-export async function openPlatformStore(file,{owner,ownerContact='',legacyState}={}){
+export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false}={}){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   const pidFile=file+'.pid';
   if(existsSync(pidFile)){if(lockHolderRunning(Number(readFileSync(pidFile,'utf8'))))throw Error('La plataforma ya está abierta. Detén la instancia antes de abrir otra.');rmSync(pidFile,{force:true});}
@@ -26,8 +27,11 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState}
   const db=new DatabaseSync(file);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS platform(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL, storage_version INTEGER NOT NULL DEFAULT 0)');
   try{
     const prior=db.prepare('SELECT data FROM platform WHERE id=1').get();
-    if(!prior){const initial=await createPlatform({owner,ownerContact,legacyState});db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(initial));}
-    else{const state=JSON.parse(prior.data);state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));}
+    let state=prior?JSON.parse(prior.data):await createPlatform({owner,ownerContact,legacyState});
+    state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;
+    if(withTestCompany)state=await seedTestCompany(state);
+    if(!prior)db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(state));
+    else db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));
     try{chmodSync(file,0o600);}catch{}
   }catch(error){db.close();rmSync(pidFile,{force:true});throw error;}
   // BE-10: the parsed state is cached by storage_version. Writers clone before mutating
