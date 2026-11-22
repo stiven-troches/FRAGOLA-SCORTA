@@ -25,6 +25,7 @@ test('negocio configura colores y comparte un catálogo público con carrito par
  await page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true}).fill('2');
  await page.getByRole('button',{name:'Seguir explorando',exact:true}).click();await page.reload();
  await expect(page.getByRole('button',{name:'Carrito · 2',exact:true})).toBeVisible();await noOverflow(page);
+ await page.screenshot({path:test.info().outputPath('catalogo.png'),fullPage:true});
  await page.getByRole('button',{name:'Carrito · 2',exact:true}).click();
  await page.route('https://wa.me/**',route=>route.fulfill({contentType:'text/html',body:'Pedido preparado, no enviado.'}));
  await page.getByRole('button',{name:'Comprar por WhatsApp',exact:true}).click();await page.waitForURL('https://wa.me/**');

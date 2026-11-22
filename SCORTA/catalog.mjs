@@ -3,6 +3,15 @@ import {sumMoney,roundMoney} from './money.mjs';
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status,code:'CATALOG_ERROR'})};
 const text=(v,max=300)=>String(v??'').trim().slice(0,max);
 export const catalogDefaults={enabled:false,primary:'#1644d8',secondary:'#edf2ff',headline:'Encuentra lo que necesitas.',description:'Explora nuestros productos y haz tu pedido por WhatsApp.'};
+// El enlace compartido y la pestaña también pertenecen al negocio, sin iconos de SCORTA.
+export function catalogHead(html,company){
+ const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const name=escape(company?.name||'Catálogo'),description=escape(company?.catalog?.description||'Explora los productos de este negocio.');
+ return html.replace(/<title>[^<]*<\/title>/,'<title>'+name+' · Catálogo</title>')
+  .replace(/<meta name="description"[^>]*>/,'<meta name="description" content="'+description+'">')
+  .replace(/<link\b[^>]*rel="(?:manifest|icon|apple-touch-icon)"[^>]*>/g,'')
+  .replace('</head>','<meta property="og:title" content="'+name+'"><meta property="og:description" content="'+description+'">'+(company?.logo?'<link rel="icon" href="'+escape(company.logo)+'">':'')+'</head>');
+}
 export function whatsappNumber(value){const n=String(value||'').replace(/\D/g,'');return /^3\d{9}$/.test(n)?'57'+n:/^[1-9]\d{10,14}$/.test(n)?n:''}
 export function cleanCatalog(form,previous={}){
  const value={...catalogDefaults,...previous,...form};

@@ -19,6 +19,7 @@ for(const role of ['admin','seller'])test(`${role}: inventario y taller alimenta
  await page.getByRole('button',{name:'Agregar al carrito',exact:true}).click();await navigate(page,'Nueva venta');
  await waitSaved(page);await page.reload();await expect(page.getByRole('spinbutton',{name:'Cantidad de '+scenario.product.nombre,exact:true})).toHaveValue('3');
  await expect(page.getByText('Cambio de aceite QA',{exact:true})).toBeVisible();await noOverflow(page);
+ await page.getByRole('checkbox',{name:'El cliente autorizó el tratamiento de sus datos',exact:true}).check();
  await page.getByRole('button',{name:'Registrar venta',exact:true}).click();await expect(page.getByRole('dialog',{name:'Detalle de venta'})).toBeVisible();
  const data=await scenario.data();const sale=data.state.ventas.find(item=>item.placa==='QA123D');expect(sale.total).toBe(120000);expect(data.state.prods.find(p=>p.id===scenario.product.id).stock).toBe(47);
 });

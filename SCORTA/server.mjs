@@ -1,3 +1,4 @@
+import {catalogHead} from './catalog.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
@@ -143,7 +144,10 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  const file=resolve(root,'dist','.'+(spa?'/index.html':landing?'/landing.html':decodeURIComponent(path)));
  if(!file.startsWith(resolve(root,'dist')+'/')&&!file.startsWith(resolve(root,'dist')+'\\'))throw Error('Ruta inválida');
  if(!existsSync(file)){res.statusCode=404;return res.end('No encontrado')}
- res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));res.end(readFileSync(file));
+ let contents=readFileSync(file);
+ const catalogPage=path.match(/^\/catalogo\/([^/]+)\/?$/);
+ if(catalogPage){let company;try{const result=await platformStore?.request({method:'GET',path:'/api/v2/catalog/'+catalogPage[1]});if(result?.status===200)company=result.body.company;}catch{}contents=catalogHead(contents.toString('utf8'),company);}
+ res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));res.end(contents);
  }catch(e){if(!e.status)console.error(JSON.stringify({level:'warn',at:new Date().toISOString(),method:req.method,path:String(req.url||'').split('?')[0],error:String(e?.message||e)}));res.statusCode=e.status||400;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({error:e.message}))}
  });server.on('close',()=>{offsite.stop();auth.close();store.close();platformStore?.close()});
  // Graceful stop for redeploys: stop accepting, drop idle keep-alive sockets, then

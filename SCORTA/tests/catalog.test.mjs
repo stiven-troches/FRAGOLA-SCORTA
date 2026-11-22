@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPlatform,platformRequest} from '../platform.mjs';
-import {cleanCatalog,whatsappNumber,catalogDefaults} from '../catalog.mjs';
+import {catalogHead,cleanCatalog,whatsappNumber,catalogDefaults} from '../catalog.mjs';
 import {contrastText} from '../src/catalog-ui.mjs';
 const now='2026-11-22T18:00:00Z',password='CatalogTest!2026';
 async function fixture(){
@@ -53,4 +53,10 @@ test('WhatsApp, colores y configuración inválidos no se guardan',async()=>{
  assert.equal(contrastText('#ffffff'),'#000000');assert.equal(contrastText('#000000'),'#ffffff');
  assert.deepEqual(cleanCatalog({}),catalogDefaults);assert.throws(()=>cleanCatalog({primary:'red'}));assert.throws(()=>cleanCatalog({enabled:'yes'}));
  const f=await fixture();assert.equal((await f.action(f.admin,{type:'catalog.update',form:{enabled:true,whatsapp:''}})).status,400);assert.equal((await f.call(f.url)).status,404);
+});
+
+test('la página compartida usa la marca del negocio y escapa texto HTML',()=>{
+ const source='<head><meta name="description" content="SCORTA"><link rel="manifest" href="/manifest"><link rel="icon" href="/scorta.png"><title>SCORTA</title></head>';
+ const html=catalogHead(source,{name:'Tienda <script>',catalog:{description:'Comillas " y <texto>'}});
+ assert.ok(!html.includes('SCORTA')&&!html.includes('<script>')&&!html.includes('rel="manifest"'));assert.match(html,/Tienda &lt;script&gt;/);assert.match(html,/&quot;/);assert.match(catalogHead(source),/Catálogo/);
 });
