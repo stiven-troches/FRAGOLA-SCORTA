@@ -28,6 +28,7 @@ export const test=base.extend({
    await action(ownerApi,{type:'user.create',companyId:company.id,form:{username:'qavendedor',name:'QA Vendedor',role:'vendedor',password:'QA.Vendedor!2026'}});
    const admin={company:companyName,username:'qaadmin',password:'QA.Admin!2026',name:'QA Administrador'},seller={company:companyName,username:'qavendedor',password:'QA.Vendedor!2026',name:'QA Vendedor'};
    await request(adminApi,'/api/v2/login',{method:'POST',body:admin,companyId:company.id});
+   await action(adminApi,{type:'terms.accept'},company.id);
    let data=await action(adminApi,{type:'business.change',payload:{kind:'producto',form:{nombre:'Aceite QA '+suffix,referencia:'QA-'+suffix,categoria:'Lubricantes',stock:50,stock_minimo:2,precio_venta:35000,precio_compra:20000}}},company.id);
    const product=data.state.prods.find(item=>item.referencia==='QA-'+suffix);
    data=await action(adminApi,{type:'mechanic.create',form:{name:'QA Mecánico',percentage:60}},company.id);

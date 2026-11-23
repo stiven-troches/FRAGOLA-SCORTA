@@ -1,3 +1,4 @@
+import {catalogHead} from './catalog.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
@@ -87,7 +88,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
   catch(error){lastBackup={at:new Date().toISOString(),ok:false,kind:'startup'};opsLog('error','startup-backup-failed',{error:String(error?.message||error)});}
  }
  const platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||existsSync(platformFile);
- const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:store.read()}):null;
+ const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:store.read(),withTestCompany:process.env.SCORTA_TEST_COMPANY!=='0'}):null;
  const requireTerms=process.env.NODE_ENV==='production'||process.env.SCORTA_REQUIRE_TERMS==='1';
  // SEG-13: correo transaccional (Resend o webhook). Sin configuración queda desactivado.
  let mailer;try{mailer=createMailer({log:({level,event,...rest})=>opsLog(level,event,rest)});}catch(error){opsLog('error','mail-config-invalid',{error:String(error?.message||error)});mailer=createMailer({env:{}});}
@@ -138,12 +139,15 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1000000)throw Error('Solicitud demasiado grande')};let payload;try{payload=JSON.parse(body)}catch{throw Error('Datos inválidos: envía un objeto JSON')}if(!payload||Array.isArray(payload)||typeof payload!=='object')throw Error('Datos inválidos: envía un objeto JSON');if(path==='/api/users'){if(actor.role!=='admin')throw Object.assign(Error('Acceso restringido'),{status:403});store.addUser(payload.username,payload.password,payload.role);return res.end(JSON.stringify(store.listUsers()))}if(actor.role!=='admin'&&!['venta','servicio','estado'].includes(payload.kind))throw Object.assign(Error('No tienes permiso para esta operación'),{status:403});return res.end(JSON.stringify(store.change(payload,actor.username)));
  }res.statusCode=404;return res.end('{}');}
  if(req.method!=='GET'){res.statusCode=405;return res.end()}
- const spa=path==='/'||path==='/recuperar'||/^\/c\/[^/]+\/?$/.test(path)||/^\/receipt\/[A-Za-z0-9_-]{43}$/.test(path);
+ const spa=/^\/catalogo\/[^/]+\/?$/.test(path)||path==='/'||path==='/recuperar'||/^\/c\/[^/]+\/?$/.test(path)||/^\/receipt\/[A-Za-z0-9_-]{43}$/.test(path);
  const landing=path==='/inicio'||path==='/inicio/';
  const file=resolve(root,'dist','.'+(spa?'/index.html':landing?'/landing.html':decodeURIComponent(path)));
  if(!file.startsWith(resolve(root,'dist')+'/')&&!file.startsWith(resolve(root,'dist')+'\\'))throw Error('Ruta inválida');
  if(!existsSync(file)){res.statusCode=404;return res.end('No encontrado')}
- res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));res.end(readFileSync(file));
+ let contents=readFileSync(file);
+ const catalogPage=path.match(/^\/catalogo\/([^/]+)\/?$/);
+ if(catalogPage){let company;try{const result=await platformStore?.request({method:'GET',path:'/api/v2/catalog/'+catalogPage[1]});if(result?.status===200)company=result.body.company;}catch{}contents=catalogHead(contents.toString('utf8'),company);}
+ res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));res.end(contents);
  }catch(e){if(!e.status)console.error(JSON.stringify({level:'warn',at:new Date().toISOString(),method:req.method,path:String(req.url||'').split('?')[0],error:String(e?.message||e)}));res.statusCode=e.status||400;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({error:e.message}))}
  });server.on('close',()=>{offsite.stop();auth.close();store.close();platformStore?.close()});
  // Graceful stop for redeploys: stop accepting, drop idle keep-alive sockets, then
