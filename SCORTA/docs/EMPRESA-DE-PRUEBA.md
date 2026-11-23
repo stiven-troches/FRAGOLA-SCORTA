@@ -2,6 +2,8 @@
 
 El servidor crea esta empresa ficticia automáticamente una sola vez al arrancar con la plataforma configurada. Su semilla está en `test-company.mjs` y sus fotografías en `public/test-shop/`, dentro del repositorio. No necesita descargar imágenes de terceros.
 
+En la web publicada solo aparece después de subir estos archivos a `main` y de que Render termine el despliegue.
+
 Accesos de prueba, exclusivos de esta empresa:
 
 | Campo | Valor |
