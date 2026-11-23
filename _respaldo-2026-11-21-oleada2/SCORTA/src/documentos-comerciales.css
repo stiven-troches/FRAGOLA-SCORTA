@@ -1,0 +1,17 @@
+/* BE-17 / BE-35 / BE-40: Cotizaciones, Garantías y Proveedores. Celular primero; reutiliza cw-* y cc-*. */
+.dc-cost{width:118px;min-height:44px;border:1px solid #bfbfbf;border-radius:8px;padding:8px;font-size:1rem;text-align:right}
+.dc-card-title{margin:0 0 12px;font-size:1.05rem}
+.dc-range{align-items:end}
+.dc-range .excel-control{display:flex;flex-direction:column;gap:4px}
+.dc-range .excel-control .cw-btn{min-height:48px}
+.cc-card-actions .cw-muted{align-self:center;font-size:.85rem}
+@media (max-width:760px){
+ .dc-cost{width:96px}
+ .cc-list>li:has(.dc-cost){flex-wrap:wrap}
+ .cc-list>li:has(.dc-cost)>div{flex-basis:100%}
+}
+/* Nueva venta: «Guardar como cotización» junto a «Poner en espera»; compra a crédito; garantía desde la venta. */
+.cw-cart-tools{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.cw-check-row{display:flex;align-items:center;gap:9px;min-height:48px;font-weight:600}
+.cw-check-row input{width:22px;height:22px}
+.cw-receipt-extra{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
