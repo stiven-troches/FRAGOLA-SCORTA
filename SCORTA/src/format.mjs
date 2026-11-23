@@ -27,3 +27,33 @@ export const formatNumber=value=>pick(value,numberWhole,numberCents);
 /** 12,5 % · '—' si no hay dato. */
 export const formatPercent=value=>value==null||!Number.isFinite(Number(value))?'—':formatNumber(value)+' %';
 export const money=formatCOP;
+
+/**
+ * Lee un valor en pesos escrito como en Colombia y lo devuelve como número en texto ('12000', '12000.5').
+ * '12.000' → '12000' · '12.000,50' → '12000.5' · '$ 1.250.000' → '1250000' · '12,5' → '12.5' · '12.5' → '12.5'.
+ * Devuelve '' si está vacío y null si es ambiguo o inválido ('1,000', '12.00.0', '-5'): nunca adivina.
+ */
+export function parseMoneyInput(text){
+ const s=String(text??'').replace(/cop/gi,'').replace(/[\s$ ]/g,'');
+ if(!s)return '';
+ let plain;
+ if(s.includes(',')){
+  if(!/^(?:\d{1,3}(?:\.\d{3})+|\d+),\d{1,2}$/.test(s))return null;
+  plain=s.replace(/\./g,'').replace(',','.');
+ }else if(s.includes('.')){
+  if(/^\d{1,3}(?:\.\d{3})+$/.test(s))plain=s.replace(/\./g,'');
+  else if(/^\d+\.\d{1,2}$/.test(s))plain=s;
+  else return null;
+ }else{
+  if(!/^\d+$/.test(s))return null;
+  plain=s;
+ }
+ const number=Number(plain);
+ return Number.isFinite(number)?String(number):null;
+}
+/** Valor numérico ('12000', 12000.5) mostrado con separador de miles para editar: '12.000' · '12.000,50'. */
+export function formatMoneyInput(value){
+ if(value==null||value==='')return '';
+ const number=Number(value);
+ return Number.isFinite(number)?formatNumber(number):String(value);
+}

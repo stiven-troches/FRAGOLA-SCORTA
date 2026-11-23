@@ -25,7 +25,9 @@ before(async()=>{
   const chunk=(Array.isArray(result)?result[0]:result).output.find(item=>item.type==='chunk'&&item.isEntry);
   const modulePath=join(directory,'components.mjs');writeFileSync(modulePath,chunk.code);components=await import(pathToFileURL(modulePath).href);
   const source=readFileSync(join(root,'src/ClientWorkspace.jsx'),'utf8');
-  compiled=(await transformWithOxc(source,'ClientWorkspace.jsx',{jsx:{runtime:'classic'}})).code.replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ');
+  compiled=(await transformWithOxc(source,'ClientWorkspace.jsx',{jsx:{runtime:'classic'}})).code.replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ')
+  // El arnés no expande componentes: el campo de dinero se prueba como un input simple (MoneyInput tiene su propia prueba).
+  .replace(/(?<![\w$])MoneyInput(?![\w$])/g,'"input"');
 });
 after(()=>{if(directory)rmSync(directory,{recursive:true,force:true})});
 

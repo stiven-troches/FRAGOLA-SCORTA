@@ -13,6 +13,7 @@ import {laborReport} from '../labor-report.mjs';
 import {applyAdminControl} from '../admin-controls.mjs';
 import {estadoVacio,aplicarCambio} from '../inventory.mjs';
 import {roundMoney,sumMoney,moneyAmount} from '../money.mjs';
+import {parseMoneyInput} from '../src/format.mjs';
 
 const day='2026-11-20',period={from:day,to:day},clock={now:day+'T15:00:00Z',today:day};
 const actor={id:'audit-admin',username:'audit',name:'Prueba',role:'admin',companyId:'audit-company'};
@@ -116,8 +117,10 @@ test('SSR caja: entradas permiten centavos y pago desconocido deshabilita el cie
   const file=join(directory,'compiled.mjs');writeFileSync(file,chunk.code);const {default:AdminTools}=await import(pathToFileURL(file).href);
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const html=renderToStaticMarkup(React.createElement(AdminTools,{view:'cash',session:actor,data:{state:{servs:[service('legacy',100,{fecha_entrega:today,paymentMethod:''})]}},onAction:async()=>({})}));
-  const inputs=html.match(/<input\b[^>]*type="number"[^>]*>/g)||[];assert.equal(inputs.length,6,'FE-06: efectivo, transferencia, tarjeta, Nequi y Daviplata; BE-15: base inicial sin apertura');
-  for(const input of inputs)assert.match(input,/step="0\.01"/);
+  // Campos de dinero (MoneyInput): texto con teclado decimal; aceptan centavos con coma y separador de miles.
+  const inputs=html.match(/<input\b[^>]*inputMode="decimal"[^>]*>/g)||[];assert.equal(inputs.length,6,'FE-06: efectivo, transferencia, tarjeta, Nequi y Daviplata; BE-15: base inicial sin apertura');
+  for(const input of inputs){assert.match(input,/type="text"/);assert.doesNotMatch(input,/type="number"/);}
+  assert.equal(parseMoneyInput('12.000,50'),'12000.5');
   assert.match(html,/ventas sin medio de pago reconocido/);assert.match(html,/<button[^>]*disabled=""[^>]*>Registrar cierre<\/button>/);
  }finally{rmSync(directory,{recursive:true,force:true})}
 });

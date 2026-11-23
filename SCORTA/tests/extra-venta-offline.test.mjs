@@ -19,7 +19,9 @@ let compiled;
 const prior={window:globalThis.window,document:globalThis.document};
 before(async()=>{
  const source=readFileSync(join(root,'src/ClientWorkspace.jsx'),'utf8');
- compiled=(await transformWithOxc(source,'ClientWorkspace.jsx',{jsx:{runtime:'classic'}})).code.replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ');
+ compiled=(await transformWithOxc(source,'ClientWorkspace.jsx',{jsx:{runtime:'classic'}})).code.replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ')
+  // El arnés no expande componentes: el campo de dinero se prueba como un input simple (MoneyInput tiene su propia prueba).
+  .replace(/(?<![\w$])MoneyInput(?![\w$])/g,'"input"');
  const noop=()=>{};
  globalThis.window={addEventListener:noop,removeEventListener:noop,confirm:()=>true};
  globalThis.document={addEventListener:noop,removeEventListener:noop,activeElement:{focus(){}},visibilityState:'visible',body:{style:{overflow:''}}};
@@ -103,4 +105,24 @@ test('FE-19: sin BarcodeDetector el botón explica la limitación y sin cámara 
  try{await safari.settle();cameraButton(safari).props.onClick();await safari.settle();assert.ok(text(safari.tree).includes(UNSUPPORTED_SCANNER_MESSAGE));assert.equal(safari.scanner,undefined);}finally{safari.dispose()}
  const desktop=harness({camera:'none'});
  try{await desktop.settle();assert.equal(cameraButton(desktop),undefined);}finally{desktop.dispose()}
+});
+
+test('Enter en el buscador: exige coincidencia exacta o única y nunca agrega otro producto parecido',async()=>{
+ const h=harness({initialDraft:null});
+ const search=()=>nodes(h.tree,node=>node.type==='input'&&node.props['aria-label']==='Buscar producto para agregar al carrito')[0];
+ const enter=async value=>{search().props.onChange({target:{value}});await h.settle();search().props.onKeyDown({key:'Enter',preventDefault(){}});await h.settle()};
+ const cart=()=>(h.sync.latest?.cart||[]).map(l=>[l.producto_id,l.cantidad]);
+ try{
+  await h.settle();
+  // Código exacto agotado: antes agregaba otro producto con existencias; ahora avisa y no toca el carrito.
+  await enter('BUJ-9');assert.deepEqual(cart(),[]);assert.match(text(h.tree),/Bujía: no quedan existencias/);assert.equal(search().props.value,'BUJ-9','el texto queda para corregirlo');
+  // Código inexistente: aviso claro.
+  await enter('000999');assert.deepEqual(cart(),[]);assert.match(text(h.tree),/«000999»/);
+  // Código de barras exacto: agrega y limpia el buscador.
+  await enter('7701234567890');assert.deepEqual(cart(),[['p1',1]]);assert.equal(search().props.value,'');assert.doesNotMatch(text(h.tree),/«000999»/);
+  // Texto con una sola coincidencia: la agrega.
+  await enter('pastillas');assert.deepEqual(cart(),[['p1',2]]);
+  // Sin existencias restantes en el carrito: avisa.
+  await enter('pastillas');assert.deepEqual(cart(),[['p1',2]]);assert.match(text(h.tree),/no quedan existencias/);
+ }finally{h.dispose()}
 });

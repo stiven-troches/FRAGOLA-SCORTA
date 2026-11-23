@@ -16,7 +16,9 @@ let compiled;
 before(async()=>{
  const source=readFileSync(new URL('../src/ClientWorkspace.jsx',import.meta.url),'utf8');
  compiled=(await transformWithOxc(source,'ClientWorkspace.jsx',{jsx:{runtime:'classic'}})).code
-  .replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ');
+  .replace(/^import[^\n]*;\n/gm,'').replace(/export default function /g,'function ').replace(/export function /g,'function ')
+  // El arnés no expande componentes: el campo de dinero se prueba como un input simple (MoneyInput tiene su propia prueba).
+  .replace(/(?<![\w$])MoneyInput(?![\w$])/g,'"input"');
 });
 const prior={window:globalThis.window,document:globalThis.document};
 const listeners=new Map();let confirmations=[],confirmResult=true;
