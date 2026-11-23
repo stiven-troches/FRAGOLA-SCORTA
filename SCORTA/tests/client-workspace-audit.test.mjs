@@ -71,15 +71,16 @@ const click=(h,label)=>{const node=named(h,label);assert.ok(node,`Control ${labe
 const edit=(h,label,value)=>{const node=field(h,label);assert.ok(node,`Campo ${label}`);return node.props.onChange({target:{value}})};
 const consent=(h,checked=true)=>{const node=field(h,'El cliente autorizó el tratamiento de sus datos');assert.ok(node,'Casilla de consentimiento');return node.props.onChange({target:{checked}})};
 const submit=h=>{const form=nodes(h.tree,node=>node.type==='form').at(-1);assert.ok(form);return form.props.onSubmit({preventDefault(){}})};
-async function openInventory(h){click(h,'Inventario');await h.settle()}
+// Estas pruebas recorren la fila de la tabla; la vista de tarjetas tiene su propia prueba.
+async function openInventory(h){click(h,'Inventario');await h.settle();click(h,'Tabla');await h.settle()}
 async function openProduct(h){await openInventory(h);click(h,'Nuevo producto');await h.settle()}
 async function openPurchase(h){click(h,'Compras');await h.settle();click(h,'Ingresar mercancía');await h.settle()}
 function successSale(action){return {...baseData(),revision:8,draftVersion:3,state:{...baseData().state,prods:[{...product,stock:product.stock-action.items.reduce((n,l)=>n+l.cantidad,0)}],ventas:[{id:'sale-1',fecha:action.form.fecha,cliente:action.form.cliente,telefono:action.form.telefono,placa:action.form.placa,usuario:'Juan',detalles:action.items,labor:action.labor,total:action.items.reduce((n,l)=>n+l.cantidad*l.precio_unitario,0)}]}}}
 
-test('H01: editar cantidad a 2 y sumar desde venta o inventario produce 3 numérico, nunca 21',async()=>{
- for(const via of ['sale','inventory']){
+test('H01: editar cantidad a 2 y sumar desde venta, tabla o tarjetas produce 3 numérico, nunca 21',async()=>{
+ for(const via of ['sale','inventory','cards']){
   const h=harness({initialDraft:draft()});try{await h.settle();const input=nodes(h.tree,n=>n.type==='input'&&n.props['aria-label']===`Cantidad de ${product.nombre}`)[0];input.props.onChange({target:{value:'2'}});await h.settle();
-   if(via==='sale')click(h,`Agregar una unidad de ${product.nombre}`);else{await openInventory(h);click(h,'Agregar al carrito')}
+   if(via==='sale')click(h,`Agregar una unidad de ${product.nombre}`);else if(via==='cards'){click(h,'Inventario');await h.settle();click(h,`Agregar ${product.nombre} al carrito`)}else{await openInventory(h);click(h,'Agregar al carrito')}
    await h.settle();assert.equal(h.sync.latest.cart[0].cantidad,3);assert.equal(typeof h.sync.latest.cart[0].cantidad,'number');
   }finally{h.dispose()}
  }

@@ -26,7 +26,7 @@ test('demo actual distingue propietario, administrador y vendedor sin usar API H
 
 test('demo recupera la venta guardada tras recargar, muestra cantidad correcta y cobra una vez',async({page})=>{
  await selectRole(page,'Vendedor');const before=await demoData(page),product=before.state.prods.find(p=>p.stock>=4);
- await navigate(page,'Inventario');await page.getByRole('searchbox',{name:'Buscar productos',exact:true}).fill(product.referencia||product.nombre);await page.getByRole('button',{name:'Agregar al carrito',exact:true}).first().click();await navigate(page,'Nueva venta');
+ await navigate(page,'Inventario');await page.getByRole('button',{name:'Tabla',exact:true}).click();await page.getByRole('searchbox',{name:'Buscar productos',exact:true}).fill(product.referencia||product.nombre);await page.getByRole('button',{name:'Agregar al carrito',exact:true}).first().click();await navigate(page,'Nueva venta');
  const quantity=page.getByRole('spinbutton',{name:'Cantidad de '+product.nombre,exact:true});await quantity.fill('2');await page.getByRole('button',{name:'Agregar una unidad de '+product.nombre,exact:true}).click();await expect(quantity).toHaveValue('3');
  await expect(page.getByText('Guardado',{exact:true}).first()).toBeVisible();await page.reload();await expect(page.getByRole('spinbutton',{name:'Cantidad de '+product.nombre,exact:true})).toHaveValue('3');
  await page.getByRole('button',{name:'Registrar venta',exact:true}).click();await expect(page.getByRole('dialog',{name:'Detalle de venta'})).toBeVisible();

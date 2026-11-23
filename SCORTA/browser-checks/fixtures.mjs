@@ -63,7 +63,7 @@ export async function profile(page){
  await expect(page.getByRole('dialog',{name:'Mi perfil'})).toBeVisible();
 }
 export async function addProduct(page,product){
- await navigate(page,'Inventario');await page.getByRole('searchbox',{name:'Buscar productos',exact:true}).fill(product.referencia);
+ await navigate(page,'Inventario');await page.getByRole('button',{name:'Tabla',exact:true}).click();await page.getByRole('searchbox',{name:'Buscar productos',exact:true}).fill(product.referencia);
  await page.getByRole('button',{name:'Agregar al carrito',exact:true}).first().click();await navigate(page,'Nueva venta');
 }
 export async function noOverflow(page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth)+1)}

@@ -2,7 +2,7 @@ import {test,expect,login,navigate,noOverflow} from './fixtures.mjs';
 
 async function editProduct(page,scenario){
  const data=await scenario.data();await scenario.act({type:'terms.accept',form:{version:data.session.termsVersion}});
- await login(page,scenario.admin);await navigate(page,'Inventario');
+ await login(page,scenario.admin);await navigate(page,'Inventario');await page.getByRole('button',{name:'Tabla',exact:true}).click();
  await page.locator('.cw-product-link').filter({hasText:scenario.product.nombre}).click();
  await page.getByRole('button',{name:'Editar producto',exact:true}).click();
  await page.getByText('Referencia, clasificación, costo y foto',{exact:true}).click();
