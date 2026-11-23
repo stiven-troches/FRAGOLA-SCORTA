@@ -1,12 +1,9 @@
 # Moto Central Demo
 
-El servidor crea esta empresa ficticia automáticamente una sola vez al arrancar con la plataforma configurada. Su semilla está en `test-company.mjs` y sus fotografías en `public/test-shop/`, dentro del repositorio. No necesita descargar imágenes de terceros.
+El servidor crea esta empresa ficticia una sola vez al arrancar con la plataforma configurada, **solo si se activa de forma explícita** con `SCORTA_TEST_COMPANY=1`. Con `NODE_ENV=production` (Render, incluido staging) exige además `SCORTA_TEST_COMPANY_PRODUCTION=1`, porque sus credenciales son públicas. `render.yaml` la deja apagada. Su semilla está en `test-company.mjs` y sus fotografías en `public/test-shop/`, dentro del repositorio. No necesita descargar imágenes de terceros.
 
-<<<<<<< HEAD
-En la web publicada solo aparece después de subir estos archivos a `main` y de que Render termine el despliegue.
+La empresa tiene un plan con topes (3 usuarios activos, 60 productos y 40 fotos) para que una cuenta pública no haga crecer sin límite el estado compartido de la plataforma. Si faltan las fotos de `public/test-shop/`, el servidor registra `test-company-seed-failed` y arranca sin la empresa.
 
-=======
->>>>>>> 35fa6770eeb6d71f7cda7e999d89b5639d8e9fa2
 Accesos de prueba, exclusivos de esta empresa:
 
 | Campo | Valor |
@@ -25,4 +22,4 @@ El catálogo comienza publicado. El WhatsApp queda vacío: el propietario o el a
 
 Estas credenciales están publicadas intencionalmente para probar datos ficticios y nunca dan permisos de propietario ni acceso a otra empresa. No cargues información real en esta empresa de pruebas. El propietario puede cambiar sus contraseñas, suspenderla o eliminarla.
 
-Los siguientes arranques no restablecen productos, ventas, fotos, contraseñas ni ajustes de la empresa; tampoco la recrean después de eliminarla. `SCORTA_TEST_COMPANY=0` evita crear la empresa en un entorno nuevo y no borra una ya existente.
+Los siguientes arranques no restablecen productos, ventas, fotos, contraseñas ni ajustes de la empresa; tampoco la recrean después de eliminarla. Apagar `SCORTA_TEST_COMPANY` evita crearla en un entorno nuevo, pero no borra una ya existente: si se sembró en producción, el propietario debe suspenderla o eliminarla desde su panel.

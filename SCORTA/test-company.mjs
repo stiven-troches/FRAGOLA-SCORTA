@@ -1,10 +1,19 @@
 import {readFileSync} from 'node:fs';
 import {createPlatform} from './platform.mjs';
 import {estadoVacio,aplicarCambio} from './inventory.mjs';
+import {PLAN_FEATURE_KEYS} from './plan-limits.mjs';
 
 // Cuenta ficticia pública de pruebas. No sirve para entrar como propietario.
 export const TEST_COMPANY={id:'scorta-test-moto-central-v1',name:'Moto Central Demo',slug:'moto-central-demo',username:'demo.admin',seller:'demo.vendedor',password:'Demo.MotoCentral.2026'};
 const SEED='moto-central-v1';
+// Las credenciales anteriores son públicas: la empresa solo se crea si se pide de forma explícita
+// (SCORTA_TEST_COMPANY=1) y, con NODE_ENV=production, además con SCORTA_TEST_COMPANY_PRODUCTION=1.
+export function testCompanyEnabled(env=process.env){
+ if(env.SCORTA_TEST_COMPANY!=='1')return false;
+ return env.NODE_ENV!=='production'||env.SCORTA_TEST_COMPANY_PRODUCTION==='1';
+}
+// Topes del plan: una cuenta con contraseña pública no puede crecer sin límite dentro del estado compartido.
+export const TEST_COMPANY_PLAN=Object.freeze({maxUsers:3,maxProducts:60,maxPhotos:40});
 const groups=[
  {asset:'helmet',prefix:'CAS',name:'Casco integral negro',category:'Cascos',brand:'Ruta Demo',variants:['M','L','XL','XXL'],cost:120000,price:180000,description:'Casco integral negro con visor transparente. Elige la talla que deseas probar.'},
  {asset:'oil',prefix:'ACE',name:'Aceite 4T 1 litro',category:'Lubricantes',brand:'Motor Demo',variants:['10W-40','15W-50','20W-50','5W-40'],cost:22000,price:35000,description:'Aceite para motor de motocicleta de cuatro tiempos. Presentación de un litro.'},
@@ -42,6 +51,6 @@ export async function seedTestCompany(state,{now=Date.now()}={}){
  }
  // El motor de inventario no gestiona imágenes: se adjuntan después de crear el historial.
  for(const product of business.prods){const group=groups.find(g=>product.referencia.startsWith(g.prefix+'-'));product.foto=pictures[group.asset];}
- const company={id:TEST_COMPANY.id,name,slug,isTestCompany:true,seedVersion:1,enabled:true,startDate:'2026-01-01',endDate:'2099-12-31',monthlyFee:0,createdAt:at,contact:'Negocio ficticio para pruebas',email:'pruebas@example.invalid',whatsapp:'',nit:'DEMO-SIN-VALOR',address:'Empresa ficticia · Solo para pruebas',logo:pictures.logo,catalog:{enabled:true,primary:'#1644d8',secondary:'#edf2ff',headline:'Tu moto merece lo mejor.',description:'Tienda de demostración: productos, fotos y precios ficticios para explorar el catálogo.'}};
+ const company={id:TEST_COMPANY.id,name,slug,isTestCompany:true,seedVersion:1,enabled:true,startDate:'2026-01-01',endDate:'2099-12-31',monthlyFee:0,plan:{...TEST_COMPANY_PLAN,features:[...PLAN_FEATURE_KEYS]},createdAt:at,contact:'Negocio ficticio para pruebas',email:'pruebas@example.invalid',whatsapp:'',nit:'DEMO-SIN-VALOR',address:'Empresa ficticia · Solo para pruebas',logo:pictures.logo,catalog:{enabled:true,primary:'#1644d8',secondary:'#edf2ff',headline:'Tu moto merece lo mejor.',description:'Tienda de demostración: productos, fotos y precios ficticios para explorar el catálogo.'}};
  return {...state,revision:state.revision+1,companies:[...state.companies,company],users:[...state.users,admin,seller],businesses:{...state.businesses,[company.id]:business},seededFixtures:{...state.seededFixtures,[SEED]:company.id},audit:[{id:crypto.randomUUID(),fecha:at,usuario:'Sistema',accion:'test-company.seed',companyId:company.id,productos:business.prods.length},...state.audit]};
 }

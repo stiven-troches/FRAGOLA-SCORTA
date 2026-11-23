@@ -219,6 +219,13 @@ export function applyCashCreditAction(business,actor,action,{now=Date.now(),toda
   if(!actor.companyId)fail('Ingresa como soporte para operar en una empresa',403,'FORBIDDEN');
   const form=action.form||{},at=new Date(now),admin=isAdmin(actor),settings=cashSettings(business);
   const closedToday=array(business.cashClosures).some(record=>record.date===today);
+  // Un día cerrado no admite dinero nuevo: no entraría en ningún cierre (no se puede cerrar dos veces la misma fecha).
+  const assertOpen=what=>{if(closedToday)fail(`La caja de hoy ya está cerrada. Registra ${what} mañana o consulta al administrador.`,409,'CASH_ALREADY_CLOSED')};
+  if(action.type==='credit.payment')assertOpen('el abono');
+  if(action.type==='layaway.payment')assertOpen('el abono');
+  if(action.type==='layaway.deliver')assertOpen('la entrega del separado');
+  if(action.type==='layaway.create'&&finite((action.form?.deposit??{}).amount??action.form?.abono)>0)assertOpen('el separado con abono');
+  if(action.type==='layaway.cancel'&&action.form?.destino==='reembolso')assertOpen('el reembolso');
   if(action.type.startsWith('cash.')){
     const kinds={'cash.open':'base','cash.expense':'gasto','cash.withdrawal':'retiro','cash.deposit':'ingreso'},tipo=kinds[action.type];
     if(!tipo)fail('Operación de caja desconocida.',404,'NOT_FOUND');

@@ -29,7 +29,8 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     const prior=db.prepare('SELECT data FROM platform WHERE id=1').get();
     let state=prior?JSON.parse(prior.data):await createPlatform({owner,ownerContact,legacyState});
     state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;
-    if(withTestCompany)state=await seedTestCompany(state);
+    // Una semilla rota (p. ej. faltan las fotos de public/test-shop) no debe impedir el arranque.
+    if(withTestCompany){try{state=await seedTestCompany(state);}catch(error){console.error(JSON.stringify({level:'error',event:'test-company-seed-failed',error:String(error?.message||error)}));}}
     if(!prior)db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(state));
     else db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));
     try{chmodSync(file,0o600);}catch{}

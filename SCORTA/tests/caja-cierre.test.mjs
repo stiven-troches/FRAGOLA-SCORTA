@@ -113,3 +113,26 @@ test('caja: aislamiento entre empresas y vendedor sin gastos por encima del tope
  assert.equal(a.state.cashMovements.length,1);assert.equal(b.state.cashMovements.length,1);assert.equal(b.state.cashMovements[0].amount,6000);
  const bad=await post(f,B.admin,{type:'cash.expense',form:{amount:-1,motivo:'x'}});assert.equal(bad.status,400);
 });
+
+test('caja cerrada: ventas, abonos, entregas y reembolsos de hoy se rechazan; nada queda por fuera del cierre',async()=>{
+ const f=await qaPlatform({now:AT_D}),S=await shopWithCard(f,'Caja Tarde');
+ await f.act(S.seller,f.saleBody(S.product,{form:{cliente:S.card.nombre,customerId:S.card.id,paymentMethod:'credito'}}));
+ const created=await f.act(S.seller,{type:'layaway.create',form:{cliente:'Separa Tarde',items:[{producto_id:S.product.id,cantidad:1}]}});
+ const layaway=created.state.layaways[0];
+ await f.act(S.admin,{type:'cash.close',form:{date:DAY_D,actual:{efectivo:0,transferencia:0,tarjeta:0,nequi:0}}});
+ const before=await f.data(S.admin);
+ const rejected=async(actor,body,label)=>{const r=await post(f,actor,body);assert.equal(r.status,409,label+': '+JSON.stringify(r.body));assert.equal(r.body.code,'CASH_ALREADY_CLOSED',label);};
+ await rejected(S.seller,f.saleBody(S.product,{form:{cliente:'Tarde',paymentMethod:'efectivo'}}),'venta del vendedor');
+ await rejected(S.admin,f.saleBody(S.product,{form:{cliente:'Tarde',paymentMethod:'efectivo'}}),'venta del administrador sin fecha');
+ await rejected(S.admin,f.saleBody(S.product,{form:{cliente:'Tarde',paymentMethod:'efectivo',fecha:DAY_D}}),'venta del administrador con la fecha de hoy');
+ await rejected(S.seller,{type:'credit.payment',form:{customerId:S.card.id,amount:1000,method:'efectivo'}},'abono a crédito');
+ await rejected(S.seller,{type:'layaway.payment',id:layaway.id,form:{amount:1000,method:'efectivo'}},'abono a separado');
+ await rejected(S.seller,{type:'layaway.deliver',id:layaway.id,form:{payment:{amount:layaway.total,method:'efectivo'}}},'entrega de separado');
+ await rejected(S.seller,{type:'layaway.create',form:{cliente:'Otro',items:[{producto_id:S.product.id,cantidad:1}],deposit:{amount:1000,method:'efectivo'}}},'separado con abono');
+ await rejected(S.admin,{type:'layaway.cancel',id:layaway.id,form:{motivo:'x',destino:'reembolso',method:'efectivo'}},'reembolso de separado');
+ const after=await f.data(S.admin);
+ assert.equal(after.state.ventas.length,before.state.ventas.length,'no se registró ninguna venta');
+ assert.equal((after.state.creditPayments||[]).length,(before.state.creditPayments||[]).length);
+ // Al día siguiente la operación sigue normal.
+ f.setNow(AT_D1);ok(await post(f,S.seller,f.saleBody(S.product,{form:{cliente:"Mañana",paymentMethod:"efectivo"}})));
+});

@@ -31,3 +31,7 @@ updates:
       day: monday
     commit-message:
       prefix: docker
+    # Node se mantiene en 24 (engines, NODE_VERSION de Render y CI). Un salto de versión mayor se hace a mano en todas a la vez.
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]

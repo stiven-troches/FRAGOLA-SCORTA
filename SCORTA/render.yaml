@@ -22,7 +22,7 @@ services:
     region: ohio                     # Región de EE. UU. más cercana a Colombia con buena latencia.
     plan: starter                    # 0.5 CPU / 512 MB. Equivale a "0.5c-512mb". Pago: necesario para el disco.
     numInstances: 1                  # Con disco persistente Render solo permite 1 instancia (ver OPS-18).
-    buildCommand: npm ci && npm run build   # Instala exactamente el lockfile y compila el frontend con Vite.
+    buildCommand: npm ci --include=dev && npm run build   # Instala el lockfile completo (Vite es devDependency y NODE_ENV=production las omitiría) y compila el frontend.
     startCommand: npm start          # node --env-file-if-exists=.env server.mjs
     healthCheckPath: /healthz        # 200 {"ok":true} si la base responde; Render no enruta tráfico hasta que pase.
     autoDeployTrigger: checksPass    # Despliega cada commit de main SOLO si los checks de GitHub (CI) pasan.
@@ -41,6 +41,8 @@ services:
         value: /var/data             # Carpeta de las bases SQLite = punto de montaje del disco.
       - key: NODE_VERSION
         value: "24"                  # Render instala la última versión de Node 24 (coincide con engines).
+      - key: SCORTA_TEST_COMPANY
+        value: "0"                   # Sin empresa ficticia: sus credenciales son públicas (docs/EMPRESA-DE-PRUEBA.md).
       # --- Valores que se piden en el Dashboard al crear el Blueprint (sync:false = nunca en git) ---
       - key: SCORTA_PUBLIC_URL
         sync: false                  # URL pública canónica, p. ej. https://app.scorta.co (enlaces y CSRF).
@@ -94,7 +96,7 @@ services:
     region: ohio
     plan: starter                    # El plan pago más barato; "free" no admite disco.
     numInstances: 1
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeployTrigger: checksPass    # También espera a que el CI pase en la rama staging.
@@ -111,6 +113,8 @@ services:
         value: /var/data
       - key: NODE_VERSION
         value: "24"
+      - key: SCORTA_TEST_COMPANY
+        value: "0"                   # Para probar Moto Central Demo aquí: "1" y además SCORTA_TEST_COMPANY_PRODUCTION="1".
       - key: SCORTA_PUBLIC_URL
         sync: false                  # p. ej. https://scorta-staging.onrender.com
       - key: SCORTA_OWNER_COMPANY

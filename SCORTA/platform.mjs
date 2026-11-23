@@ -321,8 +321,12 @@ function customerFor(business,form,actor) {
 // The server owns the sale date: sellers always register "today" (Bogotá) and an
 // administrator may backdate only to a day without a confirmed cash closure.
 function saleDate(business,actor,requested,now) {
-  const today=dateBogota(now);
-  if(!requested||requested===today||actor.role==='vendedor')return today;
+  const today=dateBogota(now),closed=day=>(business.cashClosures||[]).some(c=>c.date===day);
+  // Una venta en un día ya cerrado no entraría en ningún cierre: la misma fecha no se cierra dos veces.
+  if(!requested||requested===today||actor.role==='vendedor'){
+    if(closed(today))fail('La caja de hoy ya está cerrada. Registra la venta mañana o consulta al administrador.',409,'CASH_ALREADY_CLOSED');
+    return today;
+  }
   const fecha=date(requested,'Fecha de venta');
   if(fecha>today)fail('La fecha de venta no puede ser posterior a hoy');
   if((business.cashClosures||[]).some(c=>c.date===fecha))fail('La caja de esa fecha ya está cerrada; registra la venta con la fecha de hoy.',409,'CASH_ALREADY_CLOSED');

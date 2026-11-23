@@ -73,7 +73,7 @@ test('cierre por ventas netas: snapshot inmutable, diferencias e idempotencia si
  let closed=await f.act('admin',body);assert.equal(closed.status,200,closed.body.error);const record=closed.body.state.cashClosures[0];
  assert.deepEqual(record.expected,{efectivo:20000,transferencia:10000,tarjeta:15000});assert.deepEqual(record.differences,{efectivo:-500,transferencia:0,tarjeta:1000});assert.deepEqual(record.totals,{expected:45000,actual:45500,difference:500});assert.equal(closed.body.state.prods[0].stock,stock);assert.ok(record.userId&&record.createdAt);assert.equal(record.businessRevision,before.revision);
  const retry=await f.act('admin',body);assert.equal(retry.status,200,retry.body.error);assert.equal(retry.body.state.cashClosures.length,1);
- await f.sell();assert.deepEqual((await f.data()).state.cashClosures[0],record);
+ const late=await f.act('seller',{type:'sale.create',form:{fecha:day,cliente:'Cliente',paymentMethod:'efectivo'},items:[{producto_id:before.state.prods[0].id,cantidad:1,precio_unitario:before.state.prods[0].precio_venta}]});assert.equal(late.status,409);assert.equal(late.body.code,'CASH_ALREADY_CLOSED');assert.deepEqual((await f.data()).state.cashClosures[0],record);
  closed=await f.act('admin',{type:'cash.close',form:body.form});assert.equal(closed.status,409);assert.equal(closed.body.code,'CASH_ALREADY_CLOSED');
  assert.equal((await f.act('seller',{type:'cash.close',form:{date:day,actual:{efectivo:0,transferencia:0,tarjeta:0}}})).status,403);
  assert.ok(!Object.hasOwn((await f.data('seller')).state,'cashClosures'));assert.deepEqual((await f.data('other')).state.cashClosures,[]);

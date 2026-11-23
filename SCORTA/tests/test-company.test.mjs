@@ -7,7 +7,8 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {createPlatform,platformRequest} from '../platform.mjs';
 import {openPlatformStore,createPlatformHandler} from '../platform-server.mjs';
-import {seedTestCompany,TEST_COMPANY} from '../test-company.mjs';
+import {seedTestCompany,TEST_COMPANY,TEST_COMPANY_PLAN,testCompanyEnabled} from '../test-company.mjs';
+import {companyPlan} from '../plan-limits.mjs';
 
 const owner={company:'Propietario QA',username:'ownerqa',password:'Owner.SeedFixture!2026'},now='2026-11-22T18:00:00Z';
 const initial=()=>createPlatform({owner});
@@ -61,4 +62,21 @@ test('SQLite añade la empresa una vez, conserva las ediciones al reiniciar y si
  assert.equal((await sign(TEST_COMPANY.password)).status,401);assert.equal((await sign(newPassword)).status,200);
  const handler=createPlatformHandler({store}),server=createServer((req,res)=>handler(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/v2/catalog/'+TEST_COMPANY.slug+'/photo/'+product.id);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/webp');assert.equal(Buffer.from(await response.arrayBuffer()).subarray(8,12).toString(),'WEBP');
+});
+
+test('activación explícita: apagada por defecto y en producción exige una segunda variable',()=>{
+ assert.equal(testCompanyEnabled({}),false,'sin variable no se crea');
+ assert.equal(testCompanyEnabled({SCORTA_TEST_COMPANY:'0'}),false);
+ assert.equal(testCompanyEnabled({SCORTA_TEST_COMPANY:'true'}),false,'solo el valor exacto 1 la activa');
+ assert.equal(testCompanyEnabled({SCORTA_TEST_COMPANY:'1'}),true);
+ assert.equal(testCompanyEnabled({SCORTA_TEST_COMPANY:'1',NODE_ENV:'production'}),false,'producción no la crea por accidente');
+ assert.equal(testCompanyEnabled({SCORTA_TEST_COMPANY:'1',NODE_ENV:'production',SCORTA_TEST_COMPANY_PRODUCTION:'1'}),true);
+ assert.equal(testCompanyEnabled({NODE_ENV:'production',SCORTA_TEST_COMPANY_PRODUCTION:'1'}),false);
+});
+
+test('la empresa de prueba tiene topes de plan y cabe dentro de ellos',async()=>{
+ const state=await seedTestCompany(await initial(),{now}),company=state.companies[0],plan=companyPlan(company),business=state.businesses[company.id];
+ assert.equal(plan.maxUsers,TEST_COMPANY_PLAN.maxUsers);assert.equal(plan.maxProducts,TEST_COMPANY_PLAN.maxProducts);assert.equal(plan.maxPhotos,TEST_COMPANY_PLAN.maxPhotos);
+ assert.ok(business.prods.length<=plan.maxProducts);assert.ok(business.prods.filter(p=>p.foto).length<=plan.maxPhotos);
+ assert.ok(state.users.filter(u=>u.companyId===company.id).length<=plan.maxUsers);
 });
