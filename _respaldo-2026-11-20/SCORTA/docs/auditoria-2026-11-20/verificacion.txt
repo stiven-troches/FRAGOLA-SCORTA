@@ -1,7 +1,0 @@
-HEAD 0e35e5eafae07cb82fa5f0865a0bcffaba76dbca
-181 pruebas: 181 aprobadas, 0 fallidas, 0 omitidas.
-Build aplicación: correcto. Build demo: correcto.
-0 enlaces relativos Markdown rotos.
-Docker: lectura estática; acceso a daemon denegado en el entorno, no construido.
-Playwright: solo enumeración de casos, no ejecución de navegador.
-Repositorio sin cambios al finalizar.
