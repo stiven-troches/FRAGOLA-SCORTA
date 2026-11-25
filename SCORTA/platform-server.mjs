@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync,gzipSync,constants as zlibConstants} from 'node:zlib';
 import {createPlatform,platformRequest,PLATFORM_SESSION_TTL_MS} from './platform.mjs';
-import {externalizeMedia} from './media-store.mjs';
+import {externalizeMedia,pendingMedia} from './media-store.mjs';
 import {MEDIA_PATH,isMediaRef} from './media-ref.mjs';
 
 const COOKIE='scorta_platform';
@@ -42,12 +42,15 @@ function lockHolderRunning(pid){
 // BE-33: onSecurityEvents(events) recibe, después de confirmar cada escritura, los eventos de
 // seguridad nuevos (los más recientes primero) para avisar por correo al propietario.
 // BE-30: media = createMediaStore(...). With it, logos and product photos leave the JSON state:
-// the data URLs already stored are moved on every start (idempotent) and new ones on every write.
-export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null,media=null}={}){
+// the data URLs already stored are moved on every start (idempotent) and the new ones of each write
+// in that write. SEG-10: a write never retries other companies' pending images; those are retried in
+// the background (at most once every mediaRetryMs) with the uploads outside the write queue.
+export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null,media=null,mediaRetryMs=5*60000}={}){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   const pidFile=file+'.pid';
   if(existsSync(pidFile)){if(lockHolderRunning(Number(readFileSync(pidFile,'utf8'))))throw Error('La plataforma ya está abierta. Detén la instancia antes de abrir otra.');rmSync(pidFile,{force:true});}
   writeFileSync(pidFile,String(process.pid),{flag:'wx',mode:0o600});
+  let startupPending=false;
   const db=new DatabaseSync(file);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS platform(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL, storage_version INTEGER NOT NULL DEFAULT 0)');
   try{
     const prior=db.prepare('SELECT data FROM platform WHERE id=1').get();
@@ -55,7 +58,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;
     // Una semilla rota (p. ej. faltan las fotos de public/test-shop) no debe impedir el arranque.
     if(withTestCompany){try{state=await seedTestCompany(state);}catch(error){console.error(JSON.stringify({level:'error',event:'test-company-seed-failed',error:String(error?.message||error)}));}}
-    if(media){const moved=await externalizeMedia(state,media);if(moved.moved||moved.failed)console.error(JSON.stringify({level:moved.failed?'warn':'info',at:new Date().toISOString(),event:'media-migration',backend:media.kind,...moved}));}
+    if(media){const moved=await externalizeMedia(state,media);if(moved.moved||moved.failed)console.error(JSON.stringify({level:moved.failed?'warn':'info',at:new Date().toISOString(),event:'media-migration',backend:media.kind,...moved}));startupPending=moved.failed>0;}
     if(!prior)db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(state));
     else db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));
     try{chmodSync(file,0o600);}catch{}
@@ -68,14 +71,48 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
   let queue=Promise.resolve(),closed=false,cache={version:-1,state:null};
   const versionStmt=db.prepare('SELECT storage_version FROM platform WHERE id=1'),rowStmt=db.prepare('SELECT data,storage_version FROM platform WHERE id=1');
   function current(){const version=versionStmt.get().storage_version;if(cache.version===version)return cache;const row=rowStmt.get();cache={version:row.storage_version,state:JSON.parse(row.data)};return cache;}
+  // SEG-10: pending images (failed uploads, other companies) are retried here, not in every write.
+  let retryTimer=null,lastRetry=Date.now();
+  function scheduleMediaRetry(){
+    if(!media||retryTimer||closed)return;
+    retryTimer=setTimeout(retryMedia,Math.max(0,lastRetry+mediaRetryMs-Date.now()));retryTimer.unref?.();
+  }
+  async function retryMedia(){
+    retryTimer=null;lastRetry=Date.now();if(closed)return;
+    const ready=new Set();let failed=0;
+    // Uploads outside the queue: a slow R2 never blocks writes.
+    for(const [companyId,values]of pendingMedia(current().state))for(const value of values){if(closed)return;try{if(await media.putDataUrl(companyId,value))ready.add(companyId+'\n'+value);else failed++;}catch{failed++;}}
+    if(ready.size&&!closed){
+      // Already stored: inside the queue the same put is a cache hit (R2) or an existing file (disk).
+      const run=queue.then(async()=>{
+        if(closed)return;
+        const snap=current(),next=structuredClone(snap.state),moved=await externalizeMedia(next,media,{include:(companyId,value)=>ready.has(companyId+'\n'+value)});
+        if(!moved.moved||closed)return;
+        const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(next),snap.version);
+        if(changed.changes)cache={version:snap.version+1,state:next};
+      });
+      queue=run.catch(()=>{});
+      await run.catch(error=>console.error(JSON.stringify({level:'error',event:'media-retry-failed',error:String(error?.message||error)})));
+    }
+    console.error(JSON.stringify({level:failed?'warn':'info',at:new Date().toISOString(),event:'media-retry',backend:media.kind,moved:ready.size,failed}));
+    if(failed)scheduleMediaRetry();
+  }
+  if(startupPending)scheduleMediaRetry();
   async function operation(payload,options){
     if(closed)throw Error('La plataforma está cerrada');
     const snap=current(),result=await platformRequest(snap.state,payload,options);
     if(result.state!==snap.state){
-      if(media)await externalizeMedia(result.state,media);
+      let pending=false;
+      if(media){
+        // Only the images this write brought; if one fails the write keeps its data URL.
+        const before=pendingMedia(snap.state);
+        await externalizeMedia(result.state,media,{include:(companyId,value)=>!before.get(companyId)?.has(value)});
+        pending=pendingMedia(result.state).size>0;
+      }
       if(closed)throw Error('La plataforma está cerrada');
       db.exec('BEGIN IMMEDIATE');
       try{const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(result.state),snap.version);if(!changed.changes){db.exec('ROLLBACK');return {status:409,body:{error:'Otra solicitud actualizó los datos. Reintenta la operación.',code:'REVISION_CONFLICT'}};}db.exec('COMMIT');cache={version:snap.version+1,state:result.state};}catch(error){try{db.exec('ROLLBACK');}catch{}throw error;}
+      if(pending)scheduleMediaRetry();
       if(onSecurityEvents){const known=snap.state.securityEvents?.[0]?.id,fresh=[];for(const event of result.state.securityEvents||[]){if(event.id===known)break;fresh.push(event);}if(fresh.length){try{onSecurityEvents(structuredClone(fresh));}catch{}}}
       // A deleted or purged company takes its images on disk with it.
       if(media)for(const company of snap.state.companies)if(!result.state.companies.some(c=>c.id===company.id)){try{media.removeCompany(company.id);}catch(error){console.error(JSON.stringify({level:'error',event:'media-remove-failed',companyId:company.id,error:String(error?.message||error)}));}}
@@ -88,7 +125,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     const result=queue.then(()=>operation(payload,options));queue=result.catch(()=>{});return result;
   }
   const stats=()=>({sizeBytes:db.prepare('PRAGMA page_count').get().page_count*db.prepare('PRAGMA page_size').get().page_size,stateBytes:db.prepare('SELECT length(CAST(data AS BLOB)) AS n FROM platform WHERE id=1').get().n});
-  return {request,stats,health:()=>!closed&&db.prepare('SELECT 1 AS ok').get().ok===1,readPrivate:()=>JSON.parse(db.prepare('SELECT data FROM platform WHERE id=1').get().data),async snapshot(){await queue;const directory=mkdtempSync(resolve(tmpdir(),'scorta-platform-')),target=resolve(directory,'platform.sqlite');try{await backup(db,target);validatePlatformDatabase(target);return readFileSync(target);}finally{rmSync(directory,{recursive:true,force:true});}},close(){closed=true;db.close();rmSync(pidFile,{force:true});}};
+  return {request,stats,health:()=>!closed&&db.prepare('SELECT 1 AS ok').get().ok===1,readPrivate:()=>JSON.parse(db.prepare('SELECT data FROM platform WHERE id=1').get().data),async snapshot(){await queue;const directory=mkdtempSync(resolve(tmpdir(),'scorta-platform-')),target=resolve(directory,'platform.sqlite');try{await backup(db,target);validatePlatformDatabase(target);return readFileSync(target);}finally{rmSync(directory,{recursive:true,force:true});}},close(){closed=true;clearTimeout(retryTimer);db.close();rmSync(pidFile,{force:true});}};
 }
 // SEG-02: x-forwarded-for is appended by every proxy, so only the entry added by our
 // own trusted proxy (counted from the right) is reliable; the leftmost one is whatever
@@ -107,13 +144,14 @@ export const ipHeaderDiagnostics=req=>({level:'info',at:new Date().toISOString()
 // configurado Y SCORTA_PUBLIC_URL (el enlace nunca se arma con la cabecera Host del cliente).
 // Se envían después de confirmar la escritura y sin esperar, para que el tiempo de respuesta
 // no revele si la cuenta existe.
-// BE-30: sends an image of the media store. Content-addressed ids never change, so /media is immutable.
+// BE-30: sends an image of the media store. Content-addressed ids never change, so the ETag comes
+// from the id and a matching If-None-Match answers 304 without reading the file or R2.
 async function sendMedia(req,res,media,ref,cacheControl){
+  const etag='"'+ref.mediaId.split('.')[0].slice(0,32)+'"';
+  if(media&&req.headers['if-none-match']===etag){res.writeHead(304,{'Cache-Control':cacheControl,ETag:etag});res.end();return;}
   const bytes=media?await media.get(ref):null;
   if(!bytes){json(res,404,{error:'Imagen no disponible'});return;}
-  const etag='"'+ref.mediaId.split('.')[0].slice(0,32)+'"';
   res.setHeader('Cache-Control',cacheControl);res.setHeader('ETag',etag);
-  if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return;}
   res.writeHead(200,{'Content-Type':ref.type,'Content-Length':String(bytes.length)});res.end(req.method==='HEAD'?undefined:bytes);
 }
 export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null,serverStatus=null,media=null}={}){
@@ -128,18 +166,31 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
   const ipHeader=typeof clientIpHeader==='string'&&clientIpHeader.trim()?clientIpHeader.trim().toLowerCase():null;
   const hops=Math.trunc(Number(trustedProxyHops))||1,clientAddress=req=>clientAddressFrom(req,ipHeader,hops);
   const loginOrigins=new Map(),loginWindowMs=60000,loginOriginLimit=120,maxOrigins=1000;
-  const catalogReads=new Map(),catalogCheckouts=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
+  const catalogReads=new Map(),catalogCheckouts=new Map(),mediaReads=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
+  // Tope por origen en una ventana de un minuto: true (y 429 + Retry-After ya enviado) si se superó.
+  const rateLimited=(bucket,limit,req,res)=>{
+    const timestamp=Number(clock());
+    for(const [key,value]of bucket)if(value.until<=timestamp)bucket.delete(key);
+    const key=clientAddress(req),previous=bucket.get(key);
+    if(previous&&previous.count>=limit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
+    if(!previous&&bucket.size>=maxOrigins)bucket.delete(bucket.keys().next().value);
+    bucket.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+    return false;
+  };
   return async(req,res)=>{
     const url=new URL(req.url,'http://localhost'),path=url.pathname;
     if(MEDIA_PATH.test(path)){
       try{
         if(!['GET','HEAD'].includes(req.method)){json(res,405,{error:'Método no permitido'});return true;}
+        // SEG-10: /media también recorre el catálogo y lee el archivo; mismo tope por origen que las lecturas del catálogo.
+        if(rateLimited(mediaReads,catalogReadLimit,req,res))return true;
         if(!store){json(res,404,{error:'Imagen no disponible'});return true;}
         const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'=')),token=match?.slice(COOKIE.length+1);
         const result=await store.request({method:'GET',path,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null});
         if(result.status!==200){json(res,result.status,result.body);return true;}
-        // Public only while the catalog shows it; images of a session are never stored by shared caches.
-        await sendMedia(req,res,media,result.body.media,(result.body.public?'public':'private')+', max-age=31536000, immutable');
+        // SEG-10: an image stops being public when the product leaves the catalog, so no long/immutable
+        // cache: public 1 h; private always revalidates (the ETag answers 304 without re-sending it).
+        await sendMedia(req,res,media,result.body.media,result.body.public?'public, max-age=3600':'private, no-cache');
       }catch(error){console.error(JSON.stringify({level:'error',at:new Date().toISOString(),method:req.method,path,error:String(error?.stack||error)}));json(res,500,{error:'Error interno del servidor. Intenta de nuevo.',code:'INTERNAL_ERROR'});}
       return true;
     }
@@ -166,12 +217,8 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       }
       // Catálogo público (sin sesión): tope por origen para que nadie sature la cola de la plataforma.
       if(path.startsWith('/api/v2/catalog/')){
-        const timestamp=Number(clock()),checkout=req.method==='POST',limit=checkout?catalogCheckoutLimit:catalogReadLimit,bucket=checkout?catalogCheckouts:catalogReads;
-        for(const [key,value]of bucket)if(value.until<=timestamp)bucket.delete(key);
-        const key=clientAddress(req),previous=bucket.get(key);
-        if(previous&&previous.count>=limit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
-        if(!previous&&bucket.size>=maxOrigins)bucket.delete(bucket.keys().next().value);
-        bucket.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+        const checkout=req.method==='POST';
+        if(rateLimited(checkout?catalogCheckouts:catalogReads,checkout?catalogCheckoutLimit:catalogReadLimit,req,res))return true;
       }
       if(limitedPaths.has(path)&&req.method==='POST'){
         const timestamp=Number(clock());

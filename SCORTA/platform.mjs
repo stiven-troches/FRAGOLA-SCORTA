@@ -295,7 +295,8 @@ const tagMatches=(header,tag)=>typeof header==='string'&&header.length<=2000&&he
 // BE-28: búsqueda paginada (GET /api/v2/search/{products|sales|customers}?q=&offset=&limit=).
 // Mismas reglas del sobre: el vendedor ve solo sus ventas, productos sin costos y clientes con
 // teléfono y documento enmascarados; nadie recibe secretos de comprobantes.
-const lightProduct=p=>{const next={...p};if(typeof next.foto==='string'&&next.foto.startsWith('data:')){delete next.foto;next.hasPhoto=true;}return next;};
+// SEG-10: una foto en el almacén de medios viaja como su URL /media (igual que en el sobre), nunca como referencia.
+const lightProduct=p=>{const next={...p};if(typeof next.foto==='string'&&next.foto.startsWith('data:')){delete next.foto;next.hasPhoto=true;}else if(isMediaRef(next.foto))next.foto=mediaUrl(next.foto);return next;};
 function searchBusiness(state,actor,kind,params){
   if(!actor.companyId)fail('La búsqueda requiere entrar a una empresa.',403,'FORBIDDEN');
   const business=state.businesses[actor.companyId]||estadoVacio(),seller=actor.role==='vendedor';
@@ -889,7 +890,8 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       if(!ref)unavailable();
       let open=false;try{const shop=catalogCompany(state,company.slug,stamp(now));open=isLogo||catalogProducts(state,shop).some(p=>same(p.foto));}catch{}
       if(open)return response(200,{media:ref,public:true});
-      const viewer=resolveActor(state,request.token?state.sessions[await hash(request.token)]:null,now);
+      // SEG-10: without a valid session the answer is 404 too, so it does not reveal that the image exists.
+      let viewer;try{viewer=resolveActor(state,request.token?state.sessions[await hash(request.token)]:null,now);}catch{unavailable();}
       if(viewer.companyId!==companyId&&!(viewer.role==='owner'&&!viewer.support&&isLogo))unavailable();
       return response(200,{media:ref,public:false});
     }
@@ -921,7 +923,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
         // BE-33: account-wide failures (any origin); one alert per 15-minute window.
         const accountKey=await hash('account|'+companyName+'|'+username),failures=state.accountFailures??={},account=failures[accountKey],active=account?.until>timestamp;
         const next=failures[accountKey]={count:active?account.count+1:1,until:active?account.until:timestamp+LOGIN_ACCOUNT_WINDOW_MS,alerted:!!(active&&account.alerted)};
-        if(next.count>=ACCOUNT_ALERT_FAILURES&&!next.alerted){next.alerted=true;securityEvent(state,'login_failures',{companyId:companyId??null,empresa:company?.name||(isOwner?state.ownerCompany:optionalText(body.company,100)),usuario:optionalText(body.username,60),intentos:next.count},now);}
+        if(next.count>=ACCOUNT_ALERT_FAILURES&&!next.alerted){next.alerted=true;securityEvent(state,'login_failures',{companyId:companyId??null,empresa:company?.name||(isOwner?state.ownerCompany:optionalText(body.company,100)),...(!company&&!isOwner?{empresaInexistente:true}:{}),usuario:optionalText(body.username,60),...(!user?{usuarioInexistente:true}:{}),intentos:next.count},now);}
         pruneLoginTracking(state,timestamp);return response(401,{error,code});
       };
       if(!valid)return reject('Empresa, usuario o contraseña incorrectos','INVALID_CREDENTIALS');

@@ -65,11 +65,11 @@ export function objectKey(prefix,date=new Date()){
   return (clean?clean+'/':'')+`${iso.slice(0,4)}/${iso.slice(5,7)}/${iso.slice(8,10)}/scorta-${iso.replaceAll(':','-')}.sqlite.enc`;
 }
 const objectUrl=(endpoint,bucket,key)=>endpoint.replace(/\/+$/,'')+'/'+encodeURIComponent(bucket)+'/'+encodeKey(key);
-export async function putObject({endpoint,bucket,region,accessKeyId,secretAccessKey},key,body,{date=new Date(),fetchImpl=fetch,contentType='application/octet-stream'}={}){
+export async function putObject({endpoint,bucket,region,accessKeyId,secretAccessKey},key,body,{date=new Date(),fetchImpl=fetch,contentType='application/octet-stream',timeoutMs=120000}={}){
   const url=objectUrl(endpoint,bucket,key);
   const headers=signV4({method:'PUT',url,headers:{'content-type':contentType},payloadHash:sha256(body),accessKeyId,secretAccessKey,region,date});
   delete headers.host;
-  const response=await fetchImpl(url,{method:'PUT',headers,body,signal:AbortSignal.timeout(120000)});
+  const response=await fetchImpl(url,{method:'PUT',headers,body,signal:AbortSignal.timeout(timeoutMs)});
   if(!response.ok)throw Error(`S3 respondió ${response.status}: ${(await response.text().catch(()=>'')).slice(0,300)}`);
   return url;
 }

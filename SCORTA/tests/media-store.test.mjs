@@ -125,7 +125,7 @@ test('BE-30: migración al arrancar: data URL heredados pasan al almacén, el es
   try{assert.deepEqual(again.readPrivate().businesses,state.businesses);assert.deepEqual(again.readPrivate().companies,state.companies);}finally{again.close();}
 });
 
-test('BE-30: /media sirve los mismos bytes con caché inmutable; otra empresa no accede y el catálogo público solo muestra lo publicado',async t=>{
+test('BE-30: /media sirve los mismos bytes con caché revalidable; otra empresa no accede y el catálogo público solo muestra lo publicado',async t=>{
   const p=await legacyPlatform(t),handler=createPlatformHandler({store:p.store,media:p.media});
   const server=createServer((req,res)=>handler(req,res).then(done=>{if(!done){res.statusCode=404;res.end();}}));server.listen(0,'127.0.0.1');await once(server,'listening');closeLater(t,()=>new Promise(r=>{server.close(r);server.closeAllConnections();}));
   const base='http://127.0.0.1:'+server.address().port,get=(path,token,headers={})=>fetch(base+path,{headers:{...headers,...(token?{cookie:'scorta_platform='+token}:{})}});
@@ -134,12 +134,12 @@ test('BE-30: /media sirve los mismos bytes con caché inmutable; otra empresa no
   const aceite=session.state.prods.find(x=>x.nombre==='Aceite'),agotado=session.state.prods.find(x=>x.nombre==='Agotado');
   assert.match(aceite.foto,/^\/media\/[^/]+\/[a-f0-9]{64}\.png$/);assert.match(session.session.company.logo,/^\/media\//);
   let r=await get(aceite.foto,p.adminA);
-  assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png');assert.equal(r.headers.get('cache-control'),'private, max-age=31536000, immutable');
+  assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png');assert.equal(r.headers.get('cache-control'),'private, no-cache');
   assert.deepEqual(Buffer.from(await r.arrayBuffer()),p.images.photo,'bytes idénticos');
   const etag=r.headers.get('etag');assert.equal((await get(aceite.foto,p.adminA,{'if-none-match':etag})).status,304);
   assert.equal((await fetch(base+aceite.foto,{method:'HEAD',headers:{cookie:'scorta_platform='+p.adminA}})).status,200);
-  // Sin sesión (catálogo apagado): 401. Otra empresa: 404, igual que una imagen inexistente.
-  assert.equal((await get(aceite.foto)).status,401);
+  // Sin sesión (catálogo apagado), con una sesión inventada u otra empresa: 404, igual que una imagen inexistente (SEG-10).
+  assert.equal((await get(aceite.foto)).status,404);assert.equal((await get(aceite.foto,'x'.repeat(43))).status,404);
   assert.equal((await get(aceite.foto,p.adminB)).status,404);
   assert.equal((await get(session.session.company.logo,p.adminB)).status,404);
   assert.equal((await get('/media/'+p.companyA.id+'/'+'0'.repeat(64)+'.png',p.adminA)).status,404);
@@ -150,16 +150,16 @@ test('BE-30: /media sirve los mismos bytes con caché inmutable; otra empresa no
   assert.equal((await get(aceite.foto,p.ownerToken)).status,404);
   // Catálogo publicado: la foto del producto visible y el logo son públicos; el agotado no.
   const published=await p.action(p.adminA,{type:'catalog.update',form:{enabled:true}});assert.equal(published.status,200,JSON.stringify(published.body));
-  r=await get(aceite.foto);assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'public, max-age=31536000, immutable');assert.deepEqual(Buffer.from(await r.arrayBuffer()),p.images.photo);
+  r=await get(aceite.foto);assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'public, max-age=3600');assert.deepEqual(Buffer.from(await r.arrayBuffer()),p.images.photo);
   assert.equal((await get(session.session.company.logo)).status,200);
-  assert.equal((await get(agotado.foto)).status,401,'un producto fuera del catálogo sigue privado');
+  assert.equal((await get(agotado.foto)).status,404,'un producto fuera del catálogo sigue privado');
   assert.equal((await get(agotado.foto,p.adminA)).status,200);
   const catalog=await (await get('/api/v2/catalog/'+p.companyA.slug)).json();
   assert.equal(catalog.products.find(x=>x.nombre==='Aceite').foto,aceite.foto);assert.equal(catalog.company.logo,session.session.company.logo);
   r=await get('/api/v2/catalog/'+p.companyA.slug+'/logo');assert.equal(r.status,200);assert.deepEqual(Buffer.from(await r.arrayBuffer()),p.images.logoA);
   r=await get('/api/v2/catalog/'+p.companyA.slug+'/photo/'+aceite.id);assert.equal(r.status,200);assert.deepEqual(Buffer.from(await r.arrayBuffer()),p.images.photo);
   // Catálogo apagado otra vez: vuelve a ser privado.
-  await p.action(p.adminA,{type:'catalog.update',form:{enabled:false}});assert.equal((await get(aceite.foto)).status,401);
+  await p.action(p.adminA,{type:'catalog.update',form:{enabled:false}});assert.equal((await get(aceite.foto)).status,404);
   assert.equal((await fetch(base+aceite.foto,{method:'POST'})).status,405);
 });
 
