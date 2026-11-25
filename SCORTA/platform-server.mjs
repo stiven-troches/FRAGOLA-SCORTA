@@ -96,7 +96,7 @@ export const ipHeaderDiagnostics=req=>({level:'info',at:new Date().toISOString()
 // configurado Y SCORTA_PUBLIC_URL (el enlace nunca se arma con la cabecera Host del cliente).
 // Se envían después de confirmar la escritura y sin esperar, para que el tiempo de respuesta
 // no revele si la cuenta existe.
-export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null}={}){
+export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null,serverStatus=null}={}){
   const mailEnabled=!!(mailer?.enabled&&publicUrl),resetBaseUrl=publicUrl?new URL(publicUrl).origin:undefined;
   const limitedPaths=new Set(['/api/v2/login','/api/v2/password/forgot','/api/v2/password/reset']);
   const cookie=(value,age)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${production?'; Secure':''}`;
@@ -119,6 +119,18 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){json(res,415,{error:'La solicitud debe utilizar JSON'});return true;}
       }
       if(!store){json(res,503,{error:'Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',code:'SETUP_REQUIRED'});return true;}
+      // OPS-19: estado del servidor para el panel del propietario (solo lectura). Exige la
+      // sesión del propietario fuera de soporte; nunca usa ni expone SCORTA_HEALTH_TOKEN.
+      if(path==='/api/v2/owner/server-status'){
+        if(req.method!=='GET'){json(res,405,{error:'Método no permitido'});return true;}
+        if(typeof serverStatus!=='function'){json(res,404,{error:'Ruta inexistente',code:'NOT_FOUND'});return true;}
+        const raw=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        const session=await store.request({method:'GET',path:'/api/v2/session',token:/^[A-Za-z0-9_-]{43}$/.test(raw||'')?raw:null,clientKey:clientAddress(req)},{...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{})});
+        if(session.status!==200){if(session.status===401&&raw)res.setHeader('Set-Cookie',cookie('',0));json(res,session.status,{error:session.body?.error||'Tu sesión terminó.',...(session.body?.code?{code:session.body.code}:{})});return true;}
+        const s=session.body.session;
+        if(s?.role!=='owner'||s.companyId||s.mustChangePassword||requireOwnerTwoFactor&&!s.twoFactorEnabled){json(res,403,{error:'Solo el propietario de la plataforma puede ver el estado del servidor.',code:'FORBIDDEN'});return true;}
+        sendJson(req,res,200,{status:await serverStatus()});return true;
+      }
       // Catálogo público (sin sesión): tope por origen para que nadie sature la cola de la plataforma.
       if(path.startsWith('/api/v2/catalog/')){
         const timestamp=Number(clock()),checkout=req.method==='POST',limit=checkout?catalogCheckoutLimit:catalogReadLimit,bucket=checkout?catalogCheckouts:catalogReads;
