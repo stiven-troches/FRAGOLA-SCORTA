@@ -13,7 +13,7 @@ Actualizada: 2026-11-25, después de la auditoría tarea por tarea contra el có
 | Técnicas de la fase de crecimiento (Postgres) | 17 |
 | Tareas tuyas | 52 (ver abajo) |
 
-**Pruebas:** 496 de 497 pasan (1 omitida a propósito: la credencial privada de JE). Compilan la app y la demo.
+**Pruebas:** 505 de 506 pasan (1 omitida a propósito: la credencial privada de JE). Compilan la app y la demo.
 
 ---
 
@@ -27,7 +27,7 @@ Actualizada: 2026-11-25, después de la auditoría tarea por tarea contra el có
 
 **DevOps:** OPS-08, OPS-10, OPS-12, OPS-14, OPS-17, OPS-19 (tarjeta «Estado del servidor»), OPS-20, OPS-21 (`SCORTA/docs/SALIDA-DE-RENDER.md`). El código de OPS-01, OPS-03 y OPS-09 está listo; falta crear las cuentas. Ensayo de restauración automático: `npm run ensayo:restauracion` (OK el 2026-11-25).
 
-**Seguridad:** SEG-01, SEG-03, SEG-06 a SEG-09, SEG-12, SEG-13. SEG-10 (revisión interna): ver la sección 4.
+**Seguridad:** SEG-01, SEG-03, SEG-06 a SEG-10, SEG-12, SEG-13 (SEG-10: ver la sección 4).
 
 **QA:** QA-01 a QA-06, QA-08 a QA-10, QA-12, QA-13.
 
@@ -72,7 +72,7 @@ Siguiente paso recomendado cuando llegue: contratar Postgres en Render (US-46) �
 
 ## 4. Revisión interna de seguridad (SEG-10)
 
-Resultado de la revisión del 2026-11-25 sobre la rama `release/pendientes-lanzamiento`: ver `SCORTA/docs/seguridad.md` (sección «Revisión interna 2026-11-25»).
+✅ Hecha el 2026-11-25 sobre la rama `release/pendientes-lanzamiento`. Sin hallazgos de severidad alta. Se corrigieron los 6 puntos encontrados: límite de peticiones en `/media`, cabeceras de caché de imágenes, alertas de fuerza bruta que un señuelo podía silenciar, subidas a R2 que frenaban las escrituras, 404 en vez de 401 en `/media` y fotos en los resultados de búsqueda. Detalle en `SCORTA/docs/seguridad.md` (sección «Revisión interna 2026-11-25 (SEG-10)»). Queda la prueba externa (SEG-11) antes de 10 clientes.
 
 ---
 
