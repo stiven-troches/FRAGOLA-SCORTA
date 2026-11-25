@@ -16,7 +16,8 @@
     "build:demo": "vite build --mode demo && node scripts/finalize-demo.mjs",
     "preview:demo": "vite preview --outDir dist-demo --host 127.0.0.1 --port 4173",
     "test:demo:ui": "playwright test --config playwright.demo.config.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "capturas": "node scripts/capturas.mjs"
   },
   "dependencies": {
     "exceljs": "4.4.0",

@@ -53,8 +53,8 @@ La captura inicial mostró transitoriamente el resaltado de la sección anterior
 
 Evidencia visual final:
 
-- [Inventario de escritorio](capturas/inventario-claro-escritorio.png).
-- [Inventario móvil](capturas/inventario-claro-movil.png).
+- [Inventario de escritorio](historico/capturas-anteriores/inventario-claro-escritorio.png).
+- [Inventario móvil](historico/capturas-anteriores/inventario-claro-movil.png).
 - Se revisó además la captura con categoría y marca activas y el panel cerrado.
 
 La coordinación confirmó **32/32 pruebas del servidor, 30/30 recorridos de interfaz y compilación aprobados**. La dirección de diseño inspeccionó las imágenes y el código; no atribuye esos recorridos a una prueba personal con operadores del almacén.
