@@ -1,10 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import {consultarProductos, consultarMovimientos} from '../consultas.mjs';
-import {openStore} from '../server.mjs';
+import {memoryStore} from './memory-store.mjs';
 
 const state = {revision: 8, prods: [
   {id:'a',nombre:'Aceite 770',referencia:'A1',marca:'Motúl',modelo:'10W',compatibilidad:'Yamaha',codigo_barras:'12',categoria:'Aceites',stock:5,stock_minimo:2,precio_venta:30},
@@ -47,7 +44,7 @@ test('historial respeta día colombiano, usuario, producto y fechas válidas', (
 });
 
 test('movimientos nuevos conservan usuario, saldo, documento y reintentos únicos', () => {
-  const dir=mkdtempSync(join(tmpdir(),'scorta-consultas-')),store=openStore(join(dir,'store.sqlite'));
+  const store=memoryStore();
   try {
     let s=store.change({kind:'producto',revision:0,form:{nombre:'Casco',stock:5,precio_venta:100}},'ana');
     const p=s.prods[0];
@@ -63,5 +60,5 @@ test('movimientos nuevos conservan usuario, saldo, documento y reintentos único
     assert.deepEqual([s.movimientos[0].stock_antes,s.movimientos[0].stock_despues,s.movimientos[0].tipo_documento,s.movimientos[0].documento],[3,4,'venta',saleId]);
     s=store.change({kind:'ajuste',revision:s.revision,id:p.id,form:{stock:3,motivo:'Conteo físico'}},'admin');
     assert.deepEqual([s.movimientos[0].stock_antes,s.movimientos[0].stock_despues,s.movimientos[0].cantidad],[4,3,-1]);
-  } finally {store.close();rmSync(dir,{recursive:true,force:true});}
+  } finally {store.close();}
 });

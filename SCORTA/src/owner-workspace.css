@@ -21,6 +21,7 @@
 .ow-badge-idle{margin-left:8px;background:#fff1e0;color:#8a4600;border:1px solid #f0c48f}
 .ow-security{margin-top:24px}.ow-security-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.ow-security-list li{display:grid;grid-template-columns:minmax(0,14rem) minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:10px 12px;border:1px solid #e6e6e6;border-radius:10px;background:#fff}.ow-security-type{font-weight:700}.ow-security-login_failures{color:#a12a1f}.ow-security-list time{font-size:.8125rem;color:#5b5b5b;white-space:nowrap}
 @media(max-width:640px){.ow-security-list li{grid-template-columns:1fr}}
+.ow-server{margin-top:24px}.ow-server-ok,.ow-server-warning{margin:0 0 12px;font-weight:600}.ow-server-ok{color:#1f6f3a}.ow-server-warning{color:#a12a1f}
 .ow-usage{margin-top:14px}.ow-check{display:flex;gap:10px;align-items:flex-start;margin:12px 0}.ow-check input{width:22px;height:22px;flex:none}
 .ow-danger-panel h3{margin:18px 0 6px;font-size:1rem}
 .ow-plan-features{border:1px solid #dedede;border-radius:10px;padding:8px 14px;margin:12px 0}.ow-plan-features legend{font-weight:700;padding:0 6px}

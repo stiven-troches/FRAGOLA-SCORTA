@@ -35,7 +35,7 @@ Puntos clave:
 
 - **Una sola base**: `platform.sqlite` guarda todo. Si se daña o se pierde, se pierden todas las empresas hasta restaurar.
 - **Una sola instancia**: con disco, Render no permite varias instancias ni deploys sin corte. Cada deploy corta el servicio entre unos segundos y un par de minutos.
-- **`motoshop.sqlite`** es la base heredada. El servidor todavía la abre, pero la plataforma no la usa. Los comandos `backup.mjs` y `restore.mjs` solo sirven para esa base: **no respaldan la plataforma**.
+- **`motoshop.sqlite`** es la base del modo antiguo, ya retirado (BE-38). El servidor solo la lee una vez, sin modificarla, si al preparar una plataforma nueva todavía existe, para copiar sus datos comerciales a «Almacén principal». Después puedes archivarla. No hay rutas `/api/*` heredadas ni comandos `backup.mjs`/`restore.mjs`: usa `platform-backup.mjs`.
 - **GitHub** guarda el código y corre las pruebas (CI). No guarda datos de clientes.
 
 ---
@@ -65,7 +65,7 @@ Se configuran en Render → servicio → *Environment*. Las marcadas como **secr
 | `SCORTA_OWNER_USER` | usuario del propietario | Cambia el valor por defecto (`Steven`) (US-10). |
 | `SCORTA_OWNER_NAME` | nombre visible | |
 | `SCORTA_OWNER_PASSWORD` | **secreto** | Solo crea al propietario cuando la base es nueva. **Bórrala de Render después del primer arranque** (ver [SECRETOS.md](SECRETOS.md)). Cambiarla después no cambia la contraseña. |
-| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». |
+| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». `SCORTA_OWNER_EMAIL` además recibe las alertas por correo (sección 6). |
 
 ### IP real del cliente (límite de intentos)
 
@@ -111,9 +111,7 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 - El log muestra `mail-config` al arrancar (`enabled:true|false`), `mail-sent` y `mail-failed` con el destinatario enmascarado (`l***@dominio.com`). Si aparece `mail-failed`, revisa la llave, el dominio verificado y el panel de Resend.
 - Prueba tras configurar: entra, verifica tu correo en «Mi perfil», cierra sesión y usa «¿Olvidaste tu contraseña?».
 
-### Solo para el servidor heredado
-
-`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` crean el primer usuario de `motoshop.sqlite`. No hacen falta en la plataforma multiempresa.
+`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` eran del modo antiguo «motoshop», retirado (BE-38). Ya no se usan: bórralas de Render si siguen definidas.
 
 ### Ajustes del servicio en Render
 
@@ -174,7 +172,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    - Si el problema empezó con el último deploy: usa el más reciente de `DATA_DIR/backups/startup-*.sqlite` (ya está descifrado y en el disco).
    - Si no: en el panel de R2, entra al bucket, al prefijo y a la fecha, y elige el último archivo `.sqlite.enc` **anterior** al problema. Anota su nombre y hora.
 3. **Activa el mantenimiento.** Render → *Environment* → `SCORTA_MAINTENANCE=1` → *Save*. Render reinicia el servicio sin abrir la base.
-4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **503 a propósito**: UptimeRobot avisará (es esperado; pausa el monitor) y Render puede marcar el deploy como fallido. Si Render no deja el servicio arriba, borra temporalmente el *Health Check Path* y vuelve a ponerlo al terminar (paso 9).
+4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **200** con `{"ok":false,"maintenance":true}` para que Render no marque el deploy como fallido; la app y `/api/*` responden 503. UptimeRobot no avisará por el código HTTP: pausa el monitor durante la restauración y reactívalo al terminar (paso 9).
 5. **Entra por Render Shell** (servicio → *Shell*).
 6. **Lleva el respaldo al disco** (si viene de R2). Descárgalo desde el panel de R2 a tu PC y súbelo al servidor, o usa una URL temporal firmada de R2 con `curl -o "$DATA_DIR/restaurar.sqlite.enc" '<url-firmada>'`. La URL firmada debe vencer en minutos.
 7. **Descifra:**
@@ -188,7 +186,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    node platform-backup.mjs restore $DATA_DIR/restaurar.sqlite $DATA_DIR/platform.sqlite --offline
    ```
    El comando valida el respaldo, guarda la base anterior como `platform.sqlite.previous-<número>`, borra las sesiones y las ventas pendientes del respaldo y elimina archivos `-wal`/`-shm` vacíos. Si dice que hay archivos WAL/SHM con datos o que la plataforma está abierta, **detente**: el servicio no está en mantenimiento.
-9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Si quitaste el *Health Check Path*, vuelve a poner `/healthz` y reactiva el monitor de UptimeRobot.
+9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Reactiva el monitor de UptimeRobot.
 10. **Verifica:**
     - `https://<dominio>/healthz` responde 200.
     - Entras como propietario y ves todas las empresas.
@@ -212,7 +210,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
 | Errores del servidor | Logs de Render | Busca `"level":"error"`, `offsite-backup-failed`, `offsite-backup-disabled`. Render guarda pocos días: envíalos a un servicio externo cuando se pueda (OPS-07). | Revisión semanal |
 | Gasto | Render y Cloudflare | Alerta de facturación (US-45). | Correo del dueño |
 
-`/healthz` responde 200 si la base abre bien y 503 si no (también 503 en modo mantenimiento, con `"maintenance":true`). Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
+`/healthz` responde 200 si la base abre bien y 503 si no. En modo mantenimiento responde 200 a propósito, con `"ok":false` y `"maintenance":true`, para que el *Health Check* de Render no falle mientras restauras. Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
 
 ```powershell
 curl.exe -H "Authorization: Bearer TU_TOKEN" https://<dominio>/healthz
@@ -230,6 +228,10 @@ El detalle incluye:
 | `warning` | `true` si el disco supera 80 % o el estado supera 20 MB |
 
 Consúltalo con el token una vez por semana y revisa `warning` y `lastBackup`.
+
+El mismo detalle se ve sin token en el panel del propietario, tarjeta **«Estado del servidor»** (OPS-19): la sirve `GET /api/v2/owner/server-status`, que exige la sesión del propietario (con la verificación en dos pasos cuando es obligatoria) y separa el último respaldo local y el externo.
+
+**Alertas por correo (BE-11, BE-33, OPS-07).** Si el correo está configurado (Resend o webhook, sección 2) y `SCORTA_OWNER_EMAIL` tiene un correo válido, el servidor también envía al propietario estas alertas: capacidad (`capacity-warning`, revisada cada 15 minutos), muchos intentos fallidos de ingreso, ingreso del propietario desde un origen nuevo, inicio de un modo soporte, fallo del respaldo externo (`offsite-backup-failed`) y una ráfaga de errores del servidor (10 respuestas 5xx en 5 minutos; el umbral se cambia con `SCORTA_ALERT_5XX_THRESHOLD`). Llega como máximo un correo por tipo de alerta cada hora. El correo nunca lleva llaves, cookies, IP ni datos de clientes de los almacenes. El log muestra `alert-mail-config` al arrancar y `alert-mail-sent`, `alert-mail-throttled` o `alert-mail-failed`. Sin correo configurado, las alertas siguen solo en el log y en el panel del propietario.
 
 Eventos útiles en el log de Render: `capacity-warning` (disco > 80 % o estado > 20 MB), `startup-backup` (copia local al arrancar), `offsite-backup-enabled`, `offsite-backup`, `offsite-backup-failed`, `offsite-backup-disabled`, `maintenance-mode`. Las líneas de peticiones guardan método, ruta, estado y duración; **no guardan la IP** salvo que actives `SCORTA_LOG_IP_HEADERS=1`.
 
