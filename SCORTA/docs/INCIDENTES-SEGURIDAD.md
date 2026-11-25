@@ -14,8 +14,8 @@ Abre el **registro del incidente** (una nota con fecha) y escribe: hora, quién 
 
 1. **Cierra las sesiones.**
    - Una cuenta: restablece su contraseña desde el panel del propietario (cierra sus sesiones) o desactívala.
-   - Una empresa: inhabilítala desde el panel del propietario.
-   - Toda la plataforma: activa `SCORTA_MAINTENANCE=1` en Render. Al volver, restaurar o rotar sesiones obliga a todos a entrar de nuevo. (BE-12 añadirá «revocar todas las sesiones» con un clic).
+   - Una empresa: en el panel del propietario, **Cerrar sesiones de la empresa** (BE-12); si hace falta impedir el ingreso, inhabilítala.
+   - Toda la plataforma: en el panel del propietario, **Cerrar todas las sesiones** (BE-12; tu sesión actual sigue abierta). Si no confías en la cuenta del propietario, activa `SCORTA_MAINTENANCE=1` en Render.
 2. **Si el atacante pudo tener el propietario:** cambia su contraseña y la del correo, revisa 2FA, y revisa la auditoría de «soporte_inicio» en cada empresa.
 3. **Si no sabes el alcance:** pon el servicio en mantenimiento. Es preferible cortar unas horas a seguir exponiendo datos.
 4. **Conserva evidencia:** descarga los logs de Render del período, guarda una copia de `platform.sqlite` (ver OPERACION.md 7.3, paso 3) y capturas. No borres nada.
@@ -73,3 +73,74 @@ Hazlo en el **staging** o solo «en papel», nunca rotando de verdad las llaves 
 | Fecha | Participantes | Duración real | Hallazgos |
 |---|---|---|---|
 | | | | |
+
+---
+
+## Ejercicio de mesa: contraseña del propietario filtrada (30 minutos)
+
+Ejercicio **en papel**: nadie toca producción. Se lee cada escena en voz alta, el responsable dice qué haría y dónde lo haría, y el facilitador compara con las acciones esperadas. Sirve para comprobar que este plan, [seguridad.md](seguridad.md) y [SECRETOS.md](SECRETOS.md) alcanzan para actuar sin improvisar.
+
+**Roles:** facilitador (lee las escenas y toma el tiempo), responsable (el dueño, decide) y anotador (llena el registro). Con dos personas, el facilitador también anota.
+
+**Material:** este documento, [seguridad.md](seguridad.md), [SECRETOS.md](SECRETOS.md), [OPERACION.md](OPERACION.md), el panel del propietario de **staging** abierto (para señalar botones, no para pulsarlos en producción) y un reloj.
+
+### Escena 1 (minuto 0): el aviso
+
+> Un lunes a las 8:10 a. m. te llega un correo de un servicio de alertas de filtraciones: tu correo de propietario aparece en una lista publicada con una contraseña en texto claro. Es la misma contraseña que usas en SCORTA. En el panel del propietario, *Eventos de seguridad* muestra a las 3:42 a. m. «Intentos fallidos de ingreso» contra tu usuario y a las 3:47 a. m. «Ingreso del propietario desde un origen nuevo».
+
+Preguntas: ¿Es un incidente de seguridad o una falsa alarma? ¿Qué haces en los primeros 10 minutos?
+
+**Acciones esperadas (10 min):**
+
+1. Abrir el registro del incidente con hora, fuente (correo de alerta) y lo visto en *Eventos de seguridad*.
+2. Tratarlo como incidente: hubo un ingreso desde un origen nuevo que no reconoces. La 2FA es obligatoria en producción (SEG-01), así que ese ingreso **también necesitó un código válido**: suponer que el atacante tiene la contraseña y quizá el segundo factor.
+3. Cambiar la contraseña del propietario (cierra todas sus sesiones) por una nueva, única, del gestor de contraseñas.
+4. **Cerrar todas las sesiones** de la plataforma desde el panel (BE-12).
+5. Cambiar la contraseña del correo del propietario y revisar que tenga 2FA: es el canal de recuperación (SEG-13).
+6. Cambiar esa misma contraseña en cualquier otro servicio donde se reutilizó (Render, GitHub, Cloudflare, R2, el gestor de correo).
+
+### Escena 2 (minuto 10): qué hizo el intruso
+
+> Al revisar la auditoría de las empresas ves que a las 3:49 a. m. alguien inició **modo soporte** en «Repuestos El Centro» con el motivo «revisión». Tú no lo hiciste. La sesión duró 25 minutos. En la auditoría de la plataforma aparece, a las 4:05 a. m., una exportación completa de esa empresa (`company.export`).
+
+Preguntas: ¿El segundo factor está comprometido? ¿Qué datos pudieron salir y de quién? ¿Hay que parar el servicio?
+
+**Acciones esperadas (10 min):**
+
+1. Asumir el segundo factor comprometido: rehacer la 2FA del propietario (retirar `totp` del usuario con acceso directo a la base, como indica [seguridad.md](seguridad.md#verificación-en-dos-pasos-2fa-del-propietario), y activarla de nuevo con un celular de confianza). Revisar si el secreto TOTP estaba en una copia en la nube del celular.
+2. Decidir el mantenimiento: si no se puede asegurar la cuenta del propietario en minutos, activar `SCORTA_MAINTENANCE=1` en Render. Anotar la decisión y el porqué.
+3. Conservar evidencia antes de cambiar más cosas: logs de Render del período (3:30–4:30 a. m.), copia de `platform.sqlite`, capturas de *Eventos de seguridad* y de la auditoría de la empresa.
+4. Determinar el alcance: «Repuestos El Centro» (exportación completa: clientes con nombre, teléfono y placas, ventas). Revisar la auditoría de **todas** las demás empresas por `soporte_inicio` desde las 3:42 a. m.
+5. Revisar si el intruso cambió algo en la plataforma: usuarios nuevos, restablecimientos de contraseña, empresas habilitadas o inhabilitadas, pagos registrados.
+
+### Escena 3 (minuto 20): avisar y cerrar
+
+> Son las 8:40 a. m. El administrador de «Repuestos El Centro» te escribe: vio el aviso «El soporte de SCORTA está trabajando en tu cuenta» en la madrugada y pregunta qué pasó.
+
+Preguntas: ¿Qué le respondes y cuándo? ¿A quién más avisas? ¿Qué queda pendiente?
+
+**Acciones esperadas (10 min):**
+
+1. Responder al almacén con la plantilla de la sección 5: qué pasó, qué datos de su empresa pudieron salir, qué se hizo y qué le recomiendas (cambiar contraseñas de sus usuarios, estar atento a mensajes extraños a sus clientes).
+2. Llamar al abogado el mismo día; llevar la pregunta de si corresponde reportar a la SIC y en qué plazo. Recordar que el almacén es el responsable de los datos y SCORTA el encargado.
+3. Revisar si hay que rotar llaves según la sección 3 (si el intruso no tuvo acceso a Render ni al correo, las llaves de R2 y de respaldo pueden quedarse; anotar por qué).
+4. Anotar las tareas para no repetirlo (por ejemplo: alerta inmediata por correo cuando el propietario ingresa desde un origen nuevo) y llevarlas a `PENDIENTES-SCORTA.md`.
+
+### Cómo evaluar
+
+| Criterio | Cumple si… |
+|---|---|
+| Tiempo de contención | Contraseña cambiada y sesiones cerradas antes del minuto 10. |
+| Evidencia | Se pensó en guardar logs y base **antes** de restaurar o borrar algo. |
+| Alcance | Se revisaron todas las empresas, no solo la mencionada. |
+| Comunicación | El aviso al almacén salió con la plantilla y sin prometer lo que no se sabe. |
+| Documentación | Cada paso que no estaba escrito o era confuso quedó anotado para corregir este documento. |
+
+### Registro del ejercicio
+
+Llena una fila por cada ejercicio realizado. **Todavía no se ha hecho ninguno**; la fila de ejemplo muestra el formato y no corresponde a un ejercicio real.
+
+| Fecha | Escenario | Participantes | Duración real | Contención antes del min 10 | Faltantes en la documentación | Acciones de mejora (responsable, fecha) |
+|---|---|---|---|---|---|---|
+| *Ejemplo: AAAA-MM-DD* | *Contraseña del propietario filtrada* | *Dueño (responsable), socio (facilitador)* | *34 min* | *Sí (8 min)* | *No estaba claro cómo retirar `totp` desde Render Shell* | *Escribir el comando en seguridad.md (dueño, AAAA-MM-DD)* |
+| | | | | | | |
