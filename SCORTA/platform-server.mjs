@@ -11,9 +11,12 @@ const COOKIE='scorta_platform';
 const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
 // Respuestas de la API: comprimidas si el navegador lo acepta y, en la recarga periódica de
 // datos (GET /api/v2/data), 304 sin cuerpo cuando el contenido no cambió desde la copia del cliente.
+// etag: texto = versión calculada por el motor (BE-29); true = resumen del cuerpo serializado.
+const API_VARY='Accept-Encoding, Cookie, X-SCORTA-Company';
 export function sendJson(req,res,status,body,{etag=false}={}){
-  const text=JSON.stringify(body),headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:'Accept-Encoding, Cookie, X-SCORTA-Company'};
-  if(etag&&status===200){
+  const text=JSON.stringify(body),headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:API_VARY};
+  if(typeof etag==='string'&&status===200)headers.ETag=etag;
+  else if(etag&&status===200){
     headers.ETag='W/"'+createHash('sha256').update(text).digest('base64url').slice(0,32)+'"';
     if(String(req.headers['if-none-match']||'').split(',').map(v=>v.trim()).includes(headers.ETag)){res.writeHead(304,headers);res.end();return;}
   }
@@ -142,7 +145,10 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='));
       const token=match?.slice(COOKIE.length+1);
       const hasContext=Object.hasOwn(req.headers,'x-scorta-company');
-      const result=await store.request({method:req.method,path:path+url.search,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
+      // BE-29: la recarga de datos y las acciones devuelven la versión del sobre; If-None-Match
+      // coincidente en GET /api/v2/data responde 304 sin armar ni enviar el sobre.
+      const versioned=req.method==='GET'&&path==='/api/v2/data'||req.method==='POST'&&path==='/api/v2/action';
+      const result=await store.request({method:req.method,path:path+url.search,body,...(versioned?{etag:true,...(req.method==='GET'&&req.headers['if-none-match']?{ifNoneMatch:String(req.headers['if-none-match'])}:{})}:{}),token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
       if(mailEnabled&&Array.isArray(result.outbox)&&result.outbox.length){const sending=mailer.sendAll(result.outbox).catch(()=>[]);onMail?.(sending);}
       if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
@@ -156,7 +162,8 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return true;}
         res.setHeader('Content-Type',image[1]);res.end(bytes);return true;
       }
-      sendJson(req,res,result.status,result.body,{etag:req.method==='GET'&&path==='/api/v2/data'});return true;
+      if(result.status===304&&versioned){res.writeHead(304,{'Cache-Control':'no-store',Vary:API_VARY,...(result.etag?{ETag:result.etag}:{})});res.end();return true;}
+      sendJson(req,res,result.status,result.body,{etag:versioned&&typeof result.etag==='string'?result.etag:false});return true;
     }catch(error){
       // Expected failures carry a status; anything else is an internal fault: log it
       // and never expose its message (SQLite/Node internals) to the client.
