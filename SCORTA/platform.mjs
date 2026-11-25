@@ -4,7 +4,8 @@ import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './
 import {salesReport} from './admin-reports.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
-import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
+import {readDraft,writeDraft,assertDraftSale,finishDraftSale,draftKey} from './sale-drafts.mjs';
+import {searchProducts,searchSales,searchCustomers} from './platform-search.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 import {moneyAmount,roundMoney,sumMoney} from './money.mjs';
 import {applyCashCreditAction,cashSettings,cleanCashSettings,creditFields,creditAccounts,creditCheck,creditTerms,refundFor,cashMethod} from './caja-credito.mjs';
@@ -231,6 +232,10 @@ function aggregates(business) {
 }
 const maskTail=value=>{const text=String(value||'');return text?'•••'+text.slice(-4):''};
 function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje','costHistory'].includes(key))next[key]=removeCosts(item);return next;}return value;}
+// BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
+const directoryCard=c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})});
+// Ley 1581: el vendedor solo recibe los últimos 4 caracteres del teléfono y del documento.
+const maskedCard=c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true});
 function envelope(state, actor, now, baseUrl) {
   const support=actor.role!=='owner'&&actor.companyId?activeSupport(state,actor.companyId,now):null;
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact,
@@ -245,13 +250,12 @@ function envelope(state, actor, now, baseUrl) {
   business.creditAccounts=creditAccounts(business,dateBogota(now));
   for(const sale of business.ventas||[]){dropReceiptSecret(sale);delete sale.receiptHash;}
   for(const product of business.prods||[])if(isMediaRef(product.foto))product.foto=mediaUrl(product.foto);
-  // BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
-  business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})}));
+  business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(directoryCard);
   if(actor.role==='vendedor'){
     // Ley 1581: el vendedor busca y elige la ficha, pero no recibe el teléfono ni el documento
     // completos de todo el directorio; solo los últimos 4 caracteres. Al cobrar con la ficha,
     // el servidor completa los datos desde el registro.
-    business.customerDirectory=business.customerDirectory.map(c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true}));
+    business.customerDirectory=business.customerDirectory.map(maskedCard);
     business.mechanics=activeMechanics(business);delete business.cashClosures;
     business.compras=[];
     business.ventas=business.ventas.filter(s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username);
@@ -268,6 +272,41 @@ function envelope(state, actor, now, baseUrl) {
   Object.assign(business,aggregates(business));
   business.payableAccounts=payableAccounts(business,dateBogota(now));
   return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:business};
+}
+// BE-29: versión (ETag) del sobre de /api/v2/data para la recarga periódica. Se calcula sin
+// armar el sobre, con todo lo que lo determina para ESTE usuario: identidad, rol, empresa y su
+// estado público, contenido del negocio, tickets visibles, soporte activo, versión del borrador,
+// día de Bogotá y la configuración del servidor. Así el 304 depende solo de los datos de la
+// propia empresa (un cambio en otra empresa no obliga a descargar todo de nuevo) y, como el rol
+// y el usuario forman parte de la versión, la copia de un vendedor nunca valida la de un
+// administrador ni la de otra empresa. El contenido del negocio se resume una vez por objeto:
+// el estado en caché es inmutable y cada escritura produce objetos nuevos. Para el propietario
+// (que ve toda la plataforma) la versión es la identidad del estado guardado.
+const BOOT_TAG=id(),contentTags=new WeakMap(),stateTags=new WeakMap();
+async function contentTag(object){let tag=contentTags.get(object);if(!tag){tag=await hash(JSON.stringify(object));contentTags.set(object,tag);}return tag;}
+function stateTag(state){let tag=stateTags.get(state);if(!tag){tag=id();stateTags.set(state,tag);}return tag;}
+async function dataTag(state,actor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor}){
+  const {company,...who}=actor,parts=[BOOT_TAG,TERMS_VERSION,baseUrl||'',!!mailEnabled,!!requireOwnerTwoFactor,dateBogota(now),who,company?[await contentTag(company),companyStatus(company,now)]:null,state.ownerContact??null];
+  if(actor.role==='owner'&&!actor.support)parts.push('owner',stateTag(state));
+  else{const business=state.businesses[actor.companyId];parts.push('company',business?await contentTag(business):'empty',visibleTickets(state,actor),activeSupport(state,actor.companyId,now),state.saleDrafts?.[draftKey(actor)]?.version??0);}
+  return 'W/"'+(await hash(JSON.stringify(parts))).replace(/[+/=]/g,c=>({'+':'-','/':'_','=':''})[c]).slice(0,32)+'"';
+}
+const tagMatches=(header,tag)=>typeof header==='string'&&header.length<=2000&&header.split(',').some(value=>value.trim()===tag);
+// BE-28: búsqueda paginada (GET /api/v2/search/{products|sales|customers}?q=&offset=&limit=).
+// Mismas reglas del sobre: el vendedor ve solo sus ventas, productos sin costos y clientes con
+// teléfono y documento enmascarados; nadie recibe secretos de comprobantes.
+const lightProduct=p=>{const next={...p};if(typeof next.foto==='string'&&next.foto.startsWith('data:')){delete next.foto;next.hasPhoto=true;}return next;};
+function searchBusiness(state,actor,kind,params){
+  if(!actor.companyId)fail('La búsqueda requiere entrar a una empresa.',403,'FORBIDDEN');
+  const business=state.businesses[actor.companyId]||estadoVacio(),seller=actor.role==='vendedor';
+  let result;
+  if(kind==='products'){result=searchProducts(business.prods||[],params);result.items=result.items.map(p=>{const light=lightProduct(p);return seller?removeCosts(light):structuredClone(light);});}
+  else if(kind==='sales'){
+    const own=s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username;
+    result=searchSales(business.ventas||[],params,seller?{key:actor.id+'|'+actor.username,visible:own}:{});
+    result.items=result.items.map(s=>{const sale=seller?removeCosts(s):structuredClone(s);dropReceiptSecret(sale);delete sale.receiptHash;return sale;});
+  }else result=searchCustomers(business.customerRecords||[],params,seller?{key:'masked',card:c=>maskedCard(directoryCard(c))}:{card:directoryCard});
+  return {...result,revision:business.revision};
 }
 function uniqueUser(state,companyId,username,exceptId) {if(state.users.some(u=>u.companyId===companyId&&norm(u.username)===norm(username)&&u.id!==exceptId))fail('Ese usuario ya existe en esta empresa');}
 function companyForm(state,form,old,now) {
@@ -933,6 +972,14 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(path==='/api/v2/draft'&&method==='GET')return response(200,readDraft(state,actor));
     if(path==='/api/v2/draft'&&method==='POST')return response(200,writeDraft(state,actor,body,stamp(now).getTime()));
+    const search=path.match(/^\/api\/v2\/search\/(products|sales|customers)$/);
+    if(method==='GET'&&search)return response(200,searchBusiness(state,actor,search[1],url.searchParams));
+    // BE-29: con request.etag el sobre lleva su versión; si coincide con If-None-Match, 304 sin cuerpo.
+    if(method==='GET'&&path==='/api/v2/data'&&request.etag){
+      const etag=await dataTag(state,actor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor});
+      if(tagMatches(request.ifNoneMatch,etag))return response(304,null,{etag});
+      return response(200,envelope(state,actor,now,baseUrl),{etag});
+    }
     if(method==='GET'&&(path==='/api/v2/session'||path==='/api/v2/data'))return response(200,envelope(state,actor,now,baseUrl));
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     if(method==='POST'&&path==='/api/v2/password'){
@@ -956,11 +1003,15 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const extra=await applyAction(state,actor,session,body,now,baseUrl,{enforceContext:!!request.enforceContext,requireDataConsent,mailEnabled});
       if(extra.failure)return response(extra.failure.status,{error:extra.failure.error,code:extra.failure.code});
       if(requestKey)state.requests[requestKey]={fingerprint,createdAt:iso(now)};
-      const result=envelope(state,resolveActor(state,session,now),now,baseUrl);
+      const nextActor=resolveActor(state,session,now),result=envelope(state,nextActor,now,baseUrl);
       // SEG-03: the clear receipt link exists only in this response (never stored).
       if(extra.receiptLink){result.receiptLink=extra.receiptLink;const sale=result.state?.ventas?.find(s=>s.id===extra.receiptLink.saleId);if(sale)Object.assign(sale,{receiptToken:extra.receiptLink.token,receiptUrl:extra.receiptLink.url,receiptExpiresAt:extra.receiptLink.expiresAt});}
-      for(const key of ['twoFactorSetup','export','customerExport','revoked','warning','document'])if(Object.hasOwn(extra,key))result[key]=extra[key];
-      return response(200,result,extra.outbox?.length?{outbox:extra.outbox}:{});
+      const extraKeys=['twoFactorSetup','export','customerExport','revoked','warning','document'].filter(key=>Object.hasOwn(extra,key));
+      for(const key of extraKeys)result[key]=extra[key];
+      // BE-29: la respuesta de una acción es el mismo sobre de /api/v2/data; con su versión la
+      // siguiente recarga ya puede responder 304. No se versiona si lleva datos de un solo uso.
+      const tagged=request.etag&&!extra.receiptLink&&!extraKeys.length?{etag:await dataTag(state,nextActor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor})}:{};
+      return response(200,result,{...(extra.outbox?.length?{outbox:extra.outbox}:{}),...tagged});
     }
     fail('Ruta inexistente',404,'NOT_FOUND');
   }catch(error){

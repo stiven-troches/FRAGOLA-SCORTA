@@ -199,3 +199,25 @@ test('Compras: el producto se busca por nombre, referencia o código y Enter eli
   assert.match(text(h.tree),/1 × Pastillas de freno/);
  }finally{h.dispose()}
 });
+
+test('BE-28: con catálogo grande, inventario y Nueva venta buscan en el servidor por páginas',async()=>{
+ const many=Array.from({length:1600},(_,i)=>({...product,id:'p'+i,nombre:'Producto '+String(i).padStart(4,'0'),referencia:'R'+i}));
+ const calls=[],original=globalThis.fetch,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ globalThis.fetch=async(url,init)=>{calls.push({url,init});const params=new URL(url,'http://x').searchParams,offset=Number(params.get('offset')),limit=Number(params.get('limit'));
+  const rows=params.get('q')==='r7'?[{id:'p7',nombre:'Servidor 7',stock:40}]:many.slice(0,1234).map(p=>({id:p.id,nombre:'Servidor '+p.id,stock:p.stock}));
+  return {ok:true,json:async()=>({items:rows.slice(offset,offset+limit),total:rows.length,offset,limit,nextOffset:offset+limit<rows.length?offset+limit:null})}};
+ const h=harness({data:baseData({prods:many})});
+ try{
+  await h.settle();
+  const sale=()=>nodes(h.tree,n=>n.type==='input'&&n.props['aria-label']==='Buscar producto para agregar al carrito')[0];
+  sale().props.onChange({target:{value:'r7'}});await h.settle();await wait(200);await h.settle();
+  assert.ok(calls.some(c=>c.url==='/api/v2/search/products?q=r7&offset=0&limit=8'&&c.init.headers['X-SCORTA-Company']==='company-1'));
+  assert.match(text(h.tree),/Producto 0007/,'muestra la copia local del producto encontrado');
+  calls.length=0;click(h,'Inventario');await h.settle();await wait(300);await h.settle();
+  assert.equal(calls[0].url,'/api/v2/search/products?offset=0&limit=100');
+  assert.match(text(h.tree),/1234 de 1600 productos/);assert.match(text(h.tree),/1134 restantes/);
+  calls.length=0;click(h,'Mostrar más (1134 restantes)');await h.settle();await wait(50);await h.settle();
+  assert.deepEqual(calls.map(c=>c.url),['/api/v2/search/products?offset=100&limit=100'],'solo pide la página que falta');
+  assert.match(text(h.tree),/1034 restantes/);
+ }finally{h.dispose();globalThis.fetch=original}
+});
