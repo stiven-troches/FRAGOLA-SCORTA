@@ -8,6 +8,8 @@ async function editProduct(page,scenario){
  await page.getByText('Referencia, clasificación, costo y foto',{exact:true}).click();
  return page.getByRole('dialog',{name:'Producto',exact:true});
 }
+// BE-30: la foto se guarda fuera de la base; el estado trae la URL /media/... y se compara el contenido servido.
+const mediaBase64=(page,url)=>page.evaluate(async url=>{const r=await fetch(url);if(!r.ok)throw Error('media '+r.status);const b=new Uint8Array(await r.arrayBuffer());let s='';for(const x of b)s+=String.fromCharCode(x);return btoa(s);},url);
 async function fakeCamera(page,{deferred=false}={}){
  await page.addInitScript(({deferred})=>{
   window.photoTracks=[];
@@ -44,7 +46,9 @@ test('foto de producto: cámara, repetir, guardar y cargar archivo',async({page,
  expect(cameraPhoto.length).toBeLessThan(666000);
  await dialog.getByRole('button',{name:'Guardar producto',exact:true}).click();
  await expect(dialog).not.toBeVisible();
- expect((await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).foto).toBe(cameraPhoto);
+ const savedPhoto=(await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).foto;
+ expect(savedPhoto).toMatch(/^\/media\/[\w-]+\/[0-9a-f]{64}\.(jpg|png|webp)$/);
+ expect(await mediaBase64(page,savedPhoto)).toBe(cameraPhoto.split(',')[1]);
  // El selector de archivos sigue disponible y permite elegir el mismo archivo otra vez.
  await page.locator('.cw-product-link').filter({hasText:scenario.product.nombre}).click();
  await page.getByRole('button',{name:'Editar producto',exact:true}).click();
@@ -60,7 +64,9 @@ test('foto de producto: cámara, repetir, guardar y cargar archivo',async({page,
   await expect(dialog.getByAltText('Vista previa del producto')).not.toHaveAttribute('src',cameraPhoto);
  }
  await dialog.getByRole('button',{name:'Guardar producto',exact:true}).click();await expect(dialog).not.toBeVisible();
- expect((await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).foto.length).toBeLessThan(666000);
+ const filePhoto=(await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).foto;
+ expect(filePhoto).toMatch(/^\/media\//);expect(filePhoto).not.toBe(savedPhoto);
+ expect((await mediaBase64(page,filePhoto)).length).toBeLessThan(666000);
 });
 
 test('cámara denegada ofrece cargar foto y permite guardar sin cambiarla',async({page,scenario})=>{
