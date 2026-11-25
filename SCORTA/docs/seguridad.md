@@ -93,7 +93,7 @@ El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 d�
 
 | ID | Tema |
 |---|---|
-| SEG-10 / SEG-11 | Revisión interna antes del 2.º cliente y prueba de intrusión antes de 10 |
+| SEG-11 | Prueba de intrusión externa antes de 10 clientes (SEG-10, la revisión interna, ya se hizo: ver al final) |
 | US-41 | Reforzar el hash de contraseñas (hoy PBKDF2-SHA256 con 120.000 iteraciones); espera tu decisión |
 
 ### Ya implementados (antes figuraban aquí)
@@ -115,3 +115,20 @@ El modo antiguo «motoshop» (`/api/login`, `auth.mjs`) fue retirado (BE-38): ya
 ## Pruebas
 
 `npm test` incluye, entre otras, `tests/auth.test.mjs`, `tests/audit-api-security.test.mjs`, `tests/platform-hardening.test.mjs` y `tests/correcciones-2026-11-20.test.mjs`, que cubren sesiones, permisos, origen, límite de intentos, cabeceras y aislamiento entre empresas.
+
+## Revisión interna 2026-11-25 (SEG-10)
+
+**Alcance**: imágenes fuera de la base (`/media`, R2/disco, migración), búsqueda paginada (`/api/v2/search/*`), versión del sobre con `ETag`/304, exportación de datos de una empresa (`customer.export`), estado del servidor del propietario (`/api/v2/owner/server-status`), alertas por correo, retiro del servidor heredado (`/api`) y protección CSRF (origen + JSON + `SameSite=Strict`).
+
+**Resultado**: sin hallazgos de severidad alta. Seis puntos, todos corregidos (pruebas en `tests/seg10-revision.test.mjs`):
+
+| # | Severidad | Hallazgo | Corrección |
+|---|---|---|---|
+| 1 | Media | `GET /media/...` sin tope por origen; cada petición anónima recorría el catálogo, leía el archivo y calculaba su sha256 (o pedía a R2). | Mismo tope por origen que las lecturas del catálogo (600/min, 429 + `Retry-After`); un `If-None-Match` coincidente responde 304 sin leer el archivo; en disco la huella se verifica una vez por archivo (tamaño + fecha). |
+| 2 | Baja | Imágenes públicas con `max-age=31536000, immutable`, aunque dejan de ser públicas al archivar/agotar el producto, apagar el catálogo o eliminar la empresa. | Públicas `public, max-age=3600`; privadas `private, no-cache` (revalidan con `ETag`). |
+| 3 | Baja | Alertas limitadas a un correo por tipo y hora: un ataque señuelo contra una empresa inventada silenciaba la alerta de un ataque real; el texto del atacante (empresa/usuario, dominios sin `http`) llegaba al correo. | Un correo por tipo + empresa/cuenta real cada hora y máximo 10 por hora en total; empresa o usuario inexistentes se muestran como «(empresa inexistente)» / «(usuario inexistente)»; `scrub` quita también dominios sueltos. |
+| 4 | Baja (disponibilidad) | La subida de imágenes a R2 ocurría dentro de la cola de escrituras con 120 s de espera, y cada escritura reintentaba en serie todas las imágenes pendientes de todas las empresas. | Espera de 10 s por subida (configurable); cada escritura sube solo sus imágenes; las pendientes se reintentan en segundo plano (fuera de la cola) y al arrancar. Si la subida falla, la escritura se guarda con el data URL. |
+| 5 | Informativa | `/media` respondía 401 sin sesión para una imagen privada existente y 404 para una inexistente (permitía saber si existe). | 404 en ambos casos. |
+| 6 | Error | `/api/v2/search/products` devolvía la referencia interna de la foto (`{mediaId,companyId,type,bytes}`) en vez de la URL. | La búsqueda devuelve la URL `/media/...`, igual que el sobre. |
+
+**Queda para la prueba de intrusión externa (SEG-11)**: pruebas de caja negra sobre la instancia publicada (Render + Cloudflare): fuerza bruta y límites detrás del proxy real, aislamiento entre empresas con cuentas reales, cabeceras y TLS, carga de imágenes maliciosas, abuso del catálogo y del checkout públicos, y revisión de la configuración de R2, correo y respaldos externos.
