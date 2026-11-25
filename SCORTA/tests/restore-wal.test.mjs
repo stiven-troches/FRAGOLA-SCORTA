@@ -4,8 +4,6 @@ import {DatabaseSync} from 'node:sqlite';
 import {mkdtempSync,rmSync,statSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {openStore} from '../server.mjs';
-import {restoreBackup} from '../restore.mjs';
 import {restorePlatformBackup} from '../platform-backup.mjs';
 import {validatePlatformDatabase} from '../platform-server.mjs';
 import {estadoVacio} from '../inventory.mjs';
@@ -31,20 +29,4 @@ test('platform restore snapshots committed WAL, preserves the old target and rem
     assert.throws(()=>restorePlatformBackup(source,source,{offline:true}),/diferentes/);
     assert.equal(existsSync(target+'-wal'),false);
   }finally{db?.close();rmSync(dir,{recursive:true,force:true});}
-});
-
-test('legacy restore snapshots a live WAL source including users and idempotency records',()=>{
-  const dir=mkdtempSync(join(tmpdir(),'scorta-legacy-wal-'));
-  const source=join(dir,'source.sqlite'),target=join(dir,'target.sqlite');let store,restored,checkpoint;
-  try{
-    store=openStore(source);store.addUser('audit','Audit.Fixture.2026','admin');
-    let state=store.change({kind:'producto',revision:0,form:{nombre:'Prueba',stock:5,precio_compra:10,precio_venta:20}});
-    checkpoint=new DatabaseSync(source);checkpoint.exec('PRAGMA wal_checkpoint(TRUNCATE)');checkpoint.close();checkpoint=null;
-    const action={kind:'venta',requestId:'retained-sale',revision:state.revision,form:{fecha:'2026-11-20'},items:[{producto_id:state.prods[0].id,cantidad:2,precio_unitario:20}]};
-    state=store.change(action);assert.ok(statSync(source+'-wal').size>0);
-    restoreBackup(source,{target,offline:true});
-    restored=openStore(target);assert.deepEqual(restored.read(),state);assert.equal(restored.verifyUser('audit','Audit.Fixture.2026').role,'admin');
-    assert.deepEqual(restored.change(action),state,'An already committed sale must remain idempotent after restore');
-    assert.deepEqual(store.read(),state,'The live source is unchanged');
-  }finally{checkpoint?.close();restored?.close();store?.close();rmSync(dir,{recursive:true,force:true});}
 });

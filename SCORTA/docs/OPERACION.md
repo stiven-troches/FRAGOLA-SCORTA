@@ -35,7 +35,7 @@ Puntos clave:
 
 - **Una sola base**: `platform.sqlite` guarda todo. Si se daña o se pierde, se pierden todas las empresas hasta restaurar.
 - **Una sola instancia**: con disco, Render no permite varias instancias ni deploys sin corte. Cada deploy corta el servicio entre unos segundos y un par de minutos.
-- **`motoshop.sqlite`** es la base heredada. El servidor todavía la abre, pero la plataforma no la usa. Los comandos `backup.mjs` y `restore.mjs` solo sirven para esa base: **no respaldan la plataforma**.
+- **`motoshop.sqlite`** es la base del modo antiguo, ya retirado (BE-38). El servidor solo la lee una vez, sin modificarla, si al preparar una plataforma nueva todavía existe, para copiar sus datos comerciales a «Almacén principal». Después puedes archivarla. No hay rutas `/api/*` heredadas ni comandos `backup.mjs`/`restore.mjs`: usa `platform-backup.mjs`.
 - **GitHub** guarda el código y corre las pruebas (CI). No guarda datos de clientes.
 
 ---
@@ -111,9 +111,7 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 - El log muestra `mail-config` al arrancar (`enabled:true|false`), `mail-sent` y `mail-failed` con el destinatario enmascarado (`l***@dominio.com`). Si aparece `mail-failed`, revisa la llave, el dominio verificado y el panel de Resend.
 - Prueba tras configurar: entra, verifica tu correo en «Mi perfil», cierra sesión y usa «¿Olvidaste tu contraseña?».
 
-### Solo para el servidor heredado
-
-`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` crean el primer usuario de `motoshop.sqlite`. No hacen falta en la plataforma multiempresa.
+`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` eran del modo antiguo «motoshop», retirado (BE-38). Ya no se usan: bórralas de Render si siguen definidas.
 
 ### Ajustes del servicio en Render
 

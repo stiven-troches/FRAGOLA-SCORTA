@@ -1,11 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import {aplicarCambio, estadoVacio} from '../inventory.mjs';
 import {consultarProductos, consultarMovimientos} from '../consultas.mjs';
-import {openStore} from '../server.mjs';
 
 function freezeTree(value) {
   if (value && typeof value === 'object') {
@@ -78,18 +74,13 @@ test('consultas paginadas funcionan con APIs del navegador sin Buffer de Node', 
   } finally {globalThis.Buffer=previous;}
 });
 
-test('SQLite y motor de demo producen los mismos documentos, saldos e historial durante una jornada', t => {
-  const directory=mkdtempSync(join(tmpdir(),'scorta-shared-'));
-  const store=openStore(join(directory,'test.sqlite'));
-  t.after(()=>{store.close();rmSync(directory,{recursive:true,force:true});});
+test('el motor compartido concilia documentos, saldos e historial durante una jornada', t => {
   t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,12,15)});
   t.mock.method(Math,'random',()=>0.123456789);
   let state=estadoVacio();
   const run=request=>{
     const action={...request,revision:state.revision};
     state=aplicarCambio(state,action,'Demo QA');
-    assert.deepEqual(store.change(action,'Demo QA'),state);
-    assert.deepEqual(store.read(),JSON.parse(JSON.stringify(state)));
     t.mock.timers.tick(1);
   };
   run({kind:'producto',form:{nombre:'Casco',stock:8,precio_venta:1200,precio_compra:500}});

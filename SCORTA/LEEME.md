@@ -84,7 +84,7 @@ El comprobante comercial admite impresión/PDF desde el navegador y HTML imprimi
 
 ## Respaldo y restauración
 
-La plataforma guarda empresas, cuentas, sesiones y operaciones en **`DATA_DIR/platform.sqlite`**. La primera preparación puede copiar los datos comerciales anteriores a «Almacén principal» sin alterar `motoshop.sqlite`; las cuentas anteriores deben recrearse o restablecerse desde el propietario.
+La plataforma guarda empresas, cuentas, sesiones y operaciones en **`DATA_DIR/platform.sqlite`**. Si en `DATA_DIR` todavía existe la base del modo antiguo (`motoshop.sqlite`), la primera preparación de la plataforma la lee una sola vez, sin modificarla, y copia sus datos comerciales a «Almacén principal». Las cuentas anteriores no se migran: créalas desde el propietario. El modo antiguo ya no tiene rutas ni inicio de sesión propios (BE-38).
 
 Para crear un respaldo completo y consistente:
 
@@ -109,7 +109,7 @@ Para restaurar con el servicio detenido (en Render: con `SCORTA_MAINTENANCE=1`, 
 node platform-backup.mjs restore /ruta/respaldo.sqlite /ruta/data/platform.sqlite --offline
 ```
 
-La restauración valida el respaldo, conserva una copia anterior y elimina las sesiones y las ventas pendientes recuperadas. No restaures sobre una instancia en uso. Ensaya la recuperación y comprueba cuentas, empresas y operaciones antes de depender del sistema. Los comandos antiguos `backup.mjs`/`restore.mjs` pertenecen a `motoshop.sqlite`; **no respaldan la plataforma multiempresa**.
+La restauración valida el respaldo, conserva una copia anterior y elimina las sesiones y las ventas pendientes recuperadas. No restaures sobre una instancia en uso. Ensaya la recuperación y comprueba cuentas, empresas y operaciones antes de depender del sistema.
 
 ## Demo y marca
 
