@@ -30,7 +30,7 @@ CREATE TABLE companies (
   address           text NOT NULL DEFAULT '',
   email             text NOT NULL DEFAULT '',
   whatsapp          text NOT NULL DEFAULT '',
-  logo              text NOT NULL DEFAULT '',          -- data URL hoy; BE-30 lo mueve a R2/S3
+  logo              text NOT NULL DEFAULT '',          -- BE-30: referencia JSON {mediaId,...} (R2 o DATA_DIR/media); data URL heredado hasta migrar
   start_date        date NOT NULL,
   end_date          date NOT NULL,
   monthly_fee       numeric(14,2) NOT NULL DEFAULT 0 CHECK (monthly_fee >= 0),
@@ -262,7 +262,7 @@ CREATE TABLE products (
   precio_venta    numeric(14,2) NOT NULL CHECK (precio_venta >= 0),
   stock           bigint NOT NULL DEFAULT 0 CHECK (stock >= 0),  -- BE-27
   stock_minimo    bigint NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
-  foto            text,                                           -- BE-30 lo mueve fuera
+  foto            text,                                           -- BE-30: referencia JSON a media-store, no la imagen
   created_at      timestamptz,
   updated_at      timestamptz,
   extra           jsonb,
