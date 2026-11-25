@@ -172,7 +172,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    - Si el problema empezó con el último deploy: usa el más reciente de `DATA_DIR/backups/startup-*.sqlite` (ya está descifrado y en el disco).
    - Si no: en el panel de R2, entra al bucket, al prefijo y a la fecha, y elige el último archivo `.sqlite.enc` **anterior** al problema. Anota su nombre y hora.
 3. **Activa el mantenimiento.** Render → *Environment* → `SCORTA_MAINTENANCE=1` → *Save*. Render reinicia el servicio sin abrir la base.
-4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **503 a propósito**: UptimeRobot avisará (es esperado; pausa el monitor) y Render puede marcar el deploy como fallido. Si Render no deja el servicio arriba, borra temporalmente el *Health Check Path* y vuelve a ponerlo al terminar (paso 9).
+4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **200** con `{"ok":false,"maintenance":true}` para que Render no marque el deploy como fallido; la app y `/api/*` responden 503. UptimeRobot no avisará por el código HTTP: pausa el monitor durante la restauración y reactívalo al terminar (paso 9).
 5. **Entra por Render Shell** (servicio → *Shell*).
 6. **Lleva el respaldo al disco** (si viene de R2). Descárgalo desde el panel de R2 a tu PC y súbelo al servidor, o usa una URL temporal firmada de R2 con `curl -o "$DATA_DIR/restaurar.sqlite.enc" '<url-firmada>'`. La URL firmada debe vencer en minutos.
 7. **Descifra:**
@@ -186,7 +186,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    node platform-backup.mjs restore $DATA_DIR/restaurar.sqlite $DATA_DIR/platform.sqlite --offline
    ```
    El comando valida el respaldo, guarda la base anterior como `platform.sqlite.previous-<número>`, borra las sesiones y las ventas pendientes del respaldo y elimina archivos `-wal`/`-shm` vacíos. Si dice que hay archivos WAL/SHM con datos o que la plataforma está abierta, **detente**: el servicio no está en mantenimiento.
-9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Si quitaste el *Health Check Path*, vuelve a poner `/healthz` y reactiva el monitor de UptimeRobot.
+9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Reactiva el monitor de UptimeRobot.
 10. **Verifica:**
     - `https://<dominio>/healthz` responde 200.
     - Entras como propietario y ves todas las empresas.
@@ -210,7 +210,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
 | Errores del servidor | Logs de Render | Busca `"level":"error"`, `offsite-backup-failed`, `offsite-backup-disabled`. Render guarda pocos días: envíalos a un servicio externo cuando se pueda (OPS-07). | Revisión semanal |
 | Gasto | Render y Cloudflare | Alerta de facturación (US-45). | Correo del dueño |
 
-`/healthz` responde 200 si la base abre bien y 503 si no (también 503 en modo mantenimiento, con `"maintenance":true`). Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
+`/healthz` responde 200 si la base abre bien y 503 si no. En modo mantenimiento responde 200 a propósito, con `"ok":false` y `"maintenance":true`, para que el *Health Check* de Render no falle mientras restauras. Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
 
 ```powershell
 curl.exe -H "Authorization: Bearer TU_TOKEN" https://<dominio>/healthz
