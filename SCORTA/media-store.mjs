@@ -9,7 +9,7 @@
 //     cifrada (ops/offsite-backup.mjs, syncMediaOffsite) cuando el destino es el disco.
 // El estado JSON guarda solo {mediaId,companyId,type,bytes} (media-ref.mjs).
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,renameSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {getObject,putObject} from './ops/offsite-backup.mjs';
 import {MEDIA_MAX_BYTES,MEDIA_TYPES,isMediaRef,sniffImage,validCompanyId} from './media-ref.mjs';
@@ -45,10 +45,15 @@ const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
  * `dir` es DATA_DIR/media. Con S3 la carpeta sigue sirviendo de respaldo de lectura: un archivo
  * que solo existe en disco (antes de configurar R2) se sube a R2 la primera vez que se lee.
  */
-export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024*1024}={}){
+// uploadTimeoutMs (SEG-10): las subidas a R2 ocurren dentro de la cola de escrituras; un R2 lento
+// no debe bloquearla 120 s. Si vence, la escritura sigue con el data URL y se reintenta después.
+export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024*1024,uploadTimeoutMs=10000}={}){
   if(!dir)throw Error('Falta la carpeta de medios');
   dir=resolve(dir);
   const uploaded=new Set(),cache=new Map();let cached=0;
+  // SEG-10: archivos en disco ya verificados (ruta -> tamaño:mtime) para no recalcular el sha256 en cada lectura.
+  const verified=new Map(),MAX_VERIFIED=10000;
+  const fileStamp=path=>{try{const s=statSync(path);return s.size+':'+s.mtimeMs;}catch{return null;}};
   const key=ref=>ref.companyId+'/'+ref.mediaId,s3Key=ref=>(s3.prefix?s3.prefix+'/':'')+key(ref);
   const file=ref=>resolve(dir,ref.companyId,ref.mediaId);
   const remember=(ref,bytes)=>{
@@ -65,7 +70,7 @@ export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024
   }
   async function upload(ref,bytes){
     if(uploaded.has(key(ref)))return;
-    await putObject(s3,s3Key(ref),bytes,{fetchImpl,contentType:ref.type});
+    await putObject(s3,s3Key(ref),bytes,{fetchImpl,contentType:ref.type,timeoutMs:uploadTimeoutMs});
     uploaded.add(key(ref));
   }
   async function put(companyId,bytes,type){
@@ -87,7 +92,14 @@ export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024
     if(s3){
       bytes=await getObject(s3,s3Key(ref),{fetchImpl});
       if(!bytes&&existsSync(file(ref))){bytes=readFileSync(file(ref));if(sha256(bytes)+'.'+MEDIA_TYPES[ref.type]===ref.mediaId)await upload(ref,bytes).catch(error=>log('warn','media-upload-failed',{error:String(error?.message||error)}));}
-    }else if(existsSync(file(ref)))bytes=readFileSync(file(ref));
+    }else{
+      const path=file(ref),before=fileStamp(path);if(!before)return null;
+      bytes=readFileSync(path);
+      if(verified.get(path)===before&&bytes.length===ref.bytes)return bytes;
+      if(sha256(bytes)+'.'+MEDIA_TYPES[ref.type]!==ref.mediaId){verified.delete(path);log('error','media-corrupt',{key:key(ref)});return null;}
+      if(!verified.has(path)&&verified.size>=MAX_VERIFIED)verified.delete(verified.keys().next().value);
+      verified.set(path,before);return bytes;
+    }
     if(!bytes)return null;
     if(sha256(bytes)+'.'+MEDIA_TYPES[ref.type]!==ref.mediaId){log('error','media-corrupt',{key:key(ref)});return null;}
     remember(ref,bytes);return bytes;
@@ -97,6 +109,7 @@ export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024
     if(!validCompanyId(companyId))return false;
     rmSync(resolve(dir,companyId),{recursive:true,force:true});
     for(const k of [...cache.keys()])if(k.startsWith(companyId+'/')){cached-=cache.get(k).length;cache.delete(k);}
+    const folder=resolve(dir,companyId);for(const path of [...verified.keys()])if(resolve(path,'..')===folder)verified.delete(path);
     return true;
   }
   return {kind:s3?'s3':'disk',dir,put,putDataUrl,get,removeCompany};
@@ -105,12 +118,14 @@ export function createMediaStore({dir,s3=null,fetchImpl=fetch,cacheBytes=32*1024
 /**
  * Migra al almacén de medios los data URL del estado (logos y fotos) y los cambia por referencias.
  * Idempotente: solo toca valores que todavía son data URL. Un error deja el data URL (sigue
- * funcionando) y se reintenta en la siguiente escritura o arranque. Muta `state`.
+ * funcionando) y se reintenta en segundo plano o en el siguiente arranque. Muta `state`.
+ * include(companyId,value) (SEG-10): limita la pasada a esos valores (p. ej. los de una escritura).
  */
-export async function externalizeMedia(state,media){
+export async function externalizeMedia(state,media,{include=null}={}){
   const result={moved:0,failed:0};
   const move=async(companyId,holder,field)=>{
     const value=holder[field];if(typeof value!=='string'||!value.startsWith('data:'))return;
+    if(include&&!include(companyId,value))return;
     try{const ref=await media.putDataUrl(companyId,value);if(ref){holder[field]=ref;result.moved++;}else result.failed++;}
     catch(error){result.failed++;log('warn','media-migrate-failed',{companyId,error:String(error?.message||error)});}
   };
@@ -120,4 +135,15 @@ export async function externalizeMedia(state,media){
     for(const product of business?.prods||[])if(product)await move(companyId,product,'foto');
   }
   return result;
+}
+
+/** SEG-10: data URL migrables que siguen en el estado, por empresa: Map<companyId, Set<dataUrl>>. */
+export function pendingMedia(state){
+  const pending=new Map(),add=(companyId,value)=>{
+    if(typeof value!=='string'||!validCompanyId(companyId)||!/^data:image\/(?:png|jpeg|webp);base64,/.test(value))return;
+    if(!pending.has(companyId))pending.set(companyId,new Set());pending.get(companyId).add(value);
+  };
+  for(const company of state?.companies||[])add(company?.id,company?.logo);
+  for(const [companyId,business]of Object.entries(state?.businesses||{}))for(const product of business?.prods||[])add(companyId,product?.foto);
+  return pending;
 }
