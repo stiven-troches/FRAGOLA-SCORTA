@@ -6,6 +6,7 @@ despliega, o se vuelve atrás según el plan de la sección 5.
 ## 1. Antes de desplegar
 
 - [ ] La CI del commit que se va a desplegar está **verde**: `npm test`, `npm run test:ui` y `npm run test:demo:ui`.
+  - En tu PC, `npm run test:ui` usa el puerto 19420; si está ocupado (otra copia del proyecto), usa otro: `SCORTA_UI_PORT=19520 npm run test:ui`.
 - [ ] No hay pruebas nuevas marcadas `todo` o `skip` sin anotarlas en el registro de hallazgos.
 - [ ] Revisé el diff contra la versión en producción y encontré cambios de esquema o de formato del estado: ☐ No ☐ Sí (en ese caso, respaldo obligatorio y plan de vuelta atrás probado).
 - [ ] **Respaldo previo** tomado y verificado (`node platform-backup.mjs save <db> <carpeta>`). Anoto el archivo en el registro.

@@ -1,6 +1,6 @@
 // QA-08: flujos completos de mostrador en escritorio y celular (todos los proyectos de
 // playwright.config.mjs). Se verifica la interfaz y, después, el estado real por la API.
-import {test,expect,login,navigate,addProduct,noOverflow,waitSaved} from './fixtures.mjs';
+import {test,expect,login,navigate,addProduct,noOverflow,waitSaved,choosePurchaseProduct} from './fixtures.mjs';
 
 const stockOf=async(scenario)=>(await scenario.data()).state.prods.find(p=>p.id===scenario.product.id).stock;
 const saleFor=(scenario,{cantidad=1,paymentMethod='efectivo',cliente='Cliente QA'}={})=>({type:'sale.create',form:{cliente,paymentMethod},items:[{producto_id:scenario.product.id,cantidad,precio_unitario:scenario.product.precio_venta}],labor:[]});
@@ -42,7 +42,7 @@ test('compra de mercancía actualiza existencias',async({page,scenario})=>{
  await page.getByRole('button',{name:'Ingresar mercancía',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Ingresar mercancía',exact:true});
  await dialog.getByLabel('Proveedor',{exact:true}).fill('Proveedor QA '+scenario.suffix);
- await dialog.getByRole('combobox',{name:'Producto',exact:true}).selectOption(scenario.product.id);
+ await choosePurchaseProduct(dialog,scenario.product);
  await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('4');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('21000');
  await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();await noOverflow(page);
  await dialog.getByRole('button',{name:'Registrar compra',exact:true}).click();await expect(dialog).not.toBeVisible();

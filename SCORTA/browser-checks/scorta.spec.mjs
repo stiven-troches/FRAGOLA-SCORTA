@@ -1,4 +1,4 @@
-import {test,expect,login,navigate,profile,addProduct,noOverflow,waitSaved,request,OWNER,ORIGIN,action,day} from './fixtures.mjs';
+import {test,expect,login,navigate,profile,addProduct,noOverflow,waitSaved,request,OWNER,ORIGIN,action,day,choosePurchaseProduct} from './fixtures.mjs';
 
 test('propietario administra empresa y credenciales sin exponerlas en tarjetas',async({page,scenario})=>{
  await login(page,OWNER);await expect(page.getByRole('button',{name:'Administrar '+scenario.company.name,exact:true})).toBeVisible();
@@ -58,7 +58,7 @@ test('reintento de cobro tras respuesta perdida registra una sola venta',async({
 test('compra pendiente bloquea cambios hasta confirmar el POST',async({page,scenario})=>{
  await login(page,scenario.admin);await navigate(page,'Compras');await page.getByRole('button',{name:'Ingresar mercancía',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Ingresar mercancía',exact:true});await dialog.getByLabel('Proveedor',{exact:true}).fill('Proveedor QA');
- await dialog.getByRole('combobox',{name:'Producto',exact:true}).selectOption(scenario.product.id);await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('2');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('20000');await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();
+ await choosePurchaseProduct(dialog,scenario.product);await dialog.getByLabel('Cantidad recibida',{exact:true}).fill('2');await dialog.getByLabel('Costo por unidad (COP)',{exact:true}).fill('20000');await dialog.getByRole('button',{name:'Agregar a la compra',exact:true}).click();
  let release;const blocked=new Promise(resolve=>{release=resolve});await page.route('**/api/v2/action',async route=>{if(route.request().postDataJSON()?.payload?.kind==='compra'){await blocked;await route.continue()}else await route.continue()});
  await dialog.getByRole('button',{name:'Registrar compra',exact:true}).click();
  await expect(dialog.getByLabel('Proveedor',{exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'Agregar a la compra',exact:true})).toBeDisabled();
