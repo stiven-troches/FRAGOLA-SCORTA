@@ -110,7 +110,7 @@ El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 d�
 
 ## Servidor heredado (`/api`)
 
-El modo antiguo «motoshop» (`/api/login`, `auth.mjs`, `motoshop.sqlite`) usa sesiones en memoria de 8 horas que se pierden al reiniciar. La plataforma no lo usa y se retirará (BE-38). No crees cuentas nuevas en él.
+El modo antiguo «motoshop» (`/api/login`, `auth.mjs`) fue retirado (BE-38): ya no hay rutas ni inicio de sesión propios, y cualquier `/api/*` fuera de `/api/v2/*` responde 403. Si `motoshop.sqlite` existe al preparar una plataforma nueva, solo se lee una vez, sin modificarla.
 
 ## Pruebas
 
