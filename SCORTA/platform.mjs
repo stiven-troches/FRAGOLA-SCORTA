@@ -358,6 +358,25 @@ async function issueReceipt(state,companyId,sale,now,baseUrl){
   sale.receiptHash=key;sale.receiptExpiresAt=new Date(expires).toISOString();state.receipts[key]={companyId,saleId:sale.id,expires};
   return {saleId:sale.id,token:value,url:new URL('/receipt/'+value,baseUrl||'https://scorta.example').href,expiresAt:sale.receiptExpiresAt};
 }
+// BE-09 (Ley 1581, consulta): todo lo que el almacén guarda de un cliente final, sin costos
+// internos ni enlaces/hashes de comprobantes.
+export function customerDataExport(business,record,company,now){
+  const id=record.id,sales=(business.ventas||[]).filter(s=>s.customerId===id),saleIds=new Set(sales.map(s=>s.id));
+  const clean=list=>removeCosts(structuredClone(list)).map(doc=>{dropReceiptSecret(doc);delete doc.receiptHash;delete doc.receiptExpiresAt;return doc;});
+  const {consentAt,consentBy,consentMedium,...ficha}=structuredClone(record);
+  return {format:'scorta-customer-data',version:1,exportedAt:iso(now),
+    responsable:{empresa:company.name,nit:company.nit||'',direccion:company.address||'',correo:company.email||'',whatsapp:company.whatsapp||''},
+    cliente:ficha,
+    autorizacionDatos:consentAt?{fecha:consentAt,registradaPor:consentBy||'',medio:consentMedium||''}:null,
+    autorizacionesEnVentas:sales.filter(s=>s.dataConsent).map(s=>({venta:s.id,fecha:s.fecha,...structuredClone(s.dataConsent)})),
+    ventas:clean(sales),
+    servicios:clean((business.servs||[]).filter(s=>s.customerId===id||saleIds.has(s.venta_id))),
+    credito:{cuenta:structuredClone(creditAccounts(business,dateBogota(now)).find(a=>a.customerId===id)||null),abonos:clean((business.creditPayments||[]).filter(p=>p.customerId===id))},
+    separados:clean((business.layaways||[]).filter(l=>l.customerId===id)),
+    cotizaciones:clean((business.quotes||[]).filter(q=>q.customerId===id)),
+    garantias:clean((business.warranties||[]).filter(w=>w.customerId===id||saleIds.has(w.saleId))),
+    historial:structuredClone((business.auditoria||[]).filter(e=>e.documento===id||saleIds.has(e.documento)))};
+}
 // BE-08: full company export without password hashes, TOTP secrets, sessions or receipt hashes.
 export function exportCompany(state,companyId,now){
   const company=companyFor(state,companyId),business=structuredClone(state.businesses[companyId]||estadoVacio());
@@ -630,6 +649,13 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
       for(const key of Object.keys(record))if(key!=='id')delete record[key];Object.assign(record,{nombre:'Cliente eliminado',telefono:'',erasedAt:iso(now),erasedBy:actor.label});
       businessAudit(b,actor,'cliente_borrado',{documento:record.id,ventas:sales.length,servicios:services.length},now);auditExtra={ventas:sales.length};
     }
+    b.revision++;documentId=record.id;
+  }else if(a.type==='customer.export'){
+    // BE-09 (Ley 1581, consulta): descarga de todo lo guardado de un cliente final; queda auditada.
+    if(actor.role==='vendedor'||!admin(actor))fail('Solo el administrador puede descargar los datos de un cliente',403,'FORBIDDEN');
+    const b=businessContext(state,actor),record=(b.customerRecords||[]).find(c=>c.id===a.id);if(!record||record.erasedAt)fail('Cliente inexistente',404,'NOT_FOUND');
+    extra.customerExport=customerDataExport(b,record,companyFor(state,actor.companyId),now);
+    businessAudit(b,actor,'cliente_consultado',{documento:record.id,motivo:actor.support?.reason||optionalText(form.motivo,300)||'Consulta de datos personales (Ley 1581)'},now);
     b.revision++;documentId=record.id;
   }else if(a.type==='company.renew'){
     const proposal=renewalProposal(company,now),next=period({startDate:form.startDate||proposal.startDate,endDate:form.endDate});
@@ -912,7 +938,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const result=envelope(state,resolveActor(state,session,now),now,baseUrl);
       // SEG-03: the clear receipt link exists only in this response (never stored).
       if(extra.receiptLink){result.receiptLink=extra.receiptLink;const sale=result.state?.ventas?.find(s=>s.id===extra.receiptLink.saleId);if(sale)Object.assign(sale,{receiptToken:extra.receiptLink.token,receiptUrl:extra.receiptLink.url,receiptExpiresAt:extra.receiptLink.expiresAt});}
-      for(const key of ['twoFactorSetup','export','revoked','warning','document'])if(Object.hasOwn(extra,key))result[key]=extra[key];
+      for(const key of ['twoFactorSetup','export','customerExport','revoked','warning','document'])if(Object.hasOwn(extra,key))result[key]=extra[key];
       return response(200,result,extra.outbox?.length?{outbox:extra.outbox}:{});
     }
     fail('Ruta inexistente',404,'NOT_FOUND');
