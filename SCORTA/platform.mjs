@@ -14,6 +14,7 @@ import {applyWarrantyAction} from './garantias.mjs';
 import {applyPurchasingAction,attachPurchaseTerms,assertPurchaseCancellable,afterPurchaseCancelled,payableAccounts} from './compras-proveedores.mjs';
 import {companyPlan,cleanPlan,assertFeature,assertLimit,photoCount} from './plan-limits.mjs';
 import {generateTotpSecret,verifyTotp,otpauthUri,totpCounter} from './totp.mjs';
+import {MEDIA_MAX_BYTES,MEDIA_PATH,clientImage,imageWeight,isMediaRef,mediaUrl,sniffImage} from './media-ref.mjs';
 import {dateBogota,nextMonth,renewalProposal} from './src/renewal.mjs';
 import {MAIL_DISABLED_MESSAGE,RECOVERY_REQUESTED_MESSAGE} from './src/recovery.mjs';
 export {dateBogota,renewalProposal};
@@ -21,7 +22,7 @@ export {dateBogota,renewalProposal};
 const encoder = new TextEncoder();
 // BE-07: bump when the terms change; every company admin must accept the new version.
 export const TERMS_VERSION = '2026-11-21';
-// BE-06: temporary per-company cap while photos live inside the JSON state.
+// BE-06: per-company photo cap (BE-30 keeps it; size counted as base64-equivalent characters).
 export const MAX_COMPANY_PHOTOS = 200, MAX_COMPANY_PHOTO_CHARS = 40 * 1024 * 1024;
 const PASSWORD_WINDOW_MS=15*60000,PASSWORD_MAX_FAILURES=5,ACCOUNT_ALERT_FAILURES=5,MAX_SECURITY_EVENTS=500,MAX_OWNER_ORIGINS=50;
 const MAX_IMAGE = 700000;
@@ -134,14 +135,16 @@ async function verifyPassword(user, password) {
   for(let i=0;i<a.length;i++)different|=a[i]^(b[i]||0);
   return different===0;
 }
-function image(v) {
+// BE-30: `known` are the images this company already has (references or legacy data URLs).
+// An unchanged value is kept as is; the browser sends back /media/<companyId>/<id> for a stored one.
+function image(v, known=[]) {
   if (!v) return '';
-  if (typeof v !== 'string' || v.length > MAX_IMAGE || !/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/.test(v)) fail('La imagen debe ser PNG, JPEG, WebP o GIF de hasta 500 KB');
-  const encoded=v.slice(v.indexOf(',')+1),bytes=fromBase64(encoded),mime=v.slice(5,v.indexOf(';'));
-  if(bytes.length>512000)fail('La imagen no puede superar 500 KB');
-  const starts=signature=>signature.every((n,i)=>bytes[i]===n);
-  const valid=mime==='image/png'?starts([137,80,78,71,13,10,26,10]):mime==='image/jpeg'?starts([255,216,255]):mime==='image/gif'?String.fromCharCode(...bytes.slice(0,6))==='GIF87a'||String.fromCharCode(...bytes.slice(0,6))==='GIF89a':mime==='image/webp'?String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP':false;
-  if(!valid)fail('El contenido de la imagen no coincide con su formato');
+  if (known.includes(v)) return v;
+  if (typeof v === 'string' && MEDIA_PATH.test(v)) {const ref=known.find(k=>isMediaRef(k)&&mediaUrl(k)===v);if(!ref)fail('La imagen ya no está disponible. Vuelve a elegirla.');return ref;}
+  if (typeof v !== 'string' || v.length > MAX_IMAGE || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(v)) fail('La imagen debe ser PNG, JPEG o WebP de hasta 500 KB');
+  const bytes=fromBase64(v.slice(v.indexOf(',')+1)),mime=v.slice(5,v.indexOf(';'));
+  if(bytes.length>MEDIA_MAX_BYTES)fail('La imagen no puede superar 500 KB');
+  if(sniffImage(bytes)!==mime)fail('El contenido de la imagen no coincide con su formato');
   return v;
 }
 function phone(v) {const value=optionalText(v,30);if(value&&!/^\+?[0-9 ()-]{6,30}$/.test(value))fail('Número de teléfono inválido');return value.replace(/[ ()-]/g,'');}
@@ -149,7 +152,7 @@ function period(form) {const startDate=date(form.startDate,'Inicio del contrato'
 export function companyStatus(company, now) {const today=dateBogota(now);return !company.enabled?'disabled':today<company.startDate?'scheduled':today>company.endDate?'expired':'active';}
 const publicUser = user => {const {password,version,totp,emailVerification,...safe}=user;return safe;};
 const termsAccepted = company => !company || company.terms?.version===TERMS_VERSION;
-const publicCompany = (company, now, baseUrl) => ({...company,plan:companyPlan(company),status:companyStatus(company,now),daysRemaining:Math.max(0,Math.round((Date.parse(company.endDate)-Date.parse(dateBogota(now)))/86400000)),url:new URL('/c/'+encodeURIComponent(company.slug),baseUrl||'https://scorta.example').href});
+const publicCompany = (company, now, baseUrl) => ({...company,logo:clientImage(company.logo),plan:companyPlan(company),status:companyStatus(company,now),daysRemaining:Math.max(0,Math.round((Date.parse(company.endDate)-Date.parse(dateBogota(now)))/86400000)),url:new URL('/c/'+encodeURIComponent(company.slug),baseUrl||'https://scorta.example').href});
 const admin = actor => actor.role === 'admin' || actor.role === 'owner';
 const owner = actor => {if(actor.role!=='owner')fail('Solo el propietario de SCORTA puede realizar esta acción',403,'FORBIDDEN');};
 const audit = (state,actor,action,companyId,details,now) => {state.audit.unshift({id:id(),fecha:iso(now),usuario:actor.username,userId:actor.id,accion:action,companyId,...details});};
@@ -241,6 +244,7 @@ function envelope(state, actor, now, baseUrl) {
   // BE-16: cartera calculada sobre todas las ventas (el vendedor la necesita para cobrar abonos).
   business.creditAccounts=creditAccounts(business,dateBogota(now));
   for(const sale of business.ventas||[]){dropReceiptSecret(sale);delete sale.receiptHash;}
+  for(const product of business.prods||[])if(isMediaRef(product.foto))product.foto=mediaUrl(product.foto);
   // BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
   business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})}));
   if(actor.role==='vendedor'){
@@ -270,7 +274,7 @@ function companyForm(state,form,old,now) {
   const name=text(form.name??old?.name,'Nombre de empresa',100);
   if(norm(name)===norm(state.ownerCompany)||state.companies.some(c=>c.id!==old?.id&&(norm(c.name)===norm(name)||norm(c.slug)===norm(name))))fail('Ya existe una empresa con ese nombre');
   const email=optionalText(form.email??old?.email,254);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo inválido');
-  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:moneyAmount(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
+  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo,[old?.logo].filter(Boolean)),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:moneyAmount(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
   if(old)return {...old,...fields};
   const base=companySlug(name),reserved=new Set([norm(state.ownerCompany),companySlug(state.ownerCompany)]);let slug=base;while(reserved.has(norm(slug))||state.companies.some(c=>c.slug===slug||norm(c.name)===slug))slug=base+'-'+id().slice(0,6);
   return {id:id(),slug,...fields,enabled:true,createdAt:iso(now)};
@@ -381,7 +385,8 @@ export function customerDataExport(business,record,company,now){
 export function exportCompany(state,companyId,now){
   const company=companyFor(state,companyId),business=structuredClone(state.businesses[companyId]||estadoVacio());
   for(const sale of business.ventas||[]){dropReceiptSecret(sale);delete sale.receiptHash;}
-  return {format:'scorta-company-export',version:1,exportedAt:iso(now),termsVersion:TERMS_VERSION,company:structuredClone(company),
+  for(const product of business.prods||[])if(isMediaRef(product.foto))product.foto=mediaUrl(product.foto);
+  return {format:'scorta-company-export',version:1,exportedAt:iso(now),termsVersion:TERMS_VERSION,company:{...structuredClone(company),logo:clientImage(company.logo)},
     users:state.users.filter(u=>u.companyId===companyId).map(u=>structuredClone(publicUser(u))),business,
     payments:structuredClone(state.payments.filter(p=>p.companyId===companyId)),supportTickets:structuredClone((state.supportTickets||[]).filter(t=>t.companyId===companyId)),
     saleDrafts:Object.entries(state.saleDrafts||{}).filter(([key])=>JSON.parse(key)[0]===companyId).map(([,value])=>structuredClone(value)),
@@ -683,7 +688,7 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
     if(!['producto','compra','ajuste','importar','eliminar','estado','reversion'].includes(payload.kind))fail('Operación inválida; registra ventas desde Nueva venta');
     if(payload.kind==='reversion'&&payload.form?.tipo==='venta')fail('Utiliza la autorización de devolución de venta');
     if(payload.kind==='reversion'&&payload.form?.tipo==='servicio'&&b.servs.some(s=>s.id===payload.id&&s.venta_id))fail('Este servicio está vinculado a una venta. Anula o devuelve desde esa venta.');
-    const original=structuredClone(b),photo=payload.kind==='producto'?image(payload.form?.foto):null;
+    const original=structuredClone(b),photo=payload.kind==='producto'?image(payload.form?.foto,original.prods.map(p=>p.foto).filter(Boolean)):null;
     // BE-13: browser/HTTP adapters (enforceContext) must send the revision they edited.
     if(options.enforceContext&&['ajuste','producto'].includes(payload.kind)&&a.revision==null)fail('Recarga los datos antes de guardar este cambio.',428,'REVISION_REQUIRED');
     // BE-40: una compra con pagos al proveedor no se anula; la compra a crédito es parte del plan.
@@ -703,7 +708,7 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
       else if(payload.kind==='importar'){last.antes={productos:original.prods.length};last.despues={productos:next.prods.length};}
       else {last.antes={productos:original.prods.map(p=>({id:p.id,stock:p.stock}))};last.despues={productos:next.prods.map(p=>({id:p.id,stock:p.stock}))};}
     }
-    if(['producto','importar'].includes(payload.kind)){const size=prods=>prods.reduce((n,p)=>({count:n.count+(p.foto?1:0),chars:n.chars+(p.foto?.length||0)}),{count:0,chars:0}),now_=size(next.prods),was=size(original.prods);
+    if(['producto','importar'].includes(payload.kind)){const size=prods=>prods.reduce((n,p)=>({count:n.count+(p.foto?1:0),chars:n.chars+imageWeight(p.foto)}),{count:0,chars:0}),now_=size(next.prods),was=size(original.prods);
       if(now_.count>MAX_COMPANY_PHOTOS&&now_.count>was.count||now_.chars>MAX_COMPANY_PHOTO_CHARS&&now_.chars>was.chars)fail('La empresa alcanzó el límite de fotos ('+MAX_COMPANY_PHOTOS+' fotos o 40 MB en total). Quita o reduce fotos de otros productos antes de agregar más.',400,'PHOTO_LIMIT');
       // BE-37: productos y fotos según el plan de la empresa.
       const target=companyFor(state,actor.companyId);assertLimit(target,'maxProducts',next.prods.length,original.prods.length);assertLimit(target,'maxPhotos',now_.count,was.count);}
@@ -833,6 +838,22 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
     if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:publicReceiptSale(sale),expiresAt:new Date(ref.expires).toISOString()});}
+    // BE-30: /media/<companyId>/<mediaId>. Public when the image is in an open catalog (or is its logo);
+    // otherwise only a session of that company (the owner, in support, too) sees it. The owner also
+    // sees every company logo. Anything else is 404, so other tenants learn nothing.
+    const media=method==='GET'&&path.match(MEDIA_PATH);
+    if(media){
+      const [,companyId,mediaId]=media,company=state.companies.find(c=>c.id===companyId),unavailable=()=>fail('Imagen no disponible',404,'NOT_FOUND');
+      if(!company)unavailable();
+      const same=value=>isMediaRef(value)&&value.mediaId===mediaId,isLogo=same(company.logo);
+      const ref=isLogo?company.logo:(state.businesses[companyId]?.prods||[]).find(p=>same(p.foto))?.foto;
+      if(!ref)unavailable();
+      let open=false;try{const shop=catalogCompany(state,company.slug,stamp(now));open=isLogo||catalogProducts(state,shop).some(p=>same(p.foto));}catch{}
+      if(open)return response(200,{media:ref,public:true});
+      const viewer=resolveActor(state,request.token?state.sessions[await hash(request.token)]:null,now);
+      if(viewer.companyId!==companyId&&!(viewer.role==='owner'&&!viewer.support&&isLogo))unavailable();
+      return response(200,{media:ref,public:false});
+    }
     if(method==='POST'){
       if(!body||typeof body!=='object'||Array.isArray(body))fail('Datos inválidos');
       state=structuredClone(input);

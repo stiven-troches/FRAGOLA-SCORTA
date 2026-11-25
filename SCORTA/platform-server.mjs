@@ -6,6 +6,8 @@ import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync,gzipSync,constants as zlibConstants} from 'node:zlib';
 import {createPlatform,platformRequest,PLATFORM_SESSION_TTL_MS} from './platform.mjs';
+import {externalizeMedia} from './media-store.mjs';
+import {MEDIA_PATH,isMediaRef} from './media-ref.mjs';
 
 const COOKIE='scorta_platform';
 const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
@@ -36,7 +38,9 @@ function lockHolderRunning(pid){
 }
 // BE-33: onSecurityEvents(events) recibe, después de confirmar cada escritura, los eventos de
 // seguridad nuevos (los más recientes primero) para avisar por correo al propietario.
-export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null}={}){
+// BE-30: media = createMediaStore(...). With it, logos and product photos leave the JSON state:
+// the data URLs already stored are moved on every start (idempotent) and new ones on every write.
+export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null,media=null}={}){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   const pidFile=file+'.pid';
   if(existsSync(pidFile)){if(lockHolderRunning(Number(readFileSync(pidFile,'utf8'))))throw Error('La plataforma ya está abierta. Detén la instancia antes de abrir otra.');rmSync(pidFile,{force:true});}
@@ -48,6 +52,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;
     // Una semilla rota (p. ej. faltan las fotos de public/test-shop) no debe impedir el arranque.
     if(withTestCompany){try{state=await seedTestCompany(state);}catch(error){console.error(JSON.stringify({level:'error',event:'test-company-seed-failed',error:String(error?.message||error)}));}}
+    if(media){const moved=await externalizeMedia(state,media);if(moved.moved||moved.failed)console.error(JSON.stringify({level:moved.failed?'warn':'info',at:new Date().toISOString(),event:'media-migration',backend:media.kind,...moved}));}
     if(!prior)db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(state));
     else db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));
     try{chmodSync(file,0o600);}catch{}
@@ -64,10 +69,13 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     if(closed)throw Error('La plataforma está cerrada');
     const snap=current(),result=await platformRequest(snap.state,payload,options);
     if(result.state!==snap.state){
+      if(media)await externalizeMedia(result.state,media);
       if(closed)throw Error('La plataforma está cerrada');
       db.exec('BEGIN IMMEDIATE');
       try{const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(result.state),snap.version);if(!changed.changes){db.exec('ROLLBACK');return {status:409,body:{error:'Otra solicitud actualizó los datos. Reintenta la operación.',code:'REVISION_CONFLICT'}};}db.exec('COMMIT');cache={version:snap.version+1,state:result.state};}catch(error){try{db.exec('ROLLBACK');}catch{}throw error;}
       if(onSecurityEvents){const known=snap.state.securityEvents?.[0]?.id,fresh=[];for(const event of result.state.securityEvents||[]){if(event.id===known)break;fresh.push(event);}if(fresh.length){try{onSecurityEvents(structuredClone(fresh));}catch{}}}
+      // A deleted or purged company takes its images on disk with it.
+      if(media)for(const company of snap.state.companies)if(!result.state.companies.some(c=>c.id===company.id)){try{media.removeCompany(company.id);}catch(error){console.error(JSON.stringify({level:'error',event:'media-remove-failed',companyId:company.id,error:String(error?.message||error)}));}}
     }
     const {state,...publicResult}=result;return publicResult;
   }
@@ -96,7 +104,16 @@ export const ipHeaderDiagnostics=req=>({level:'info',at:new Date().toISOString()
 // configurado Y SCORTA_PUBLIC_URL (el enlace nunca se arma con la cabecera Host del cliente).
 // Se envían después de confirmar la escritura y sin esperar, para que el tiempo de respuesta
 // no revele si la cuenta existe.
-export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null,serverStatus=null}={}){
+// BE-30: sends an image of the media store. Content-addressed ids never change, so /media is immutable.
+async function sendMedia(req,res,media,ref,cacheControl){
+  const bytes=media?await media.get(ref):null;
+  if(!bytes){json(res,404,{error:'Imagen no disponible'});return;}
+  const etag='"'+ref.mediaId.split('.')[0].slice(0,32)+'"';
+  res.setHeader('Cache-Control',cacheControl);res.setHeader('ETag',etag);
+  if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return;}
+  res.writeHead(200,{'Content-Type':ref.type,'Content-Length':String(bytes.length)});res.end(req.method==='HEAD'?undefined:bytes);
+}
+export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null,serverStatus=null,media=null}={}){
   const mailEnabled=!!(mailer?.enabled&&publicUrl),resetBaseUrl=publicUrl?new URL(publicUrl).origin:undefined;
   const limitedPaths=new Set(['/api/v2/login','/api/v2/password/forgot','/api/v2/password/reset']);
   const cookie=(value,age)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${production?'; Secure':''}`;
@@ -110,7 +127,20 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
   const loginOrigins=new Map(),loginWindowMs=60000,loginOriginLimit=120,maxOrigins=1000;
   const catalogReads=new Map(),catalogCheckouts=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
   return async(req,res)=>{
-    const url=new URL(req.url,'http://localhost'),path=url.pathname;if(!path.startsWith('/api/v2/'))return false;
+    const url=new URL(req.url,'http://localhost'),path=url.pathname;
+    if(MEDIA_PATH.test(path)){
+      try{
+        if(!['GET','HEAD'].includes(req.method)){json(res,405,{error:'Método no permitido'});return true;}
+        if(!store){json(res,404,{error:'Imagen no disponible'});return true;}
+        const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'=')),token=match?.slice(COOKIE.length+1);
+        const result=await store.request({method:'GET',path,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null});
+        if(result.status!==200){json(res,result.status,result.body);return true;}
+        // Public only while the catalog shows it; images of a session are never stored by shared caches.
+        await sendMedia(req,res,media,result.body.media,(result.body.public?'public':'private')+', max-age=31536000, immutable');
+      }catch(error){console.error(JSON.stringify({level:'error',at:new Date().toISOString(),method:req.method,path,error:String(error?.stack||error)}));json(res,500,{error:'Error interno del servidor. Intenta de nuevo.',code:'INTERNAL_ERROR'});}
+      return true;
+    }
+    if(!path.startsWith('/api/v2/'))return false;
     try{
       const protocol=production||req.socket.encrypted?'https':'http';
       const origin=publicUrl?new URL(publicUrl).origin:`${protocol}://${req.headers.host}`;
@@ -163,6 +193,7 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
       if(result.status===429&&Number.isFinite(result.body?.retryAfterSeconds))res.setHeader('Retry-After',String(result.body.retryAfterSeconds));
       if(req.method==='GET'&&/^\/api\/v2\/catalog\/[^/]+\/(?:photo\/[^/]+|logo)$/.test(path)&&result.status===200){
+        if(isMediaRef(result.body.image)){await sendMedia(req,res,media,result.body.image,'public, max-age=300, stale-while-revalidate=86400');return true;}
         const image=result.body.image?.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/);
         if(!image){json(res,404,{error:'Imagen no disponible'});return true;}
         // Imágenes públicas: caché corta en el navegador/CDN y validación por contenido.
@@ -170,6 +201,11 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         res.setHeader('Cache-Control','public, max-age=300, stale-while-revalidate=86400');res.setHeader('ETag',etag);
         if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return true;}
         res.setHeader('Content-Type',image[1]);res.end(bytes);return true;
+      }
+      // The public receipt keeps its logo inline (printable and offline), as before BE-30.
+      if(req.method==='GET'&&path.startsWith('/api/v2/receipt/')&&isMediaRef(result.body?.company?.logo)){
+        const ref=result.body.company.logo,bytes=media?await media.get(ref).catch(()=>null):null;
+        result.body={...result.body,company:{...result.body.company,logo:bytes?'data:'+ref.type+';base64,'+bytes.toString('base64'):''}};
       }
       sendJson(req,res,result.status,result.body,{etag:req.method==='GET'&&path==='/api/v2/data'});return true;
     }catch(error){

@@ -21,6 +21,7 @@ Actualizado: 21 de noviembre de 2026. Este documento dice **qué** secretos exis
 | 5 | **Cuenta de Cloudflare** (incluye R2) | Gestor | Dueño | DNS, proxy, certificados y almacenamiento de respaldos. | Contraseña anual | Cambiar contraseña, revisar DNS y reglas, revocar tokens de API. |
 | 6 | `SCORTA_S3_ACCESS_KEY_ID` y `SCORTA_S3_SECRET_ACCESS_KEY` (token de R2) | Render y gestor | Dueño | Subir respaldos. **Permiso: solo escritura en el bucket de respaldos.** | Anual | Revocar el token en Cloudflare → R2 → *Manage API tokens*, crear uno nuevo, actualizar las 2 variables en Render y confirmar el siguiente respaldo en Healthchecks. |
 | 7 | **Token de lectura de R2** (para restaurar) | Solo en el gestor; se crea cuando se necesita | Dueño | Descargar respaldos. | Crear al usar y revocar después | Revocar en Cloudflare. |
+| 7b | `SCORTA_MEDIA_S3_ACCESS_KEY_ID` y `SCORTA_MEDIA_S3_SECRET_ACCESS_KEY` (token de R2 para imágenes, BE-30) | Render y gestor | Dueño | Leer y guardar fotos de productos y logos. **Permiso: lectura y escritura solo en el bucket de imágenes** (nunca en el de respaldos). Quien lo tenga puede ver o reemplazar imágenes de todas las empresas. | Anual | Revocar el token en Cloudflare → R2 → *Manage API tokens*, crear uno nuevo con el mismo alcance, actualizar las 2 variables en Render y abrir un catálogo para comprobar que las fotos cargan. Mientras tanto las imágenes dan 500/404; los datos no se pierden. |
 | 8 | `SCORTA_BACKUP_PING_URL` (Healthchecks.io) + cuenta | Render y gestor | Dueño | Aviso de respaldo. Quien la tenga puede enviar avisos falsos de «respaldo correcto». | Anual | En Healthchecks, regenerar la URL del *check* y actualizar Render. |
 | 9 | **Cuenta de UptimeRobot** | Gestor | Dueño | Monitoreo de caídas. | Contraseña anual | Cambiar contraseña. |
 | 10 | **Cuenta de GitHub** (+ tokens personales, si existen) | Gestor | Dueño | Código y CI. Quien la tenga puede desplegar código a Render. | Contraseña anual; tokens con vencimiento ≤ 1 año | Cambiar contraseña, revocar tokens y llaves SSH, revisar *commits* y *Actions* recientes. |
@@ -51,7 +52,7 @@ Guárdala primero en el gestor (con la fecha en el nombre, p. ej. «SCORTA backu
 
 ## Qué no es secreto
 
-`SCORTA_PUBLIC_URL`, `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_REGION`, `SCORTA_S3_PREFIX`, `SCORTA_CLIENT_IP_HEADER` y los nombres de usuario no son secretos, pero no hace falta publicarlos.
+`SCORTA_PUBLIC_URL`, `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_REGION`, `SCORTA_S3_PREFIX`, `SCORTA_MEDIA_S3_ENDPOINT`, `SCORTA_MEDIA_S3_BUCKET`, `SCORTA_MEDIA_S3_REGION`, `SCORTA_MEDIA_S3_PREFIX`, `SCORTA_CLIENT_IP_HEADER` y los nombres de usuario no son secretos, pero no hace falta publicarlos.
 
 ## Registro de rotaciones
 

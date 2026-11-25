@@ -12,6 +12,7 @@ import {startupBackup} from './platform-backup.mjs';
 import {startOffsiteBackup} from './ops/offsite-backup.mjs';
 import {createMailer} from './ops/mailer.mjs';
 import {createAlerter,errorBurst,securityAlert,scrub} from './ops/alerts.mjs';
+import {createMediaStore,mediaConfig} from './media-store.mjs';
 const root=dirname(fileURLToPath(import.meta.url));
 // Archivos de texto (JS, CSS, HTML, SVG, JSON) comprimidos con brotli o gzip; se guardan en
 // memoria por ruta y fecha de modificación para no recomprimir en cada visita.
@@ -88,6 +89,9 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
   catch(error){lastBackup={at:new Date().toISOString(),ok:false,kind:'startup'};opsLog('error','startup-backup-failed',{error:String(error?.message||error)});}
   backups.local={...lastBackup};
  }
+ // BE-30: fotos y logos en R2 (SCORTA_MEDIA_S3_*) o, sin esa configuración, en DATA_DIR/media.
+ const mediaSettings=mediaConfig();if(mediaSettings.missing.length)opsLog('error','media-s3-incomplete',{missing:mediaSettings.missing,message:'Faltan variables de R2 para imágenes; se usa DATA_DIR/media'});
+ const media=createMediaStore({dir:resolve(dataDir,'media'),s3:mediaSettings.s3});opsLog('info','media-config',{backend:media.kind,...(mediaSettings.s3?{bucket:mediaSettings.s3.bucket,prefix:mediaSettings.s3.prefix}:{dir:media.dir})});
  // SEG-13: correo transaccional (Resend o webhook). Sin configuración queda desactivado.
  let mailer;try{mailer=createMailer({log:({level,event,...rest})=>opsLog(level,event,rest)});}catch(error){opsLog('error','mail-config-invalid',{error:String(error?.message||error)});mailer=createMailer({env:{}});}
  if(mailer.enabled&&!process.env.SCORTA_PUBLIC_URL)opsLog('warn','mail-without-public-url',{message:'Define SCORTA_PUBLIC_URL: sin ella no se envían enlaces de recuperación'});
@@ -98,11 +102,11 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  const onSecurityEvents=events=>{for(const event of events){const alert=securityAlert(event);alerter.notify(alert.type,alert);}};
  const platformExists=existsSync(platformFile),platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||platformExists;
  if(process.env.NODE_ENV==='production'&&!platformConfigured)throw Error('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma SCORTA');
- const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:platformExists?undefined:readLegacyState(resolve(dataDir,'motoshop.sqlite')),withTestCompany:testCompanyEnabled(),onSecurityEvents}):null;
+ const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:platformExists?undefined:readLegacyState(resolve(dataDir,'motoshop.sqlite')),withTestCompany:testCompanyEnabled(),onSecurityEvents,media}):null;
  const requireTerms=process.env.NODE_ENV==='production'||process.env.SCORTA_REQUIRE_TERMS==='1';
  // Propietario: verificación en dos pasos obligatoria en producción (SCORTA_REQUIRE_OWNER_2FA=0 la vuelve opcional; =1 la exige fuera de producción).
  const requireOwnerTwoFactor=process.env.SCORTA_REQUIRE_OWNER_2FA==='1'||process.env.NODE_ENV==='production'&&process.env.SCORTA_REQUIRE_OWNER_2FA!=='0';
- const offsite=startOffsiteBackup(platformStore,{onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};backups.offsite={at:result.at,ok:result.ok};
+ const offsite=startOffsiteBackup(platformStore,{mediaDir:media.kind==='disk'?media.dir:null,onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};backups.offsite={at:result.at,ok:result.ok};
   if(!result.ok)alerter.notify('offsite-backup-failed',{subject:'Falló el respaldo externo cifrado',lines:['Último intento: '+result.at,'Error: '+scrub(result.error,300),'El respaldo local al arrancar sigue disponible; revisa las variables SCORTA_S3_* y el bucket.']});}});
  const latency=latencyWindow(500),logIpHeaders=process.env.SCORTA_LOG_IP_HEADERS==='1';let warned=0;
  const health=()=>{
@@ -116,7 +120,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  };
  // OPS-19: read-only server status for the owner panel (same data as the /healthz detail).
  const serverStatus=()=>({...health(),uptimeSeconds:Math.round(process.uptime()),backups:{local:backups.local,offsite:backups.offsite,offsiteEnabled:!!offsite.enabled},alertMail:alerter.enabled});
- const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms,requireOwnerTwoFactor,serverStatus});
+ const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms,requireOwnerTwoFactor,serverStatus,media});
  // Capacity is checked every 15 minutes even if nobody calls /healthz.
  const capacityTimer=setInterval(health,15*60*1000);capacityTimer.unref();
  const production=process.env.NODE_ENV==='production';

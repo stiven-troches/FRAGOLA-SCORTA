@@ -20,13 +20,16 @@ Cloudflare (DNS, proxy y TLS del dominio propio)        ← opcional hasta tener
 Render · Web Service (Node 24, 1 sola instancia, región EE. UU.)
    └─ server.mjs
         ├─ /api/v2/*  → platform-server.mjs → platform.mjs → DATA_DIR/platform.sqlite
+        ├─ /media/<empresa>/<id> → fotos y logos (R2 si SCORTA_MEDIA_S3_* existe; si no, DATA_DIR/media)
         ├─ /healthz   → estado del servicio (lo usan Render y UptimeRobot)
         └─ archivos de la app (dist/)
    └─ Disco persistente de Render montado en DATA_DIR (p. ej. /var/data)
         ├─ platform.sqlite          ← TODAS las empresas, usuarios, ventas y auditoría
-        └─ backups/startup-*.sqlite ← copia local al arrancar (últimas 5)
+        ├─ backups/startup-*.sqlite ← copia local al arrancar (últimas 5)
+        └─ media/<empresa>/<sha256>.<ext> ← fotos y logos, solo si no hay R2 para imágenes (BE-30)
    │
    ├─ cada hora → respaldo cifrado → almacenamiento S3 compatible (Cloudflare R2)
+   │                                  ├─ incluye DATA_DIR/media cuando las imágenes están en disco
    │                                  └─ aviso a Healthchecks.io (éxito o fallo)
    └─ logs (una línea JSON por petición) → panel de Render
 ```
@@ -95,6 +98,27 @@ Se configuran en Render → servicio → *Environment*. Las marcadas como **secr
 
 Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCESS_KEY_ID`, `SCORTA_S3_SECRET_ACCESS_KEY` o `SCORTA_BACKUP_KEY`, el respaldo externo **queda apagado** y el log muestra `offsite-backup-disabled` con la lista de las que faltan.
 
+### Fotos y logos (BE-30)
+
+Las fotos de productos y los logos ya **no viven dentro de `platform.sqlite`**: el estado guarda solo una referencia `{mediaId, companyId, type, bytes}` y el navegador las pide a `/media/<empresa>/<sha256>.<ext>`. Solo se aceptan WebP, PNG o JPEG de hasta 500 KB (se revisa la firma real del archivo); el tope por empresa sigue en 200 fotos / 40 MB y los límites del plan.
+
+| Variable | Valor | Notas |
+|---|---|---|
+| `SCORTA_MEDIA_S3_ENDPOINT` | `https://<cuenta>.r2.cloudflarestorage.com` | Endpoint S3 de **R2 (recomendado en producción)**. |
+| `SCORTA_MEDIA_S3_BUCKET` | p. ej. `scorta-media` | Bucket **distinto** al de respaldos y **sin** regla de borrado por antigüedad: las imágenes se guardan una sola vez. |
+| `SCORTA_MEDIA_S3_REGION` | `auto` (R2) | Opcional; por defecto `auto`. |
+| `SCORTA_MEDIA_S3_ACCESS_KEY_ID` | **secreto** | Token de R2 con **lectura y escritura** solo en ese bucket. |
+| `SCORTA_MEDIA_S3_SECRET_ACCESS_KEY` | **secreto** | |
+| `SCORTA_MEDIA_S3_PREFIX` | p. ej. `produccion` | Opcional. Usa otro prefijo (o bucket) para staging. |
+
+- **Con R2** (las 4 variables obligatorias): las imágenes se suben y se leen de R2 con firma SigV4; el servidor guarda en memoria las más usadas (32 MB). R2 no es público: todo pasa por la app, que aplica las reglas de acceso. Activa el versionado del bucket si quieres poder recuperar una imagen borrada.
+- **Sin R2**: se guardan en `DATA_DIR/media/` en el disco persistente. **Esa carpeta no está dentro de `platform.sqlite`**: el respaldo externo horario la sube cifrada (ver sección 3). Sin respaldo externo configurado, las imágenes solo existen en el disco de Render.
+- **Configuración a medias** (falta alguna de las 4): el log muestra `media-s3-incomplete` y se usa el disco. Al arrancar aparece `media-config` con `backend` `s3` o `disk`.
+- **Migración automática**: en cada arranque, los data URL que aún estén en la base (empresas antiguas, empresa de prueba) se mueven al almacén y se cambian por referencias (`media-migration` en el log). Es idempotente. Si R2 falla, el data URL se queda y sigue funcionando; se reintenta en la siguiente escritura o arranque. Un GIF heredado no se migra y sigue sirviéndose como antes.
+- **Pasar de disco a R2**: configura las variables y reinicia. Las imágenes que solo están en `DATA_DIR/media` se suben a R2 la primera vez que alguien las pide; mantén la carpeta hasta que todas se hayan servido una vez (o súbela con `rclone` a `<bucket>/<prefijo>/<empresa>/<archivo>`).
+- **Quién ve cada imagen**: sin sesión, solo el logo y las fotos de productos visibles en un catálogo **publicado y vigente** (`Cache-Control: public, max-age=31536000, immutable`). El resto exige sesión de **esa** empresa (o del propietario en soporte; el propietario ve además los logos de todas) y se entrega con `private`. Cualquier otra empresa recibe 404. El comprobante público sigue llevando el logo incrustado.
+- **Empresa eliminada o purgada**: se borra su carpeta `DATA_DIR/media/<empresa>`. En R2 no se borran solas: elimina el prefijo `<prefijo>/<id-empresa>/` desde el panel de R2 (hazlo en la purga por fin de contrato).
+
 ### Correo de recuperación (SEG-13)
 
 | Variable | Valor | Notas |
@@ -127,10 +151,13 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 | Tipo | Cuándo | Dónde | Retención | Protege contra |
 |---|---|---|---|---|
 | **Externo cifrado** | Cada hora (`SCORTA_BACKUP_INTERVAL_MIN`); el primero 2 minutos después de arrancar | Bucket R2: `<prefijo>/AAAA/MM/DD/scorta-<fecha-hora>.sqlite.enc` | 30 días (regla de ciclo de vida del bucket, OPS-01) | Pérdida del disco, de la cuenta de Render, borrado o daño |
+| **Imágenes en disco** (solo sin R2 para imágenes) | Con cada respaldo externo, antes de la base | Bucket de respaldos: `<prefijo>/media/<empresa>/<sha256>.<ext>.enc` | Cada imagen se sube una vez y se vuelve a subir cada 7 días, así la regla de 30 días nunca deja una imagen viva sin copia | Pérdida del disco. Las imágenes en R2 no se copian aquí: R2 ya está fuera de Render |
 | **Local al arrancar** | En cada arranque y deploy, antes de abrir la base | `DATA_DIR/backups/startup-*.sqlite` | Las últimas 5 | Un deploy que daña datos; es lo más rápido para volver atrás |
 | **Snapshot de Render** | Diario (lo hace Render) | Dentro de Render | La que fije Render | Errores del disco. No es una copia externa (OPS-11) |
 
-Cómo funciona el respaldo externo: toma una copia consistente de `platform.sqlite`, la comprime, la cifra con AES-256-GCM usando `SCORTA_BACKUP_KEY` y la sube al bucket. Después avisa a Healthchecks.io. Si algo falla, escribe `offsite-backup-failed` en el log y avisa del fallo.
+Cómo funciona el respaldo externo: si las imágenes están en disco, primero sube cifradas las de `DATA_DIR/media` que falten (un manifiesto `DATA_DIR/media/.offsite-*.json` recuerda cuáles ya subió). Luego toma una copia consistente de `platform.sqlite`, la comprime, la cifra con AES-256-GCM usando `SCORTA_BACKUP_KEY` y la sube al bucket. Después avisa a Healthchecks.io. Si algo falla (base o imágenes), escribe `offsite-backup-failed` en el log y avisa del fallo.
+
+> **Producción: usa R2 para las imágenes** (`SCORTA_MEDIA_S3_*`). Con imágenes en disco el respaldo funciona, pero restaurar exige descargar y descifrar también la carpeta `media/` del bucket (paso 8 de la sección 5) y el disco de 1 GB se llena antes.
 
 **Respaldo manual** (desde Render Shell):
 
@@ -186,6 +213,12 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    node platform-backup.mjs restore $DATA_DIR/restaurar.sqlite $DATA_DIR/platform.sqlite --offline
    ```
    El comando valida el respaldo, guarda la base anterior como `platform.sqlite.previous-<número>`, borra las sesiones y las ventas pendientes del respaldo y elimina archivos `-wal`/`-shm` vacíos. Si dice que hay archivos WAL/SHM con datos o que la plataforma está abierta, **detente**: el servicio no está en mantenimiento.
+
+   **Imágenes (solo si están en disco y el disco se perdió):** descarga del bucket de respaldos la carpeta `<prefijo>/media/` completa (p. ej. con `rclone copy r2:<bucket>/<prefijo>/media ./media-enc`) y restáurala:
+   ```sh
+   node platform-backup.mjs decrypt-media ./media-enc $DATA_DIR/media
+   ```
+   Comprueba la huella sha256 de cada imagen. Con R2 para imágenes no hace falta: siguen en su bucket.
 9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Reactiva el monitor de UptimeRobot.
 10. **Verifica:**
     - `https://<dominio>/healthz` responde 200.

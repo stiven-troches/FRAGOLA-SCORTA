@@ -56,5 +56,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   if(command==='save'&&first&&second&&!flag)console.log(await savePlatformBackup(resolve(first),resolve(second)));
   else if(command==='restore'&&first&&second&&flag==='--offline')console.log(JSON.stringify(restorePlatformBackup(resolve(first),resolve(second),{offline:true})));
   else if(command==='decrypt'&&first&&second&&!flag){const {decryptBackup}=await import('./ops/offsite-backup.mjs');const out=resolve(second);if(existsSync(out))throw Error('El archivo de salida ya existe');writeFileSync(out,decryptBackup(readFileSync(resolve(first)),process.env.SCORTA_BACKUP_KEY),{flag:'wx',mode:0o600});validatePlatformDatabase(out);console.log(out);}
-  else throw Error('Uso: node platform-backup.mjs save archivo-platform.sqlite carpeta | restore respaldo.sqlite destino-platform.sqlite --offline | decrypt respaldo.sqlite.enc salida.sqlite (usa SCORTA_BACKUP_KEY)');
+  // BE-30: fotos y logos del respaldo externo (carpeta media/ descargada del bucket) -> DATA_DIR/media.
+  else if(command==='decrypt-media'&&first&&second&&!flag){const {decryptMediaFolder}=await import('./ops/offsite-backup.mjs');console.log(decryptMediaFolder(resolve(first),resolve(second),process.env.SCORTA_BACKUP_KEY)+' imágenes restauradas en '+resolve(second));}
+  else throw Error('Uso: node platform-backup.mjs save archivo-platform.sqlite carpeta | restore respaldo.sqlite destino-platform.sqlite --offline | decrypt respaldo.sqlite.enc salida.sqlite | decrypt-media carpeta-media-descargada DATA_DIR/media (usa SCORTA_BACKUP_KEY)');
 }
