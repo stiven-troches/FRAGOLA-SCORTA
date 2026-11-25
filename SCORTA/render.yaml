@@ -29,7 +29,7 @@ services:
                                      # Reemplaza al antiguo "autoDeploy: true".
     maxShutdownDelaySeconds: 30      # Tiempo para cerrar SQLite limpiamente tras SIGTERM.
     disk:
-      name: scorta-data              # Disco persistente: aquí viven las bases SQLite.
+      name: scorta-data              # Disco persistente: bases SQLite (y DATA_DIR/media si no hay R2 para imágenes).
       mountPath: /var/data           # Debe coincidir con DATA_DIR.
       sizeGB: 1                      # Se puede aumentar después, nunca reducir.
     envVars:
@@ -78,6 +78,18 @@ services:
         sync: false                  # SECRETO.
       - key: SCORTA_BACKUP_PING_URL
         sync: false                  # URL de Healthchecks.io (dead-man's switch del respaldo, OPS-03).
+      - key: SCORTA_MEDIA_S3_ENDPOINT
+        sync: false                  # BE-30: endpoint S3 de R2 para fotos y logos. Vacío = DATA_DIR/media (respaldado con el respaldo externo).
+      - key: SCORTA_MEDIA_S3_BUCKET
+        sync: false                  # Bucket de imágenes, distinto al de respaldos y sin borrado por antigüedad.
+      - key: SCORTA_MEDIA_S3_REGION
+        sync: false                  # En R2 "auto" (valor por defecto si queda vacía).
+      - key: SCORTA_MEDIA_S3_PREFIX
+        sync: false                  # Opcional, p. ej. produccion.
+      - key: SCORTA_MEDIA_S3_ACCESS_KEY_ID
+        sync: false                  # SECRETO. Token de R2 con lectura y escritura solo en el bucket de imágenes.
+      - key: SCORTA_MEDIA_S3_SECRET_ACCESS_KEY
+        sync: false                  # SECRETO.
       - key: RESEND_API_KEY
         sync: false                  # SECRETO. Llave de Resend para correos de recuperación (SEG-13). Vacía = recuperación por correo apagada.
       - key: SCORTA_MAIL_FROM
@@ -148,4 +160,16 @@ services:
       - key: SCORTA_S3_SECRET_ACCESS_KEY
         sync: false
       - key: SCORTA_BACKUP_PING_URL
+        sync: false
+      - key: SCORTA_MEDIA_S3_ENDPOINT
+        sync: false
+      - key: SCORTA_MEDIA_S3_BUCKET
+        sync: false                  # Bucket o prefijo distinto al de producción.
+      - key: SCORTA_MEDIA_S3_REGION
+        sync: false
+      - key: SCORTA_MEDIA_S3_PREFIX
+        sync: false                  # p. ej. staging
+      - key: SCORTA_MEDIA_S3_ACCESS_KEY_ID
+        sync: false
+      - key: SCORTA_MEDIA_S3_SECRET_ACCESS_KEY
         sync: false
