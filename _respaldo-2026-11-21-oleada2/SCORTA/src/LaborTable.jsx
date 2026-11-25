@@ -1,9 +1,0 @@
-import React,{useState} from 'react';
-import {formatCOP} from './format.mjs';
-import ExcelButton from './ExcelButton.jsx';
-const money=value=>value===null?'Sin reparto':formatCOP(value||0);
-export const laborColumns=[['date','FECHA'],['plate','PLACA'],['customer','CLIENTE'],['description','SERVICIO'],['mechanic','MECÁNICO'],['status','ESTADO'],['net','COBRO NETO','#,##0.00'],['percentage','% MECÁNICO','0.00'],['mechanicAmount','PARTE MECÁNICO','#,##0.00'],['businessAmount','PARTE NEGOCIO','#,##0.00']];
-export default function LaborTable({rows=[],from='',to='',title='MANO DE OBRA',filename='SCORTA-mano-de-obra'}){
- const [limit,setLimit]=useState(10);
- return <section className="ov-card ov-labor"><div className="ov-card-heading"><h2>{title}</h2><ExcelButton options={{title,columns:laborColumns,rows,from,to}} name={filename}/></div>{!rows.length?<p className="ov-empty">No hay servicios en estas fechas.</p>:<><div className="ov-table-wrap"><table className="ov-table"><thead><tr><th>FECHA / PLACA</th><th>SERVICIO / MECÁNICO</th><th>COBRO NETO</th><th>% MECÁNICO</th><th>PARTE MECÁNICO</th><th>PARTE NEGOCIO</th></tr></thead><tbody>{rows.slice(0,limit).map(row=><tr key={row.id}><td data-label="FECHA / PLACA">{row.date}<small>{row.plate||'—'} · {row.customer}</small></td><td data-label="SERVICIO / MECÁNICO">{row.description}<small>{row.mechanic}{row.status!=='Vigente'&&' · '+row.status}</small></td><td data-label="COBRO NETO">{row.net===null?'Devolución sin desglose':money(row.net)}</td><td data-label="% MECÁNICO">{row.percentage===null?'Sin porcentaje histórico':row.percentage+' %'}</td><td data-label="PARTE MECÁNICO">{money(row.mechanicAmount)}</td><td data-label="PARTE NEGOCIO">{money(row.businessAmount)}</td></tr>)}</tbody></table></div>{rows.length>limit&&<button type="button" className="ov-more" onClick={()=>setLimit(n=>n+10)}>Ver más trabajos</button>}</>}</section>;
-}

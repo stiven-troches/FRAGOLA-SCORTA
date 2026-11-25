@@ -23,7 +23,7 @@ const session={userId:'admin-1',name:'Laura',username:'admin',role:'admin',compa
 test('SSR suscripción: administrador consulta vigencia, estado y mensualidad en una sección plegable',()=>{
  const html=render(components.SubscriptionPanel,{session,onContact(){}});
  assert.match(html,/Mi suscripción/);assert.match(html,/sub-panel/);assert.match(html,/Activa/);assert.match(html,/29 días/);assert.match(html,/80\.000/);assert.match(html,/COP/);
- assert.match(html,/noviembre/);assert.match(html,/diciembre/);assert.match(html,/Consultar por ticket de soporte/);
+ assert.match(html,/[0-9]{1,2} nov 2026/);assert.match(html,/[0-9]{1,2} dic 2026/);assert.match(html,/Consultar por ticket de soporte/);
  assert.doesNotMatch(html,/<details[^>]*open/);
 });
 

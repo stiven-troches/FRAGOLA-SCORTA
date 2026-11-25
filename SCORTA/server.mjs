@@ -6,6 +6,7 @@ import {mkdirSync,readFileSync,existsSync,statSync,statfsSync} from 'node:fs';
 import {resolve,extname,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
+import {brotliCompressSync,gzipSync,constants as zlibConstants} from 'node:zlib';
 import {timingSafeEqual,createHash,scryptSync,randomBytes} from 'node:crypto';
 import {createAuth} from './auth.mjs';
 import {createFullBackup} from './backup.mjs';
@@ -16,6 +17,28 @@ import {startupBackup} from './platform-backup.mjs';
 import {startOffsiteBackup} from './ops/offsite-backup.mjs';
 import {createMailer} from './ops/mailer.mjs';
 const root=dirname(fileURLToPath(import.meta.url));
+// Archivos de texto (JS, CSS, HTML, SVG, JSON) comprimidos con brotli o gzip; se guardan en
+// memoria por ruta y fecha de modificación para no recomprimir en cada visita.
+const COMPRESSIBLE=/\.(?:js|mjs|css|html|svg|json|webmanifest|txt)$/i,compressedCache=new Map();
+export function compressStatic(req,res,file,contents,cacheable=true){
+ if(!COMPRESSIBLE.test(file)||contents.length<1024)return contents;
+ const accepted=String(req.headers['accept-encoding']||''),encoding=/\bbr\b/.test(accepted)?'br':/\bgzip\b/.test(accepted)?'gzip':'';
+ res.setHeader('Vary','Accept-Encoding');if(!encoding)return contents;
+ let key='';if(cacheable){try{key=file+'|'+statSync(file).mtimeMs+'|'+encoding}catch{}}
+ let body=key&&compressedCache.get(key);
+ if(!body){body=encoding==='br'?brotliCompressSync(contents,{params:{[zlibConstants.BROTLI_PARAM_QUALITY]:cacheable?9:4}}):gzipSync(contents,{level:cacheable?9:6});if(key){if(compressedCache.size>=300)compressedCache.delete(compressedCache.keys().next().value);compressedCache.set(key,body)}}
+ res.setHeader('Content-Encoding',encoding);return body;
+}
+// Fallos de programación (no de validación): 500 sin detalles internos y con traza en el log.
+export const isProgrammingError=error=>error instanceof TypeError||error instanceof ReferenceError||error instanceof RangeError||error instanceof SyntaxError&&!/JSON/.test(error.message);
+// /healthz público solo dice si el servicio está bien; el detalle (base, disco, latencia,
+// respaldos) exige `Authorization: Bearer <SCORTA_HEALTH_TOKEN>`.
+export function healthDetailAllowed(req,token=process.env.SCORTA_HEALTH_TOKEN){
+ if(!token||token.length<16)return false;
+ const given=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
+ const a=createHash('sha256').update(given).digest(),b=createHash('sha256').update(token).digest();
+ return timingSafeEqual(a,b);
+}
 export function openStore(file){
  mkdirSync(dirname(file),{recursive:true});const db=new DatabaseSync(file);db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS app (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, role TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)');
  const empty=estadoVacio();
@@ -91,11 +114,13 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  const platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||existsSync(platformFile);
  const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:store.read(),withTestCompany:testCompanyEnabled()}):null;
  const requireTerms=process.env.NODE_ENV==='production'||process.env.SCORTA_REQUIRE_TERMS==='1';
+ // Propietario: verificación en dos pasos obligatoria en producción (SCORTA_REQUIRE_OWNER_2FA=0 la vuelve opcional; =1 la exige fuera de producción).
+ const requireOwnerTwoFactor=process.env.SCORTA_REQUIRE_OWNER_2FA==='1'||process.env.NODE_ENV==='production'&&process.env.SCORTA_REQUIRE_OWNER_2FA!=='0';
  // SEG-13: correo transaccional (Resend o webhook). Sin configuración queda desactivado.
  let mailer;try{mailer=createMailer({log:({level,event,...rest})=>opsLog(level,event,rest)});}catch(error){opsLog('error','mail-config-invalid',{error:String(error?.message||error)});mailer=createMailer({env:{}});}
  if(mailer.enabled&&!process.env.SCORTA_PUBLIC_URL)opsLog('warn','mail-without-public-url',{message:'Define SCORTA_PUBLIC_URL: sin ella no se envían enlaces de recuperación'});
  opsLog('info','mail-config',{provider:mailer.provider,enabled:mailer.enabled&&!!process.env.SCORTA_PUBLIC_URL});
- const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms});
+ const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms,requireOwnerTwoFactor});
  const offsite=startOffsiteBackup(platformStore,{onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};}});
  const latency=latencyWindow(500),logIpHeaders=process.env.SCORTA_LOG_IP_HEADERS==='1';let warned=0;
  const health=()=>{
@@ -121,7 +146,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
  try{
  const url=new URL(req.url,'http://localhost'),path=url.pathname;
- if(path==='/healthz'&&(req.method==='GET'||req.method==='HEAD')){const body=health();res.writeHead(body.ok?200:503,{'Content-Type':'application/json; charset=utf-8'});return res.end(req.method==='HEAD'?undefined:JSON.stringify(body));}
+ if(path==='/healthz'&&(req.method==='GET'||req.method==='HEAD')){const full=health(),body=healthDetailAllowed(req)?full:{ok:full.ok,version:full.version,startedAt:full.startedAt,warning:full.warning};res.writeHead(full.ok?200:503,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify(body));}
  if(await handlePlatform(req,res))return;
  if(platformStore&&path.startsWith('/api/')){res.writeHead(403,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({error:'Usa el acceso de empresa de SCORTA',code:'PLATFORM_REQUIRED'}));}
  if(path.startsWith('/api/')){
@@ -148,8 +173,9 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  let contents=readFileSync(file);
  const catalogPage=path.match(/^\/catalogo\/([^/]+)\/?$/);
  if(catalogPage){let company;try{const result=await platformStore?.request({method:'GET',path:'/api/v2/catalog/'+catalogPage[1]});if(result?.status===200)company=result.body.company;}catch{}contents=catalogHead(contents.toString('utf8'),company);}
- res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));res.end(contents);
- }catch(e){if(!e.status)console.error(JSON.stringify({level:'warn',at:new Date().toISOString(),method:req.method,path:String(req.url||'').split('?')[0],error:String(e?.message||e)}));res.statusCode=e.status||400;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({error:e.message}))}
+ res.setHeader('Content-Type',CONTENT_TYPES[extname(file).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control',staticCacheControl(path));
+ const encoded=compressStatic(req,res,file,contents,!catalogPage);res.end(encoded);
+ }catch(e){const internal=!e?.status&&isProgrammingError(e);if(!e?.status)console.error(JSON.stringify({level:internal?'error':'warn',at:new Date().toISOString(),method:req.method,path:String(req.url||'').split('?')[0],error:String(internal?e?.stack||e:e?.message||e)}));res.statusCode=e?.status||(internal?500:400);res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(internal?{error:'Error interno del servidor. Intenta de nuevo.',code:'INTERNAL_ERROR'}:{error:e?.message}))}
  });server.on('close',()=>{offsite.stop();auth.close();store.close();platformStore?.close()});
  // Graceful stop for redeploys: stop accepting, drop idle keep-alive sockets, then
  // force-close the rest so the databases close and the lock file is removed before

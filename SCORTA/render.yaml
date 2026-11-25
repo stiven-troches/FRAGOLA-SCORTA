@@ -43,6 +43,8 @@ services:
         value: "24"                  # Render instala la última versión de Node 24 (coincide con engines).
       - key: SCORTA_TEST_COMPANY
         value: "0"                   # Sin empresa ficticia: sus credenciales son públicas (docs/EMPRESA-DE-PRUEBA.md).
+      - key: SCORTA_HEALTH_TOKEN
+        generateValue: true          # Token para ver el detalle de /healthz (Authorization: Bearer ...).
       # --- Valores que se piden en el Dashboard al crear el Blueprint (sync:false = nunca en git) ---
       - key: SCORTA_PUBLIC_URL
         sync: false                  # URL pública canónica, p. ej. https://app.scorta.co (enlaces y CSRF).

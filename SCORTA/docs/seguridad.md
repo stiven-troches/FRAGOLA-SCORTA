@@ -19,7 +19,7 @@ La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca
 - Entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo.
 - Se guardan con hash PBKDF2-SHA256 (120.000 iteraciones) y sal. El refuerzo a un hash más fuerte espera tu decisión (US-41).
 - Cambiar o restablecer una contraseña cierra todas las sesiones de esa cuenta.
-- Recuperación por correo (SEG-13): solo a correos verificados con código de 6 dígitos; enlace `/recuperar#<token>` de un solo uso que vence en 30 minutos, guardado solo como hash; respuesta idéntica exista o no la cuenta; límites por IP y por cuenta; al usarlo se cierran todas las sesiones. Sin proveedor de correo configurado queda apagada y el propietario o el administrador restablecen la contraseña desde su panel.
+- Recuperación por correo (SEG-13): solo a correos verificados con código de 6 dígitos; enlace `/recuperar#<token>` de un solo uso que vence en 1 hora, guardado solo como hash; respuesta idéntica exista o no la cuenta; límites por IP y por cuenta; al usarlo se cierran todas las sesiones. Sin proveedor de correo configurado queda apagada y el propietario o el administrador restablecen la contraseña desde su panel.
 
 ## Sesiones
 
@@ -42,7 +42,7 @@ La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca
 
 ## Verificación en dos pasos (2FA) del propietario
 
-**En curso (SEG-01).** Como la cuenta del propietario controla todas las empresas, tendrá un segundo factor. Mientras tanto: contraseña larga y única, sesión de 12 horas y 2FA activado en Render, Cloudflare, GitHub, R2 y el correo (US-09).
+**Implementado y obligatorio en producción (SEG-01).** El propietario controla todas las empresas, así que con `NODE_ENV=production` el servidor bloquea cualquier operación suya (`403 TWO_FACTOR_SETUP_REQUIRED`) hasta que active la verificación en dos pasos con una aplicación autenticadora (TOTP RFC 6238, 6 dígitos, 30 s, sin reutilizar códigos). Después, cada ingreso exige el código. `SCORTA_REQUIRE_OWNER_2FA=0` la vuelve opcional (no recomendado); `=1` la exige también fuera de producción. Si el propietario pierde el celular, hay que retirar `totp` de su usuario con acceso directo a la base (Render Shell) y volver a activarla. Mantén además 2FA en Render, Cloudflare, GitHub, R2 y el correo (US-09).
 
 ## Límite de intentos e IP real
 
@@ -85,7 +85,7 @@ El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 d�
 
 | ID | Tema |
 |---|---|
-| SEG-01 | 2FA del propietario (en curso) |
+| SEG-01 | 2FA del propietario (obligatorio en producción) |
 | SEG-03 | Comprobante público: enmascarar teléfono, revocar enlace, token con hash |
 | SEG-06 | Mismo tiempo de respuesta para usuarios inexistentes |
 | SEG-07 | Límite de intentos en «cambiar contraseña» |

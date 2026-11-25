@@ -84,7 +84,7 @@ test('SEG-13: diálogo de recuperación según la configuración del correo',()=
  const off=render('RecoveryDialog',{initialStatus:{emailRecovery:false},onClose(){}});
  assert.ok(off.includes(MAIL_DISABLED_MESSAGE));assert.doesNotMatch(off,/Enviar enlace|Vista previa/);
  const on=render('RecoveryDialog',{initialCompany:'Moto Norte',initialStatus:{emailRecovery:true},onClose(){}});
- for(const text of ['Enviar enlace','correo verificado','30 minutos','value="Moto Norte"'])assert.ok(on.includes(text),text);
+ for(const text of ['Enviar enlace','correo verificado','Vence en 1 hora','value="Moto Norte"'])assert.ok(on.includes(text),text);
  assert.doesNotMatch(on,/Vista previa|no se envían/);
 });
 

@@ -99,7 +99,7 @@ test('SSR: recuperación de contraseña consulta la configuración y luego pide 
   assert.match(loading,/Recuperar contraseña/);assert.match(loading,/role="dialog"/);assert.match(loading,/Comprobando el servicio de correo/);
   assert.doesNotMatch(loading,/Vista previa/);
   const html=renderToStaticMarkup(React.createElement(components.RecoveryDialog,{initialCompany:'Moto Norte',initialStatus:{emailRecovery:true},onClose(){}}));
-  assert.match(html,/30 minutos/);assert.match(html,/una sola vez/);
+  assert.match(html,/Vence en 1 hora/);assert.match(html,/una sola vez/);
   assert.match(html,/Moto Norte/);assert.match(html,/Usuario/);
 });
 

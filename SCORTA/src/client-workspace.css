@@ -162,3 +162,6 @@
 .cw-pcard-detail:hover{color:var(--cw-ink);background:#f2f2f2}
 .cw-pcard-empty .cw-pcard-media,.cw-pcard-empty .cw-pcard-price,.cw-pcard-empty .cw-pcard-name{opacity:.45}
 @media (max-width:520px){.cw-pcard-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cw-layout-toggle{margin-left:0}}
+
+/* Compras: buscador de producto */
+.cw-pick-list{list-style:none;margin:-6px 0 0;padding:0;border:1px solid var(--cw-line,#dedede);border-radius:9px;overflow:hidden;max-height:300px;overflow-y:auto}.cw-pick-list li+li{border-top:1px solid var(--cw-line,#dedede)}.cw-pick-list button{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:46px;padding:10px 14px;border:0;background:#fff;text-align:left;color:inherit}.cw-pick-list button:hover{background:#fff7d8}.cw-pick-list small{white-space:nowrap}.cw-picked-product{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;padding:12px 14px;background:#f6f6f6;border-radius:9px}

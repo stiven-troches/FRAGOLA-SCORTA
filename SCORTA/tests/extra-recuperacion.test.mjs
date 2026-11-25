@@ -97,7 +97,7 @@ test('SEG-13: límites por cuenta (silencioso) y por IP (429)',async()=>{
  assert.equal(last.status,429);assert.equal(last.body.code,'RATE_LIMITED');assert.ok(last.body.retryAfterSeconds>0);
 });
 
-test('SEG-13: /password/reset aplica la política, es de un solo uso, cierra sesiones y vence a los 30 minutos',async()=>{
+test('SEG-13: /password/reset aplica la política, es de un solo uso, cierra sesiones y vence a la hora',async()=>{
  const f=await fixture();await verifyEmail(f,f.admin);
  const other=(await f.call('POST','/api/v2/login',{company:'Moto Norte',username:'admin',password:adminPassword})).token;
  const mail=(await f.call('POST','/api/v2/password/forgot',{company:'Moto Norte',username:'admin'})).outbox[0],secret=linkToken(mail);
@@ -113,7 +113,7 @@ test('SEG-13: /password/reset aplica la política, es de un solo uso, cierra ses
  assert.equal((await f.call('POST','/api/v2/login',{company:'Moto Norte',username:'admin',password:'Nueva.Clave.Segura.2026'})).status,200);
  assert.equal((await f.call('POST','/api/v2/login',{company:'Moto Norte',username:'admin',password:adminPassword},{clientKey:'z'})).status,401);
  const audit=f.state.audit.find(a=>a.accion==='password.reset');assert.equal(audit.usuario,'admin');assert.equal(audit.medio,'correo');
- // Expiry: a second link stops working after 30 minutes.
+ // Expiry: a second link stops working after one hour.
  const later=(await f.call('POST','/api/v2/password/forgot',{company:'Moto Norte',username:'admin'},{now:T0+120000,clientKey:'e'})).outbox[0];
  const expired=await f.call('POST','/api/v2/password/reset',{token:linkToken(later),newPassword:'Tercera.Clave.Segura.2026'},{now:T0+120000+PASSWORD_RESET_TTL_MS+1});
  assert.equal(expired.status,400);assert.equal(expired.body.code,'RESET_INVALID');

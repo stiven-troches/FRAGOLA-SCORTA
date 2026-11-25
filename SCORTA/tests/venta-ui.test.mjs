@@ -14,6 +14,7 @@ import {money} from '../src/format.mjs';
 import * as venta from '../sale-pricing.mjs';
 import {matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE} from '../src/barcode-scanner.mjs';
 import {OFFLINE_SALE_MESSAGE} from '../src/connectivity.mjs';
+import {formatDate,formatDateTime} from '../src/format.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 let directory,components,compiled;
@@ -92,8 +93,8 @@ function harness({role='vendedor',initialDraft=null,onAction=async action=>succe
     dispose(){this.disposed=true}
   }
   const mockReact={...React,useId:()=>`field-${cursor++}`};
-  const made=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace};')(()=>null,
-    mockReact,(callback,deps)=>useMemo(()=>callback,deps),useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE);
+  const made=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE','formatDate','formatDateTime',compiled+';return {ClientWorkspace};')(()=>null,
+    mockReact,(callback,deps)=>useMemo(()=>callback,deps),useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE,formatDate,formatDateTime);
   function render(){cursor=0;changed=false;tree=made.ClientWorkspace(props);while(effects.length)effects.shift()();return tree}
   async function settle(){for(let i=0;i<10;i++){await Promise.resolve();if(changed)render();await Promise.resolve()}return tree}
   render();return {get tree(){return tree},get sync(){return drafts.at(-1)},settle,dispose(){for(const slot of slots)slot?.cleanup?.()}};

@@ -1,0 +1,21 @@
+# Finales de línea: el repositorio guarda LF siempre, sin importar el sistema de quien
+# haga commit. Evita que decenas de archivos aparezcan modificados solo por CRLF/LF.
+* text=auto eol=lf
+
+# Scripts de Windows necesitan CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binarios: nunca convertir.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.sqlite binary
+*.woff binary
+*.woff2 binary

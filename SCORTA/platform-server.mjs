@@ -3,10 +3,25 @@ import {DatabaseSync, backup} from 'node:sqlite';
 import {mkdirSync,existsSync,readFileSync,writeFileSync,rmSync,chmodSync,mkdtempSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
+import {brotliCompressSync,gzipSync,constants as zlibConstants} from 'node:zlib';
 import {createPlatform,platformRequest,PLATFORM_SESSION_TTL_MS} from './platform.mjs';
 
 const COOKIE='scorta_platform';
 const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
+// Respuestas de la API: comprimidas si el navegador lo acepta y, en la recarga periódica de
+// datos (GET /api/v2/data), 304 sin cuerpo cuando el contenido no cambió desde la copia del cliente.
+export function sendJson(req,res,status,body,{etag=false}={}){
+  const text=JSON.stringify(body),headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:'Accept-Encoding, Cookie, X-SCORTA-Company'};
+  if(etag&&status===200){
+    headers.ETag='W/"'+createHash('sha256').update(text).digest('base64url').slice(0,32)+'"';
+    if(String(req.headers['if-none-match']||'').split(',').map(v=>v.trim()).includes(headers.ETag)){res.writeHead(304,headers);res.end();return;}
+  }
+  const accepted=String(req.headers['accept-encoding']||''),size=Buffer.byteLength(text);
+  if(size>=1024&&/\bbr\b/.test(accepted)){headers['Content-Encoding']='br';res.writeHead(status,headers);res.end(brotliCompressSync(text,{params:{[zlibConstants.BROTLI_PARAM_QUALITY]:4,[zlibConstants.BROTLI_PARAM_SIZE_HINT]:size}}));return;}
+  if(size>=1024&&/\bgzip\b/.test(accepted)){headers['Content-Encoding']='gzip';res.writeHead(status,headers);res.end(gzipSync(text,{level:6}));return;}
+  res.writeHead(status,headers);res.end(text);
+}
 export function validatePlatformDatabase(file){
   const db=new DatabaseSync(file,{readOnly:true});
   try{if(db.prepare('PRAGMA quick_check').get().quick_check!=='ok')throw Error('Respaldo de plataforma dañado');const row=db.prepare('SELECT data FROM platform WHERE id=1').get();const state=JSON.parse(row?.data||'null');if(state?.schemaVersion!==1||!Array.isArray(state.users)||!Array.isArray(state.companies)||!state.businesses)throw Error('El archivo no contiene una plataforma SCORTA válida');return state;}finally{db.close();}
@@ -54,7 +69,8 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     const {state,...publicResult}=result;return publicResult;
   }
   function request(payload,options){
-    if(['GET','HEAD'].includes(String(payload?.method||'GET').toUpperCase()))return operation(payload,options);
+    // El checkout del catálogo es un POST que solo lee: no espera en la cola de escrituras.
+    if(['GET','HEAD'].includes(String(payload?.method||'GET').toUpperCase())||/^\/api\/v2\/catalog\/[^/?]+\/checkout(?:\?|$)/.test(String(payload?.path||'')))return operation(payload,options);
     const result=queue.then(()=>operation(payload,options));queue=result.catch(()=>{});return result;
   }
   const stats=()=>({sizeBytes:db.prepare('PRAGMA page_count').get().page_count*db.prepare('PRAGMA page_size').get().page_size,stateBytes:db.prepare('SELECT length(CAST(data AS BLOB)) AS n FROM platform WHERE id=1').get().n});
@@ -77,7 +93,7 @@ export const ipHeaderDiagnostics=req=>({level:'info',at:new Date().toISOString()
 // configurado Y SCORTA_PUBLIC_URL (el enlace nunca se arma con la cabecera Host del cliente).
 // Se envían después de confirmar la escritura y sin esperar, para que el tiempo de respuesta
 // no revele si la cuenta existe.
-export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,mailer=null,onMail=null}={}){
+export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null}={}){
   const mailEnabled=!!(mailer?.enabled&&publicUrl),resetBaseUrl=publicUrl?new URL(publicUrl).origin:undefined;
   const limitedPaths=new Set(['/api/v2/login','/api/v2/password/forgot','/api/v2/password/reset']);
   const cookie=(value,age)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${production?'; Secure':''}`;
@@ -89,6 +105,7 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
   const ipHeader=typeof clientIpHeader==='string'&&clientIpHeader.trim()?clientIpHeader.trim().toLowerCase():null;
   const hops=Math.trunc(Number(trustedProxyHops))||1,clientAddress=req=>clientAddressFrom(req,ipHeader,hops);
   const loginOrigins=new Map(),loginWindowMs=60000,loginOriginLimit=120,maxOrigins=1000;
+  const catalogReads=new Map(),catalogCheckouts=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
   return async(req,res)=>{
     const url=new URL(req.url,'http://localhost'),path=url.pathname;if(!path.startsWith('/api/v2/'))return false;
     try{
@@ -99,6 +116,15 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){json(res,415,{error:'La solicitud debe utilizar JSON'});return true;}
       }
       if(!store){json(res,503,{error:'Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',code:'SETUP_REQUIRED'});return true;}
+      // Catálogo público (sin sesión): tope por origen para que nadie sature la cola de la plataforma.
+      if(path.startsWith('/api/v2/catalog/')){
+        const timestamp=Number(clock()),checkout=req.method==='POST',limit=checkout?catalogCheckoutLimit:catalogReadLimit,bucket=checkout?catalogCheckouts:catalogReads;
+        for(const [key,value]of bucket)if(value.until<=timestamp)bucket.delete(key);
+        const key=clientAddress(req),previous=bucket.get(key);
+        if(previous&&previous.count>=limit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
+        if(!previous&&bucket.size>=maxOrigins)bucket.delete(bucket.keys().next().value);
+        bucket.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+      }
       if(limitedPaths.has(path)&&req.method==='POST'){
         const timestamp=Number(clock());
         for(const [key,value]of loginOrigins)if(value.until<=timestamp)loginOrigins.delete(key);
@@ -116,17 +142,21 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='));
       const token=match?.slice(COOKIE.length+1);
       const hasContext=Object.hasOwn(req.headers,'x-scorta-company');
-      const result=await store.request({method:req.method,path:path+url.search,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
+      const result=await store.request({method:req.method,path:path+url.search,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
       if(mailEnabled&&Array.isArray(result.outbox)&&result.outbox.length){const sending=mailer.sendAll(result.outbox).catch(()=>[]);onMail?.(sending);}
       if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
       if(result.status===429&&Number.isFinite(result.body?.retryAfterSeconds))res.setHeader('Retry-After',String(result.body.retryAfterSeconds));
-      if(req.method==='GET'&&/^\/api\/v2\/catalog\/[^/]+\/photo\/[^/]+$/.test(path)&&result.status===200){
+      if(req.method==='GET'&&/^\/api\/v2\/catalog\/[^/]+\/(?:photo\/[^/]+|logo)$/.test(path)&&result.status===200){
         const image=result.body.image?.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/);
         if(!image){json(res,404,{error:'Imagen no disponible'});return true;}
-        res.setHeader('Content-Type',image[1]);res.end(Buffer.from(image[2],'base64'));return true;
+        // Imágenes públicas: caché corta en el navegador/CDN y validación por contenido.
+        const bytes=Buffer.from(image[2],'base64'),etag='"'+createHash('sha256').update(bytes).digest('base64url').slice(0,27)+'"';
+        res.setHeader('Cache-Control','public, max-age=300, stale-while-revalidate=86400');res.setHeader('ETag',etag);
+        if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return true;}
+        res.setHeader('Content-Type',image[1]);res.end(bytes);return true;
       }
-      json(res,result.status,result.body);return true;
+      sendJson(req,res,result.status,result.body,{etag:req.method==='GET'&&path==='/api/v2/data'});return true;
     }catch(error){
       // Expected failures carry a status; anything else is an internal fault: log it
       // and never expose its message (SQLite/Node internals) to the client.

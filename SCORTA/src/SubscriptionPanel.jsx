@@ -1,12 +1,12 @@
 import React from 'react';
 import './subscription-panel.css';
-import {formatCOPCode} from './format.mjs';
+import {formatCOPCode,formatDate} from './format.mjs';
 
 const statusNames={active:'Activa',disabled:'Suspendida',expired:'Vencida',scheduled:'Aún no inicia'};
 const dateLabel=value=>{
  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return 'Sin configurar';
  const parsed=new Date(value+'T12:00:00Z');
- return Number.isNaN(parsed.getTime())||parsed.toISOString().slice(0,10)!==value?'Sin configurar':parsed.toLocaleDateString('es-CO',{timeZone:'America/Bogota',year:'numeric',month:'long',day:'numeric'});
+ return Number.isNaN(parsed.getTime())||parsed.toISOString().slice(0,10)!==value?'Sin configurar':formatDate(value);
 };
 const monthlyLabel=value=>{
  if(value==null||value===''||!Number.isFinite(Number(value))||Number(value)<0)return 'Sin configurar';

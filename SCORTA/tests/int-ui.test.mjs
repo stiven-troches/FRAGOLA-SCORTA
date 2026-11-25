@@ -16,7 +16,7 @@ before(async()=>{
   mkdirSync(join(root,'test-results'),{recursive:true});
   directory=mkdtempSync(join(root,'test-results','int-ui-'));
   const entry=join(directory,'entry.mjs'),src=file=>JSON.stringify(join(root,'src',file));
-  writeFileSync(entry,`export {Login,TermsGate,ForcedPasswordChange,TwoFactorSection,Profile} from ${src('PlatformApp.jsx')};\nexport {default as OwnerWorkspace,MetricCards,SecurityEvents} from ${src('OwnerWorkspace.jsx')};\nexport {default as ClientWorkspace} from ${src('ClientWorkspace.jsx')};\nexport {default as ReceiptTicket} from ${src('ReceiptTicket.jsx')};\nexport {default as LegalDocuments} from ${src('LegalDocuments.jsx')};\n`);
+  writeFileSync(entry,`export {Login,TermsGate,ForcedPasswordChange,TwoFactorSection,TwoFactorGate,Profile} from ${src('PlatformApp.jsx')};\nexport {default as OwnerWorkspace,MetricCards,SecurityEvents} from ${src('OwnerWorkspace.jsx')};\nexport {default as ClientWorkspace} from ${src('ClientWorkspace.jsx')};\nexport {default as ReceiptTicket} from ${src('ReceiptTicket.jsx')};\nexport {default as LegalDocuments} from ${src('LegalDocuments.jsx')};\n`);
   const result=await build({root,logLevel:'silent',build:{ssr:entry,write:false,minify:false}});
   const output=Array.isArray(result)?result[0].output:result.output,chunk=output.find(item=>item.type==='chunk'&&item.isEntry);
   const modulePath=join(directory,'components.mjs');writeFileSync(modulePath,chunk.code);
@@ -30,6 +30,19 @@ test('INT-UI-01: el login muestra el código de verificación solo cuando se req
   const plain=h(c.Login,{onLogin(){},onRecovery(){},onLegal(){}});assert.ok(!plain.includes('Código de verificación'));
   const html=h(c.Login,{onLogin(){},onRecovery(){},onLegal(){},totpRequired:true,error:'Ingresa el código de verificación de tu aplicación autenticadora.'});
   assert.match(html,/Código de verificación/);assert.match(html,/inputMode="numeric"|inputmode="numeric"/);assert.match(html,/autoComplete="one-time-code"|autocomplete="one-time-code"/);assert.match(html,/maxLength="6"|maxlength="6"/);
+});
+
+test('INT-UI-01b: un único enlace de términos y privacidad, mostrar contraseña y estado de carga',()=>{
+  const html=h(c.Login,{onLogin(){},onRecovery(){},onLegal(){},initialCompany:'moto-norte'});
+  assert.equal(html.match(/Términos y privacidad/g).length,1);assert.doesNotMatch(html,/Ver política de privacidad/);
+  assert.match(html,/value="moto-norte"/);assert.match(html,/Mostrar contraseña/);assert.match(html,/Empresa/);assert.match(html,/Usuario/);
+  assert.match(h(c.Login,{onLogin(){},onRecovery(){},onLegal(){},busy:true}),/Ingresando…/);
+});
+
+test('INT-UI-01c: el propietario sin 2FA ve la pantalla obligatoria de activación',async()=>{
+  const owner=await envelope('owner');
+  const html=h(c.TwoFactorGate,{session:{...owner.session,twoFactorRequired:true},onAction:async()=>({}),onLogout(){}});
+  assert.match(html,/Protege tu cuenta/);assert.match(html,/Activar verificación en dos pasos/);assert.match(html,/Cerrar sesión/);
 });
 
 test('INT-UI-02: verificación en dos pasos en el perfil del propietario (activar con QR y clave, desactivar)',async()=>{

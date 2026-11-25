@@ -1,8 +1,9 @@
 import React,{useEffect,useId,useRef,useState} from 'react';
+import {formatDateTime} from './format.mjs';
 import './support-tickets.css';
 
 const statusNames={open:'Abierto',in_progress:'En atención',resolved:'Resuelto'};
-const when=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?'':date.toLocaleString('es-CO',{timeZone:'America/Bogota',dateStyle:'short',timeStyle:'short'})};
+const when=value=>formatDateTime(value,'');
 export const supportUnread=tickets=>(tickets||[]).reduce((total,ticket)=>total+Number(ticket.unreadCount||0),0);
 export function TicketBell({count=0,...props}){return <button type="button" className="st-bell" {...props}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>{count}</span></button>}
 

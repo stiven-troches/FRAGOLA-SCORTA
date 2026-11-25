@@ -3,7 +3,7 @@
 import MoneyInput from './MoneyInput.jsx';
 import React,{useMemo,useRef,useState} from 'react';
 import Dialog from './Dialog.jsx';
-import {money} from './format.mjs';
+import {money,formatDate} from './format.mjs';
 import {roundMoney,sumMoney} from '../money.mjs';
 import * as venta from '../sale-pricing.mjs';
 import {AGING_BUCKETS,CASH_MOVEMENT_LABELS,CASH_OUT_TYPES,CASH_ROW_KEYS,CASH_ROW_LABELS,LAYAWAY_STATUS,cashBook,cashSettings,layawayExpired,portfolioSummary,whatsappLink} from '../caja-credito.mjs';
@@ -11,7 +11,7 @@ import {cashMovementMarkup,creditPaymentMarkup,layawayMarkup,printVoucher,statem
 import './caja-credito.css';
 
 export const todayBogota=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const humanDate=value=>{if(!value)return '—';const date=new Date(String(value).length===10?value+'T12:00:00Z':value);return Number.isNaN(date.getTime())?String(value):date.toLocaleDateString('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric'})};
+const humanDate=value=>formatDate(value,value?String(value):'—');
 const norm=value=>String(value??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const uuid=()=>globalThis.crypto.randomUUID();
 const validAmount=(value,{allowZero=false}={})=>{if(String(value??'').trim()==='')return null;const number=Number(value);return Number.isFinite(number)&&number>=0&&(allowZero||number>0)&&Math.abs(Math.round(number*100)-number*100)<1e-7&&number<=1e12?number:null};

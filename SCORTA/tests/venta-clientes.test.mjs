@@ -47,7 +47,10 @@ test('API: ficha con documento; el vendedor la selecciona y vende con precio mec
   const view=await f.data(S.seller);
   assert.equal(view.state.customerRecords,undefined);
   const entry=view.state.customerDirectory.find(c=>c.id===card.id);
-  assert.deepEqual(entry,{id:card.id,nombre:'Taller El Pistón',telefono:'3005550101',tipo:'mecanico',tipoDocumento:'NIT',numeroDocumento:'900123456-1'});
+  // Ley 1581: teléfono y documento enmascarados para el vendedor (solo los últimos 4).
+  assert.deepEqual(entry,{id:card.id,nombre:'Taller El Pistón',telefono:'•••0101',tipo:'mecanico',tipoDocumento:'NIT',numeroDocumento:'•••56-1',masked:true});
+  assert.equal(JSON.stringify(view.state.customerDirectory).includes('3005550101'),false);
+  assert.equal((await f.data(S.admin)).state.customerDirectory.find(c=>c.id===card.id).telefono,'3005550101','el administrador ve el dato completo');
   const body=await f.act(S.seller,{type:'sale.create',form:{cliente:'Taller El Pistón',telefono:'3005550101',customerId:card.id,paymentMethod:'efectivo'},items:[{producto_id:S.product.id,cantidad:2,precio:30000,precio_unitario:30000}],labor:[]});
   const record=body.state.ventas[0],line=record.detalles[0];
   assert.equal(line.precio_lista,30000);assert.equal(line.descuento,0);assert.equal(record.total,60000);assert.equal(record.tipoCliente,'mecanico');
