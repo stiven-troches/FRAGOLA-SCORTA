@@ -34,7 +34,9 @@ function lockHolderRunning(pid){
   try{process.kill(pid,0);}catch(error){if(error.code!=='EPERM')return false;}
   try{return /node/i.test(readFileSync(`/proc/${pid}/cmdline`,'utf8'));}catch{return true;}
 }
-export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false}={}){
+// BE-33: onSecurityEvents(events) recibe, después de confirmar cada escritura, los eventos de
+// seguridad nuevos (los más recientes primero) para avisar por correo al propietario.
+export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null}={}){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   const pidFile=file+'.pid';
   if(existsSync(pidFile)){if(lockHolderRunning(Number(readFileSync(pidFile,'utf8'))))throw Error('La plataforma ya está abierta. Detén la instancia antes de abrir otra.');rmSync(pidFile,{force:true});}
@@ -65,6 +67,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
       if(closed)throw Error('La plataforma está cerrada');
       db.exec('BEGIN IMMEDIATE');
       try{const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(result.state),snap.version);if(!changed.changes){db.exec('ROLLBACK');return {status:409,body:{error:'Otra solicitud actualizó los datos. Reintenta la operación.',code:'REVISION_CONFLICT'}};}db.exec('COMMIT');cache={version:snap.version+1,state:result.state};}catch(error){try{db.exec('ROLLBACK');}catch{}throw error;}
+      if(onSecurityEvents){const known=snap.state.securityEvents?.[0]?.id,fresh=[];for(const event of result.state.securityEvents||[]){if(event.id===known)break;fresh.push(event);}if(fresh.length){try{onSecurityEvents(structuredClone(fresh));}catch{}}}
     }
     const {state,...publicResult}=result;return publicResult;
   }

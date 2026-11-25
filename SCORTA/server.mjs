@@ -11,6 +11,7 @@ import {testCompanyEnabled} from './test-company.mjs';
 import {startupBackup} from './platform-backup.mjs';
 import {startOffsiteBackup} from './ops/offsite-backup.mjs';
 import {createMailer} from './ops/mailer.mjs';
+import {createAlerter,errorBurst,securityAlert,scrub} from './ops/alerts.mjs';
 const root=dirname(fileURLToPath(import.meta.url));
 // Archivos de texto (JS, CSS, HTML, SVG, JSON) comprimidos con brotli o gzip; se guardan en
 // memoria por ruta y fecha de modificación para no recomprimir en cada visita.
@@ -77,38 +78,52 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
 }else if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const dataDir=resolve(process.env.DATA_DIR||resolve(root,'data')),startedAt=new Date().toISOString(),version=deployedVersion();
  const platformFile=resolve(dataDir,'platform.sqlite');
- let lastBackup={at:null,ok:null};
+ // OPS-19: last local (startup) and offsite backup, kept apart for the owner panel.
+ let lastBackup={at:null,ok:null};const backups={local:null,offsite:null};
  if(existsSync(platformFile)){
   // SEG-04: the owner password only seeds a brand-new platform database.
   if(process.env.SCORTA_OWNER_PASSWORD)opsLog('warn','owner-password-unused',{message:'borra SCORTA_OWNER_PASSWORD de Render; ya no se usa'});
   // BE-02: consistent copy before opening the database on every start.
   try{const file=await startupBackup(platformFile,resolve(dataDir,'backups'));lastBackup={at:new Date().toISOString(),ok:true,kind:'startup'};opsLog('info','startup-backup',{file});}
   catch(error){lastBackup={at:new Date().toISOString(),ok:false,kind:'startup'};opsLog('error','startup-backup-failed',{error:String(error?.message||error)});}
+  backups.local={...lastBackup};
  }
- const platformExists=existsSync(platformFile),platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||platformExists;
- if(process.env.NODE_ENV==='production'&&!platformConfigured)throw Error('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma SCORTA');
- const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:platformExists?undefined:readLegacyState(resolve(dataDir,'motoshop.sqlite')),withTestCompany:testCompanyEnabled()}):null;
- const requireTerms=process.env.NODE_ENV==='production'||process.env.SCORTA_REQUIRE_TERMS==='1';
- // Propietario: verificación en dos pasos obligatoria en producción (SCORTA_REQUIRE_OWNER_2FA=0 la vuelve opcional; =1 la exige fuera de producción).
- const requireOwnerTwoFactor=process.env.SCORTA_REQUIRE_OWNER_2FA==='1'||process.env.NODE_ENV==='production'&&process.env.SCORTA_REQUIRE_OWNER_2FA!=='0';
  // SEG-13: correo transaccional (Resend o webhook). Sin configuración queda desactivado.
  let mailer;try{mailer=createMailer({log:({level,event,...rest})=>opsLog(level,event,rest)});}catch(error){opsLog('error','mail-config-invalid',{error:String(error?.message||error)});mailer=createMailer({env:{}});}
  if(mailer.enabled&&!process.env.SCORTA_PUBLIC_URL)opsLog('warn','mail-without-public-url',{message:'Define SCORTA_PUBLIC_URL: sin ella no se envían enlaces de recuperación'});
  opsLog('info','mail-config',{provider:mailer.provider,enabled:mailer.enabled&&!!process.env.SCORTA_PUBLIC_URL});
- const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms,requireOwnerTwoFactor});
- const offsite=startOffsiteBackup(platformStore,{onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};}});
+ // BE-11/BE-33/OPS-07: alerts also go by email to SCORTA_OWNER_EMAIL (max one per type per hour).
+ const alerter=createAlerter({mailer,to:process.env.SCORTA_OWNER_EMAIL,version,log:({level,event,...rest})=>opsLog(level,event,rest)});
+ opsLog('info','alert-mail-config',{enabled:alerter.enabled});
+ const onSecurityEvents=events=>{for(const event of events){const alert=securityAlert(event);alerter.notify(alert.type,alert);}};
+ const platformExists=existsSync(platformFile),platformConfigured=!!process.env.SCORTA_OWNER_PASSWORD||platformExists;
+ if(process.env.NODE_ENV==='production'&&!platformConfigured)throw Error('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma SCORTA');
+ const platformStore=platformConfigured?await openPlatformStore(platformFile,{owner:process.env.SCORTA_OWNER_PASSWORD?{company:process.env.SCORTA_OWNER_COMPANY||'Fragola',username:process.env.SCORTA_OWNER_USER||'Steven',name:process.env.SCORTA_OWNER_NAME||'Steven',email:process.env.SCORTA_OWNER_EMAIL||'',password:process.env.SCORTA_OWNER_PASSWORD}:undefined,ownerContact:process.env.SCORTA_OWNER_CONTACT||'',legacyState:platformExists?undefined:readLegacyState(resolve(dataDir,'motoshop.sqlite')),withTestCompany:testCompanyEnabled(),onSecurityEvents}):null;
+ const requireTerms=process.env.NODE_ENV==='production'||process.env.SCORTA_REQUIRE_TERMS==='1';
+ // Propietario: verificación en dos pasos obligatoria en producción (SCORTA_REQUIRE_OWNER_2FA=0 la vuelve opcional; =1 la exige fuera de producción).
+ const requireOwnerTwoFactor=process.env.SCORTA_REQUIRE_OWNER_2FA==='1'||process.env.NODE_ENV==='production'&&process.env.SCORTA_REQUIRE_OWNER_2FA!=='0';
+ const offsite=startOffsiteBackup(platformStore,{onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};backups.offsite={at:result.at,ok:result.ok};
+  if(!result.ok)alerter.notify('offsite-backup-failed',{subject:'Falló el respaldo externo cifrado',lines:['Último intento: '+result.at,'Error: '+scrub(result.error,300),'El respaldo local al arrancar sigue disponible; revisa las variables SCORTA_S3_* y el bucket.']});}});
  const latency=latencyWindow(500),logIpHeaders=process.env.SCORTA_LOG_IP_HEADERS==='1';let warned=0;
  const health=()=>{
   let ok=false,db=null;
   try{ok=!!platformStore?.health();db=platformStore?platformStore.stats():null;}catch(error){opsLog('error','healthz-failed',{error:String(error?.stack||error)});}
   const usedPct=diskUsedPct(dataDir),warning=(usedPct??0)>80||(db?.stateBytes??0)>20*1024*1024;
-  if(warning&&Date.now()-warned>3600000){warned=Date.now();opsLog('warn','capacity-warning',{diskUsedPct:usedPct,stateBytes:db?.stateBytes??null,message:'Disco por encima del 80 % o estado mayor a 20 MB'});}
+  if(warning&&Date.now()-warned>3600000){warned=Date.now();opsLog('warn','capacity-warning',{diskUsedPct:usedPct,stateBytes:db?.stateBytes??null,message:'Disco por encima del 80 % o estado mayor a 20 MB'});
+   alerter.notify('capacity-warning',{subject:'Capacidad del servidor en alerta',lines:['Disco usado: '+(usedPct==null?'sin dato':usedPct+' %'),'Estado de la plataforma: '+(db?.stateBytes==null?'sin dato':(db.stateBytes/1048576).toFixed(1)+' MB'),'Umbrales: disco 80 % · estado 20 MB']});}
   if(!warning)warned=0;
   return {ok,version,startedAt,db,disk:{usedPct},latencyP95Ms:latency.p95(),lastBackup,warning};
  };
+ // OPS-19: read-only server status for the owner panel (same data as the /healthz detail).
+ const serverStatus=()=>({...health(),uptimeSeconds:Math.round(process.uptime()),backups:{local:backups.local,offsite:backups.offsite,offsiteEnabled:!!offsite.enabled},alertMail:alerter.enabled});
+ const handlePlatform=createPlatformHandler({mailer,store:platformStore,production:process.env.NODE_ENV==='production',publicUrl:process.env.SCORTA_PUBLIC_URL,clientIpHeader:process.env.SCORTA_CLIENT_IP_HEADER,trustedProxyHops:Number(process.env.SCORTA_TRUSTED_PROXY_HOPS)||1,requireTerms,requireDataConsent:requireTerms,requireOwnerTwoFactor,serverStatus});
+ // Capacity is checked every 15 minutes even if nobody calls /healthz.
+ const capacityTimer=setInterval(health,15*60*1000);capacityTimer.unref();
  const production=process.env.NODE_ENV==='production';
+ // OPS-07: a burst of 5xx answers (10 in 5 minutes) also emails the owner.
+ const burst=errorBurst({threshold:Number(process.env.SCORTA_ALERT_5XX_THRESHOLD)||10,windowMs:5*60*1000});
  // One JSON line per API request (stdout is collected by Render). Receipt tokens are redacted.
- const logRequest=(req,res,started)=>{const path=String(req.url||'').split('?')[0].replace(/\/receipt\/[A-Za-z0-9_-]{43}/,'/receipt/[token]');if(!path.startsWith('/api/')&&path!=='/healthz'&&res.statusCode<400)return;const ms=Math.round(performance.now()-started);if(path.startsWith('/api/'))latency.add(ms);const line=JSON.stringify({level:res.statusCode>=500?'error':'info',at:new Date().toISOString(),method:req.method,path,status:res.statusCode,ms});(res.statusCode>=500?console.error:console.log)(line);};
+ const logRequest=(req,res,started)=>{const path=String(req.url||'').split('?')[0].replace(/\/receipt\/[A-Za-z0-9_-]{43}/,'/receipt/[token]');if(res.statusCode>=500&&burst.record())alerter.notify('http-5xx-burst',{subject:'Ráfaga de errores del servidor',lines:[burst.count()+' respuestas 5xx en los últimos 5 minutos','Última ruta con error: '+req.method+' '+path.replace(/[^\w/.-]/g,'').slice(0,120)]});if(!path.startsWith('/api/')&&path!=='/healthz'&&res.statusCode<400)return;const ms=Math.round(performance.now()-started);if(path.startsWith('/api/'))latency.add(ms);const line=JSON.stringify({level:res.statusCode>=500?'error':'info',at:new Date().toISOString(),method:req.method,path,status:res.statusCode,ms});(res.statusCode>=500?console.error:console.log)(line);};
  const server=createServer(async(req,res)=>{
  const started=performance.now();res.once('finish',()=>logRequest(req,res,started));
  if(logIpHeaders&&String(req.url||'').startsWith('/api/'))console.log(JSON.stringify(ipHeaderDiagnostics(req)));

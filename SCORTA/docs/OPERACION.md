@@ -65,7 +65,7 @@ Se configuran en Render → servicio → *Environment*. Las marcadas como **secr
 | `SCORTA_OWNER_USER` | usuario del propietario | Cambia el valor por defecto (`Steven`) (US-10). |
 | `SCORTA_OWNER_NAME` | nombre visible | |
 | `SCORTA_OWNER_PASSWORD` | **secreto** | Solo crea al propietario cuando la base es nueva. **Bórrala de Render después del primer arranque** (ver [SECRETOS.md](SECRETOS.md)). Cambiarla después no cambia la contraseña. |
-| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». |
+| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». `SCORTA_OWNER_EMAIL` además recibe las alertas por correo (sección 6). |
 
 ### IP real del cliente (límite de intentos)
 
@@ -228,6 +228,8 @@ El detalle incluye:
 | `warning` | `true` si el disco supera 80 % o el estado supera 20 MB |
 
 Consúltalo con el token una vez por semana y revisa `warning` y `lastBackup`.
+
+**Alertas por correo (BE-11, BE-33, OPS-07).** Si el correo está configurado (Resend o webhook, sección 2) y `SCORTA_OWNER_EMAIL` tiene un correo válido, el servidor también envía al propietario estas alertas: capacidad (`capacity-warning`, revisada cada 15 minutos), muchos intentos fallidos de ingreso, ingreso del propietario desde un origen nuevo, inicio de un modo soporte, fallo del respaldo externo (`offsite-backup-failed`) y una ráfaga de errores del servidor (10 respuestas 5xx en 5 minutos; el umbral se cambia con `SCORTA_ALERT_5XX_THRESHOLD`). Llega como máximo un correo por tipo de alerta cada hora. El correo nunca lleva llaves, cookies, IP ni datos de clientes de los almacenes. El log muestra `alert-mail-config` al arrancar y `alert-mail-sent`, `alert-mail-throttled` o `alert-mail-failed`. Sin correo configurado, las alertas siguen solo en el log y en el panel del propietario.
 
 Eventos útiles en el log de Render: `capacity-warning` (disco > 80 % o estado > 20 MB), `startup-backup` (copia local al arrancar), `offsite-backup-enabled`, `offsite-backup`, `offsite-backup-failed`, `offsite-backup-disabled`, `maintenance-mode`. Las líneas de peticiones guardan método, ruta, estado y duración; **no guardan la IP** salvo que actives `SCORTA_LOG_IP_HEADERS=1`.
 
