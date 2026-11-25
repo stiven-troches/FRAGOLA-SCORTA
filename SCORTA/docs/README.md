@@ -7,8 +7,9 @@ Actualizado: 21 de noviembre de 2026. Empieza por [LEEME.md](../LEEME.md) (insta
 | Documento | Para qué |
 |---|---|
 | [OPERACION.md](OPERACION.md) | Render: arquitectura, variables, respaldos, restauración, RPO/RTO, runbook de incidentes, monitoreo, despliegues. Anexo de instalación propia (Docker/Caddy). |
+| [SALIDA-DE-RENDER.md](SALIDA-DE-RENDER.md) | Plan para mover SCORTA de Render a Fly.io, Railway o un VPS en menos de un día, con corte de DNS y rollback. |
 | [seguridad.md](seguridad.md) | Estado actual de la seguridad: roles, sesiones, soporte, límites, cabeceras. |
-| [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) | Plan de respuesta a incidentes de seguridad y simulacro. |
+| [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) | Plan de respuesta a incidentes de seguridad, simulacro y ejercicio de mesa (contraseña del propietario filtrada). |
 | [SECRETOS.md](SECRETOS.md) | Inventario de secretos y llaves, rotación y qué hacer si se filtran. |
 | [LICENCIAS.md](LICENCIAS.md) | Licencias de las dependencias y titularidad del código. |
 

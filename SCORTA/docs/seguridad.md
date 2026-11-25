@@ -1,6 +1,6 @@
 # Seguridad de SCORTA
 
-Actualizado: 21 de noviembre de 2026. Describe la plataforma multiempresa (`/api/v2`) tal como está en el código hoy. Lo que aún falta está en la sección [Pendientes](#pendientes).
+Actualizado: 25 de noviembre de 2026. Describe la plataforma multiempresa (`/api/v2`) tal como está en el código hoy. Lo que aún falta está en la sección [Pendientes](#pendientes).
 
 Relacionados: [OPERACION.md](OPERACION.md) · [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) · [SECRETOS.md](SECRETOS.md)
 
@@ -19,6 +19,8 @@ La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca
 - Entre 8 y 200 caracteres, con número, mayúscula, minúscula y símbolo.
 - Se guardan con hash PBKDF2-SHA256 (120.000 iteraciones) y sal. El refuerzo a un hash más fuerte espera tu decisión (US-41).
 - Cambiar o restablecer una contraseña cierra todas las sesiones de esa cuenta.
+- **Cambio obligatorio tras un restablecimiento (SEG-08):** cuando el propietario o el administrador restablece la contraseña de otra cuenta, esa cuenta queda marcada y, al ingresar, solo puede ver su sesión, cambiar la contraseña o salir hasta que elija una nueva.
+- **Límite en «cambiar contraseña» (SEG-07):** 5 contraseñas actuales incorrectas por usuario en 15 minutos devuelven `429` hasta que pase la ventana.
 - Recuperación por correo (SEG-13): solo a correos verificados con código de 6 dígitos; enlace `/recuperar#<token>` de un solo uso que vence en 1 hora, guardado solo como hash; respuesta idéntica exista o no la cuenta; límites por IP y por cuenta; al usarlo se cierran todas las sesiones. Sin proveedor de correo configurado queda apagada y el propietario o el administrador restablecen la contraseña desde su panel.
 
 ## Sesiones
@@ -32,13 +34,14 @@ La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca
 - El navegador recibe solo una cookie `HttpOnly`, `SameSite=Strict` y `Secure` (en producción). No se guarda nada en `localStorage`.
 - El identificador de sesión es aleatorio de 256 bits y en la base solo se guarda su hash.
 - Las sesiones **sobreviven** a reinicios y deploys. Se cierran al salir, al cambiar o restablecer la contraseña, al desactivar la cuenta o la empresa, y al restaurar un respaldo (la restauración borra todas las sesiones).
+- **Cierre masivo (BE-12):** desde su panel el propietario puede cerrar todas las sesiones de una empresa (incluido el modo soporte abierto en ella) o de toda la plataforma (acción `sessions.revoke`). Su propia sesión se conserva y la acción queda en la auditoría con el número de sesiones cerradas.
 
 ## Modo soporte del propietario
 
 - Para entrar a una empresa, el propietario escribe un **motivo** obligatorio.
 - El inicio y el fin quedan en la auditoría de esa empresa, con la identidad del propietario y el motivo.
 - Termina solo a las 2 horas.
-- Falta un aviso visible para el almacén mientras el propietario está dentro (SEG-09).
+- **Aviso visible (SEG-09):** mientras el propietario está dentro, los usuarios de esa empresa ven el aviso «El soporte de SCORTA está trabajando en tu cuenta», con el motivo y la hora de inicio.
 
 ## Verificación en dos pasos (2FA) del propietario
 
@@ -48,6 +51,7 @@ La empresa de cada petición **sale siempre de la cuenta en el servidor**, nunca
 
 - **Por cuenta:** 10 intentos fallidos con la misma empresa, usuario y dirección IP bloquean esa combinación **15 minutos**.
 - **Por dirección IP:** máximo 60 intentos de login por minuto desde la misma IP.
+- **Mismo trabajo para usuarios inexistentes (SEG-06):** si la cuenta no existe, el servidor igual verifica la contraseña contra un hash de relleno; la respuesta tarda lo mismo y el mensaje es idéntico («Empresa, usuario o contraseña incorrectos»).
 - La IP real se toma de la cabecera definida en `SCORTA_CLIENT_IP_HEADER` (`cf-connecting-ip` con Cloudflare, `x-forwarded-for` en Render). Con `x-forwarded-for` se cuenta desde la derecha según `SCORTA_TRUSTED_PROXY_HOPS`, porque la parte izquierda la puede falsificar el cliente.
 - Si la variable está vacía, se usa la IP de la conexión. Detrás de un proxy esa IP es la del proxy, y el límite se volvería un bloqueo para todos. Por eso hay que configurarla en Render (ver [OPERACION.md](OPERACION.md#ip-real-del-cliente-límite-de-intentos)).
 
@@ -73,7 +77,11 @@ La CSP no permite scripts en línea ni de otros dominios.
 
 ## Comprobantes públicos
 
-El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 días; se puede renovar desde la venta. Pendiente (SEG-03): enmascarar el teléfono, poder revocar el enlace y no guardar el token en claro.
+El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 días; se puede renovar desde la venta. Además (SEG-03):
+
+- En la base solo se guarda el **hash SHA-256** del token; el enlace en claro existe solo en la respuesta que lo genera. Los tokens antiguos guardados en claro se borran con una migración única.
+- La página pública muestra el **teléfono enmascarado** (solo los 4 últimos dígitos), igual que el número de documento.
+- Desde el detalle de la venta se puede **revocar** el enlace; quien lo tenga ya no podrá abrirlo. Generar uno nuevo invalida el anterior.
 
 ## Datos y respaldos
 
@@ -85,14 +93,20 @@ El enlace del comprobante que se envía por WhatsApp es opaco y vence a los 7 d�
 
 | ID | Tema |
 |---|---|
-| SEG-01 | 2FA del propietario (obligatorio en producción) |
-| SEG-03 | Comprobante público: enmascarar teléfono, revocar enlace, token con hash |
-| SEG-06 | Mismo tiempo de respuesta para usuarios inexistentes |
-| SEG-07 | Límite de intentos en «cambiar contraseña» |
-| SEG-08 | Obligar a cambiar la contraseña tras un restablecimiento |
-| SEG-09 | Aviso visible cuando el propietario está en modo soporte |
-| BE-12 | Revocar todas las sesiones de una empresa o de la plataforma |
 | SEG-10 / SEG-11 | Revisión interna antes del 2.º cliente y prueba de intrusión antes de 10 |
+| US-41 | Reforzar el hash de contraseñas (hoy PBKDF2-SHA256 con 120.000 iteraciones); espera tu decisión |
+
+### Ya implementados (antes figuraban aquí)
+
+| ID | Tema | Dónde está |
+|---|---|---|
+| SEG-01 | 2FA del propietario, obligatorio en producción | `platform.mjs`: login con TOTP y bloqueo `TWO_FACTOR_SETUP_REQUIRED` |
+| SEG-03 | Comprobante público: token con hash, teléfono enmascarado, enlace revocable | `platform.mjs`: `issueReceipt`, `publicReceiptSale`, acción `sale.receipt.revoke` |
+| SEG-06 | Mismo trabajo y mensaje para usuarios inexistentes | `platform.mjs`: `dummyUser` en el login |
+| SEG-07 | Límite de intentos en «cambiar contraseña» | `platform.mjs`: `POST /api/v2/password` |
+| SEG-08 | Cambio obligatorio de contraseña tras un restablecimiento | `platform.mjs`: `mustChangePassword` |
+| SEG-09 | Aviso visible cuando el propietario está en modo soporte | `platform.mjs` (`activeSupport`) y `src/ClientWorkspace.jsx` |
+| BE-12 | Cerrar todas las sesiones de una empresa o de la plataforma | `platform.mjs` (`sessions.revoke`) y `src/OwnerWorkspace.jsx` |
 
 ## Servidor heredado (`/api`)
 
