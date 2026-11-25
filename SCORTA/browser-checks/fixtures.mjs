@@ -1,7 +1,8 @@
 import {test as base,expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 export {expect};
-export const ORIGIN='http://127.0.0.1:19420';
+// SCORTA_UI_PORT permite correr la suite en paralelo con otra copia del proyecto.
+export const ORIGIN='http://127.0.0.1:'+(process.env.SCORTA_UI_PORT||'19420');
 export const OWNER=Object.freeze({company:'QA Owner',username:'qaowner',password:'QA.Owner!2026',name:'QA Owner'});
 // Keep the synthetic login burst below the production limit of 60 attempts per minute.
 let lastLoginAt=0;
@@ -68,3 +69,8 @@ export async function addProduct(page,product){
 }
 export async function noOverflow(page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth)+1)}
 export async function waitSaved(page){await expect(page.getByText('Guardado',{exact:true}).first()).toBeVisible()}
+// «Ingresar mercancía» busca el producto (nombre, referencia o código + Enter) en lugar de una lista desplegable.
+export async function choosePurchaseProduct(dialog,product){
+ const search=dialog.getByRole('searchbox',{name:/^Buscar producto/});await search.fill(product.referencia);await search.press('Enter');
+ await expect(dialog.getByRole('button',{name:'Cambiar',exact:true})).toBeVisible();
+}
