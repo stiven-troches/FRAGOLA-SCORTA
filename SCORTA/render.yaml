@@ -95,6 +95,8 @@ services:
     runtime: node
     rootDir: SCORTA
     branch: staging                  # Rama de pruebas: haz merge/push a "staging" para desplegar aquí primero.
+                                     # La rama debe existir en GitHub ANTES de sincronizar el Blueprint:
+                                     #   git push origin main:staging
     region: ohio
     plan: starter                    # El plan pago más barato; "free" no admite disco.
     numInstances: 1
@@ -117,6 +119,8 @@ services:
         value: "24"
       - key: SCORTA_TEST_COMPANY
         value: "0"                   # Para probar Moto Central Demo aquí: "1" y además SCORTA_TEST_COMPANY_PRODUCTION="1".
+      - key: SCORTA_HEALTH_TOKEN
+        generateValue: true          # Token propio de staging para ver el detalle de /healthz.
       - key: SCORTA_PUBLIC_URL
         sync: false                  # p. ej. https://scorta-staging.onrender.com
       - key: SCORTA_OWNER_COMPANY

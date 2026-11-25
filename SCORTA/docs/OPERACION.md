@@ -346,6 +346,8 @@ Pasos comunes a todo incidente:
 **Cuándo:** antes del primer cliente (OPS-02) y luego cada 3 meses (enero, abril, julio, octubre).
 **Objetivo:** comprobar que los respaldos sirven, que la llave funciona y medir el RTO real.
 
+**Ensayo automático del procedimiento (sin datos reales):** `npm run ensayo:restauracion` arranca SCORTA con datos ficticios en una carpeta temporal, lo respalda cifrado, lo descifra con la CLI, comprueba que una llave equivocada se rechaza, restaura con `--offline`, arranca sobre lo restaurado y compara empresas y usuarios. Debe terminar con `RESULTADO: OK`. Primer ensayo: 25 de noviembre de 2026, OK (unos 2 s con una base pequeña). No reemplaza el ensayo con un respaldo real del bucket (pasos 1 a 6).
+
 1. Descarga del bucket el respaldo `.sqlite.enc` más reciente.
 2. En tu PC (con Node 24 y el código de SCORTA), en una carpeta vacía:
    ```sh
