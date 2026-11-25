@@ -1,4 +1,4 @@
-import {formatCOP} from './format.mjs';
+import {formatCOP,formatDate,formatDateTime} from './format.mjs';
 import {documentLabel,paymentLabel,salePayments,saleVat} from '../sale-pricing.mjs';
 const asNumber=value=>Number.isFinite(Number(value))?Number(value):0;
 export const RECEIPT_LEGAL_NOTICE='Documento comercial. No es factura electrónica.';
@@ -26,7 +26,7 @@ export function receiptTotals(sale={}){
 export function receiptDate(value){
   if(!value)return '—';
   const parsed=new Date(String(value).length===10?value+'T12:00:00Z':value);
-  return Number.isNaN(parsed.getTime())?String(value):parsed.toLocaleString('es-CO',{timeZone:'America/Bogota',...(String(value).length===10?{dateStyle:'short'}:{dateStyle:'short',timeStyle:'short'})});
+  return Number.isNaN(parsed.getTime())?String(value):String(value).length===10?formatDate(value):formatDateTime(value);
 }
 const pair=(label,value)=>value?`<div><dt>${receiptEscape(label)}</dt><dd>${receiptEscape(value)}</dd></div>`:'';
 export function receiptMarkup({sale={},company={},width=80}={}){

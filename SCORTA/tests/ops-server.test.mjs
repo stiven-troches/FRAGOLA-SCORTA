@@ -26,11 +26,15 @@ test('BE-11: ventana p95 y versión desplegada',()=>{
 
 test('arranque real: /healthz ampliado, respaldo al arrancar, aviso SEG-04 y modo mantenimiento',{timeout:60000},async t=>{
   const dir=mkdtempSync(join(tmpdir(),'scorta-ops-server-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
-  const env={DATA_DIR:dir,SCORTA_OWNER_PASSWORD:'OwnerPlatformFixture123456!',SCORTA_VERSION:'ops-test',SCORTA_LOG_IP_HEADERS:'1'};
+  const env={DATA_DIR:dir,SCORTA_OWNER_PASSWORD:'OwnerPlatformFixture123456!',SCORTA_VERSION:'ops-test',SCORTA_LOG_IP_HEADERS:'1',SCORTA_HEALTH_TOKEN:'token-de-salud-0123456789'};
+  const detail={headers:{authorization:'Bearer token-de-salud-0123456789'}};
   let s=await start(t,env);
   assert.equal(existsSync(join(dir,'backups')),false,'primer arranque: no hay base que respaldar');
   await fetch(s.base+'/api/v2/session',{headers:{'cf-connecting-ip':'203.0.113.4',cookie:'scorta_platform=secreto'}});
-  let h=await (await fetch(s.base+'/healthz')).json();
+  // Público: solo estado y versión; el detalle exige el token.
+  const pub=await (await fetch(s.base+'/healthz')).json();assert.deepEqual(Object.keys(pub).sort(),['ok','startedAt','version','warning']);
+  assert.equal((await (await fetch(s.base+'/healthz',{headers:{authorization:'Bearer otro'}})).json()).db,undefined);
+  let h=await (await fetch(s.base+'/healthz',detail)).json();
   assert.equal(h.ok,true);assert.equal(h.version,'ops-test');assert.ok(Date.parse(h.startedAt));
   assert.ok(h.db.sizeBytes>0&&h.db.stateBytes>0);assert.equal(typeof h.warning,'boolean');assert.ok(h.disk&&'usedPct' in h.disk);
   assert.equal(typeof h.latencyP95Ms,'number');assert.deepEqual(h.lastBackup,{at:null,ok:null});
@@ -39,7 +43,7 @@ test('arranque real: /healthz ampliado, respaldo al arrancar, aviso SEG-04 y mod
   s=await start(t,env);
   assert.match(s.log(),/borra SCORTA_OWNER_PASSWORD de Render; ya no se usa/);
   assert.equal(readdirSync(join(dir,'backups')).filter(f=>/^startup-.*\.sqlite$/.test(f)).length,1);
-  h=await (await fetch(s.base+'/healthz')).json();assert.equal(h.lastBackup.ok,true);assert.equal(h.lastBackup.kind,'startup');
+  h=await (await fetch(s.base+'/healthz',detail)).json();assert.equal(h.lastBackup.ok,true);assert.equal(h.lastBackup.kind,'startup');
   await s.stop();
   s=await start(t,{DATA_DIR:dir,SCORTA_MAINTENANCE:'1'});
   const health=await fetch(s.base+'/healthz');assert.equal(health.status,200,'Render no debe marcar fallido el deploy');const hb=await health.json();assert.equal(hb.maintenance,true);assert.equal(hb.ok,false);

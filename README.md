@@ -2,7 +2,7 @@
 
 Aplicación multiempresa para almacenes de accesorios y repuestos de moto: inventario, compras, ventas, taller, clientes, reportes y cierres por medio de pago. El propietario administra empresas y contratos; cada empresa tiene administradores y vendedores con permisos propios.
 
-**El proyecto está en [`SCORTA/`](SCORTA/).** Los archivos de PRENOTA que permanecen en la raíz corresponden a otro proyecto. Ejecuta los comandos desde `SCORTA`, como hace la integración continua.
+**El proyecto está en [`SCORTA/`](SCORTA/).** Ejecuta los comandos desde `SCORTA`, como hace la integración continua. PRENOTA vive en su propio repositorio (`FRAGOLA-PRENOTA`).
 
 ## Instalar el servidor
 

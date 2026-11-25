@@ -106,7 +106,7 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 
 - Sin estas variables el correo queda **apagado**: el ingreso dice «La recuperación por correo no está configurada; pide a tu administrador que restablezca tu contraseña» y no se envía nada. El administrador sigue usando «Restablecer contraseña» (contraseña temporal).
 - Los enlaces usan **solo** `SCORTA_PUBLIC_URL` (`<SCORTA_PUBLIC_URL>/recuperar#<token>`); sin ella tampoco se envían correos.
-- Flujo: el usuario registra y verifica su correo en «Mi perfil» (código de 6 dígitos, 10 minutos). Desde «¿Olvidaste tu contraseña?» recibe un enlace de un solo uso que vence en 30 minutos; al cambiarla se cierran todas sus sesiones y se le avisa por correo.
+- Flujo: el usuario registra y verifica su correo en «Mi perfil» (código de 6 dígitos, 10 minutos). Desde «¿Olvidaste tu contraseña?» recibe un enlace de un solo uso que vence en 1 hora; al cambiarla se cierran todas sus sesiones y se le avisa por correo.
 - Límites: 10 solicitudes por IP y 3 enlaces por cuenta cada 15 minutos; la respuesta es siempre la misma, exista o no la cuenta.
 - El log muestra `mail-config` al arrancar (`enabled:true|false`), `mail-sent` y `mail-failed` con el destinatario enmascarado (`l***@dominio.com`). Si aparece `mail-failed`, revisa la llave, el dominio verificado y el panel de Resend.
 - Prueba tras configurar: entra, verifica tu correo en «Mi perfil», cierra sesión y usa «¿Olvidaste tu contraseña?».
@@ -212,7 +212,13 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
 | Errores del servidor | Logs de Render | Busca `"level":"error"`, `offsite-backup-failed`, `offsite-backup-disabled`. Render guarda pocos días: envíalos a un servicio externo cuando se pueda (OPS-07). | Revisión semanal |
 | Gasto | Render y Cloudflare | Alerta de facturación (US-45). | Correo del dueño |
 
-`/healthz` responde 200 si la base abre bien y 503 si no (también 503 en modo mantenimiento, con `"maintenance":true`). No pide sesión ni muestra datos de clientes. Su respuesta incluye:
+`/healthz` responde 200 si la base abre bien y 503 si no (también 503 en modo mantenimiento, con `"maintenance":true`). Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
+
+```powershell
+curl.exe -H "Authorization: Bearer TU_TOKEN" https://<dominio>/healthz
+```
+
+El detalle incluye:
 
 | Campo | Qué es |
 |---|---|
@@ -223,7 +229,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
 | `lastBackup` | Último respaldo (local o externo), hora y si salió bien |
 | `warning` | `true` si el disco supera 80 % o el estado supera 20 MB |
 
-Ábrelo en el navegador una vez por semana y revisa `warning` y `lastBackup`.
+Consúltalo con el token una vez por semana y revisa `warning` y `lastBackup`.
 
 Eventos útiles en el log de Render: `capacity-warning` (disco > 80 % o estado > 20 MB), `startup-backup` (copia local al arrancar), `offsite-backup-enabled`, `offsite-backup`, `offsite-backup-failed`, `offsite-backup-disabled`, `maintenance-mode`. Las líneas de peticiones guardan método, ruta, estado y duración; **no guardan la IP** salvo que actives `SCORTA_LOG_IP_HEADERS=1`.
 

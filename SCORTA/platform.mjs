@@ -32,10 +32,12 @@ const SESSION_MS = PLATFORM_SESSION_TTL_MS;
 export const OWNER_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 export const SUPPORT_TTL_MS = 2 * 60 * 60 * 1000;
 const RECEIPT_MS = 7 * 86400000;
+// Topes de crecimiento: sesiones abiertas por usuario y registros de auditoría que recibe el propietario.
+export const MAX_SESSIONS_PER_USER=10,OWNER_AUDIT_LIMIT=1000;
 const LOGIN_ACCOUNT_WINDOW_MS=15*60000,LOGIN_ORIGIN_WINDOW_MS=60000;
 const LOGIN_ORIGIN_LIMIT=60,MAX_LOGIN_FAILURES=2000,MAX_LOGIN_ORIGINS=1000;
 // SEG-13: recuperación de contraseña por correo y verificación del correo.
-export const PASSWORD_RESET_TTL_MS=30*60000,EMAIL_CODE_TTL_MS=10*60000;
+export const PASSWORD_RESET_TTL_MS=60*60000,EMAIL_CODE_TTL_MS=10*60000;
 const RECOVERY_WINDOW_MS=15*60000,RECOVERY_ACCOUNT_LIMIT=3,RECOVERY_ORIGIN_LIMIT=10,RESET_ORIGIN_LIMIT=20;
 const EMAIL_CODE_MAX_ATTEMPTS=5,EMAIL_CODE_RESEND_MS=60000,EMAIL_CODE_MAX_SENDS=5,EMAIL_CODE_WINDOW_MS=60*60000;
 export {MAIL_DISABLED_MESSAGE,RECOVERY_REQUESTED_MESSAGE};
@@ -224,13 +226,14 @@ function aggregates(business) {
   }
   return {customers:[...customers.values()],vehicles:[...vehicles.values()]};
 }
+const maskTail=value=>{const text=String(value||'');return text?'•••'+text.slice(-4):''};
 function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje','costHistory'].includes(key))next[key]=removeCosts(item);return next;}return value;}
 function envelope(state, actor, now, baseUrl) {
   const support=actor.role!=='owner'&&actor.companyId?activeSupport(state,actor.companyId,now):null;
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact,
     twoFactorEnabled:!!actor.twoFactorEnabled,mustChangePassword:!!actor.mustChangePassword,termsVersion:TERMS_VERSION,termsAccepted:actor.role==='owner'||termsAccepted(actor.company),
     supportActive:!!support,supportReason:support?.reason||'',supportStartedAt:support?.startedAt||null};
-  if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>({...publicCompany(c,now,baseUrl),usage:companyUsage(state,c,now)})),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit),metrics:ownerMetrics(state,now),securityEvents:structuredClone(state.securityEvents||[])};
+  if(actor.role==='owner'&&!actor.support)return {session,revision:state.revision,tickets:visibleTickets(state,actor),companies:state.companies.map(c=>({...publicCompany(c,now,baseUrl),usage:companyUsage(state,c,now)})),users:state.users.filter(u=>u.role!=='owner').map(publicUser),payments:structuredClone(state.payments),audit:structuredClone(state.audit.slice(0,OWNER_AUDIT_LIMIT)),auditTotal:state.audit.length,metrics:ownerMetrics(state,now),securityEvents:structuredClone(state.securityEvents||[])};
   const business=structuredClone(state.businesses[actor.companyId]||estadoVacio());
   business.mechanics??=[];business.cashClosures??=[];business.cashMovements??=[];business.creditPayments??=[];business.layaways??=[];
   // BE-17/35/40: cotizaciones y garantías (de todo el almacén); proveedores, órdenes y pagos solo admin.
@@ -241,6 +244,10 @@ function envelope(state, actor, now, baseUrl) {
   // BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
   business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})}));
   if(actor.role==='vendedor'){
+    // Ley 1581: el vendedor busca y elige la ficha, pero no recibe el teléfono ni el documento
+    // completos de todo el directorio; solo los últimos 4 caracteres. Al cobrar con la ficha,
+    // el servidor completa los datos desde el registro.
+    business.customerDirectory=business.customerDirectory.map(c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true}));
     business.mechanics=activeMechanics(business);delete business.cashClosures;
     business.compras=[];
     business.ventas=business.ventas.filter(s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username);
@@ -733,7 +740,7 @@ function loginAccount(state,companyInput,usernameInput){
 }
 const greeting=user=>`Hola ${String(user.name||user.username).replace(/[\r\n]+/g,' ').slice(0,80)},`;
 function resetMail(state,user,company,link){
-  return {to:user.email,subject:'SCORTA · Crea una nueva contraseña',text:[greeting(user),'',`Recibimos una solicitud para restablecer la contraseña del usuario «${user.username}» en ${company?.name||state.ownerCompany}.`,'','Para crear una contraseña nueva abre este enlace. Vence en 30 minutos y solo se puede usar una vez:',link,'','Si no pediste el cambio, ignora este mensaje: tu contraseña actual sigue funcionando y nadie más puede usar el enlace.','','SCORTA · Gestión de inventario'].join('\n')};
+  return {to:user.email,subject:'SCORTA · Crea una nueva contraseña',text:[greeting(user),'',`Recibimos una solicitud para restablecer la contraseña del usuario «${user.username}» en ${company?.name||state.ownerCompany}.`,'','Para crear una contraseña nueva abre este enlace. Vence en 1 hora y solo se puede usar una vez:',link,'','Si no pediste el cambio, ignora este mensaje: tu contraseña actual sigue funcionando y nadie más puede usar el enlace.','','SCORTA · Gestión de inventario'].join('\n')};
 }
 function resetDoneMail(state,user,company,now){
   return {to:user.email,subject:'SCORTA · Tu contraseña cambió',text:[greeting(user),'',`La contraseña del usuario «${user.username}» en ${company?.name||state.ownerCompany} se cambió el ${new Date(stamp(now)).toLocaleString('es-CO',{timeZone:'America/Bogota'})} con un enlace de recuperación. Se cerraron todas las sesiones abiertas.`,'','Si no fuiste tú, avisa de inmediato a tu administrador para que bloquee la cuenta.','','SCORTA · Gestión de inventario'].join('\n')};
@@ -781,17 +788,18 @@ export async function resetPassword(state,body,{now,clientKey}={}){
 }
 
 /** Pure request dispatcher shared by the Node server and browser-local demonstration. */
-/** Options: requireTerms (BE-07) and requireDataConsent (BE-05) are off in the pure API and enabled by production adapters. */
-export async function platformRequest(input,request,{now,baseUrl='https://scorta.example',requireTerms=false,requireDataConsent=false,mailEnabled=false,resetBaseUrl}={}) {
+/** Options: requireTerms (BE-07), requireDataConsent (BE-05) and requireOwnerTwoFactor are off in the pure API and enabled by production adapters. */
+export async function platformRequest(input,request,{now,baseUrl='https://scorta.example',requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailEnabled=false,resetBaseUrl}={}) {
   let state=input;
   // SEG-13: the session tells the UI whether e-mail recovery is configured on this server.
-  const response=(status,body,extra={})=>{if(body?.session&&typeof body.session==='object')body.session.emailRecovery=!!mailEnabled;return {state,status,body,...extra};};
+  const response=(status,body,extra={})=>{if(body?.session&&typeof body.session==='object'){body.session.emailRecovery=!!mailEnabled;if(body.session.role==='owner')body.session.twoFactorRequired=!!requireOwnerTwoFactor;}return {state,status,body,...extra};};
   try{
     if(!input)fail('Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',503,'SETUP_REQUIRED');
     const method=(request.method||'GET').toUpperCase(),url=new URL(request.path,'https://scorta.example'),path=url.pathname,body=request.body||{};
-    const catalog=path.match(/^\/api\/v2\/catalog\/([^/]+)(?:\/photo\/([^/]+)|(\/checkout))?$/);
+    const catalog=path.match(/^\/api\/v2\/catalog\/([^/]+)(?:\/photo\/([^/]+)|(\/checkout)|(\/logo))?$/);
     if(catalog){
       const company=catalogCompany(state,decodeURIComponent(catalog[1]),stamp(now));
+      if(method==='GET'&&catalog[4]){if(!company.logo)fail('Imagen no disponible',404);return response(200,{image:company.logo});}
       if(method==='GET'&&catalog[2]){const product=catalogProducts(state,company).find(p=>p.id===decodeURIComponent(catalog[2]));if(!product?.foto)fail('Imagen no disponible',404);return response(200,{image:product.foto});}
       if(method==='GET'&&!catalog[3])return response(200,publicCatalog(state,company));
       if(method==='POST'&&catalog[3])return response(200,catalogCheckout(state,company,body.items));
@@ -820,7 +828,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const key=await hash(companyName+'|'+username+'|'+optionalText(request.clientKey,100));
       const previous=state.loginFailures[key];
       if(previous?.until>timestamp&&previous.count>=10)return response(429,{error:'Demasiados intentos. Espera unos minutos antes de volver a ingresar.',code:'RATE_LIMITED',retryAfterSeconds:Math.max(1,Math.ceil((previous.until-timestamp)/1000))});
-      const user=companyId!==undefined?state.users.find(u=>u.companyId===companyId&&norm(u.username)===username&&u.active):null;
+      const user=companyId!==undefined?state.users.find(u=>u.companyId===companyId&&norm(u.username)===username):null;
       const valid=user?await verifyPassword(user,body.password):(await verifyPassword(await dummyUser(),body.password),false);
       const reject=async(error,code)=>{
         state.loginFailures[key]={count:previous?.until>timestamp?previous.count+1:1,until:previous?.until>timestamp?previous.until:timestamp+LOGIN_ACCOUNT_WINDOW_MS};
@@ -831,6 +839,8 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
         pruneLoginTracking(state,timestamp);return response(401,{error,code});
       };
       if(!valid)return reject('Empresa, usuario o contraseña incorrectos','INVALID_CREDENTIALS');
+      // Only after proving the password: a disabled account gets its own message (no enumeration).
+      if(!user.active){pruneLoginTracking(state,timestamp);return response(403,{error:'Tu cuenta está deshabilitada. Pide al administrador de tu empresa que la habilite.',code:'ACCOUNT_DISABLED'});}
       // SEG-01: the owner with 2FA must also send a current TOTP code (no replay).
       if(user.totp?.enabled){
         if(body.totp==null||body.totp==='')return response(401,{error:'Ingresa el código de verificación de tu aplicación autenticadora.',code:'TOTP_REQUIRED'});
@@ -848,6 +858,8 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
         if(!known.includes(originHash)){if(known.length)securityEvent(state,'owner_new_origin',{companyId:null,usuario:user.username},now);known.unshift(originHash);if(known.length>MAX_OWNER_ORIGINS)known.length=MAX_OWNER_ORIGINS;}
       }
       const nextToken=token(),nextKey=await hash(nextToken);state.sessions[nextKey]={userId:user.id,version:user.version,expires:timestamp+(user.role==='owner'?OWNER_SESSION_TTL_MS:SESSION_MS)};
+      // Al superar el tope se cierran las sesiones más antiguas del mismo usuario.
+      const mine=Object.entries(state.sessions).filter(([,s])=>s.userId===user.id).sort((a,b)=>a[1].expires-b[1].expires);for(const [key]of mine.slice(0,Math.max(0,mine.length-MAX_SESSIONS_PER_USER)))delete state.sessions[key];
       return response(200,envelope(state,resolveActor(state,state.sessions[nextKey],now),now,baseUrl),{token:nextToken});
     }
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
@@ -859,6 +871,8 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     await assertRequestContext(state,actor,request,body,path);
     // SEG-08: after an administrator reset only the session, password change and logout work.
     if(actor.mustChangePassword&&!(method==='GET'&&['/api/v2/session','/api/v2/data'].includes(path))&&!(method==='POST'&&path==='/api/v2/password'))fail('Debes cambiar tu contraseña antes de continuar.',403,'PASSWORD_CHANGE_REQUIRED');
+    // The platform owner must enrol an authenticator app before doing anything else.
+    if(requireOwnerTwoFactor&&actor.role==='owner'&&!actor.twoFactorEnabled&&!(method==='GET'&&['/api/v2/session','/api/v2/data'].includes(path))&&!(method==='POST'&&(path==='/api/v2/password'||path==='/api/v2/action'&&['twofa.setup','twofa.enable'].includes(body.type))))fail('Activa la verificación en dos pasos con tu aplicación autenticadora antes de continuar.',403,'TWO_FACTOR_SETUP_REQUIRED');
     // BE-07: business writes wait for the company to accept the current terms (owner never blocked).
     if(requireTerms&&method==='POST'&&actor.role!=='owner'&&actor.companyId&&!termsAccepted(actor.company)&&(path==='/api/v2/draft'||path==='/api/v2/action'&&body.type!=='terms.accept'&&!String(body.type).startsWith('ticket.')))fail('El administrador de la empresa debe aceptar los términos vigentes antes de continuar.',403,'TERMS_REQUIRED');
     if(method==='GET'&&path==='/api/v2/export'){
@@ -905,6 +919,12 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
   }catch(error){
     // A rejected request never leaks or persists partially changed business data.
     state=input;
+    // Un fallo de programación (TypeError, etc.) no es culpa del usuario: 500 sin detalles internos
+    // y con la traza en el log. Las validaciones (fail / Error con mensaje) siguen siendo 400.
+    if(!error?.status&&(error instanceof TypeError||error instanceof ReferenceError||error instanceof RangeError||error instanceof SyntaxError&&!/JSON/.test(error.message))){
+      console.error(JSON.stringify({level:'error',at:new Date().toISOString(),event:'internal-error',method:request?.method,path:String(request?.path||'').split('?')[0],error:String(error?.stack||error)}));
+      return response(500,{error:'Error interno del servidor. Intenta de nuevo.',code:'INTERNAL_ERROR'});
+    }
     const body={error:error.message||'No se pudo completar la operación',...(error.code?{code:error.code}:{}),...(error.details?{details:error.details}:{})};
     if(error.company){body.company=error.company;body.ownerContact=input?.ownerContact||'';}
     return response(error.status||400,body);

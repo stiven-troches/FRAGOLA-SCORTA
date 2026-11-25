@@ -9,6 +9,7 @@ import {money} from '../src/format.mjs';
 import * as venta from '../sale-pricing.mjs';
 import {matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE} from '../src/barcode-scanner.mjs';
 import {OFFLINE_SALE_MESSAGE} from '../src/connectivity.mjs';
+import {formatDate,formatDateTime} from '../src/format.mjs';
 
 // This harness runs the actual JSX callbacks and effects in Node. It does not
 // start a server, emulate a browser layout, or substitute a copy of the handlers.
@@ -55,8 +56,8 @@ function harness({role='vendedor',initialDraft=null,onAction=async()=>baseData()
   dispose(){this.disposed=true}
  }
  const mockReact={...React,useId:()=>`field-${cursor++}`};
- const components=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE',compiled+';return {ClientWorkspace,Modal};')(()=>null,
-  mockReact,useCallback,useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE);
+ const components=new Function('ProductPhotoInput','React','useCallback','useEffect','useMemo','useRef','useState','Papa','SaleDraftSync','draftRequest','OverviewPanel','AdminTools','PurchaseExcel','Receipt','moneyAmount','roundMoney','sumMoney','money','venta','BarcodeScanner','scannerSupport','matchScannedCode','UNSUPPORTED_SCANNER_MESSAGE','useOnline','OFFLINE_SALE_MESSAGE','formatDate','formatDateTime',compiled+';return {ClientWorkspace,Modal};')(()=>null,
+  mockReact,useCallback,useEffect,useMemo,useRef,useState,Papa,DraftSync,async()=>({version:1,draft:null}),()=>null,()=>null,()=>null,()=>null,moneyAmount,roundMoney,sumMoney,money,venta,()=>null,()=>'none',matchScannedCode,UNSUPPORTED_SCANNER_MESSAGE,()=>true,OFFLINE_SALE_MESSAGE,formatDate,formatDateTime);
  function render(next){if(next)props={...props,...next};cursor=0;changed=false;tree=components[kind](props);while(pendingEffects.length)pendingEffects.shift()();return tree}
  async function settle(){for(let i=0;i<10;i++){await Promise.resolve();if(changed)render();await Promise.resolve()}return tree}
  function dispose(){for(const slot of slots)slot?.cleanup?.();}
@@ -69,6 +70,8 @@ const field=(h,label)=>nodes(h.tree,node=>node.type?.name==='Field'&&node.props.
 const modal=h=>nodes(h.tree,node=>node.type?.name==='Modal')[0];
 const click=(h,label)=>{const node=named(h,label);assert.ok(node,`Control ${label}`);assert.ok(!node.props.disabled,`${label} no está deshabilitado`);return node.props.onClick?.({currentTarget:{closest:()=>({open:true})},preventDefault(){}})};
 const edit=(h,label,value)=>{const node=field(h,label);assert.ok(node,`Campo ${label}`);return node.props.onChange({target:{value}})};
+// Compras: escribe en el buscador y pulsa Enter (como un lector de códigos).
+const pickProduct=async(h,value)=>{edit(h,'Buscar producto',value);await h.settle();field(h,'Buscar producto').props.onKeyDown({key:'Enter',preventDefault(){},currentTarget:{value}});await h.settle()};
 const consent=(h,checked=true)=>{const node=field(h,'El cliente autorizó el tratamiento de sus datos');assert.ok(node,'Casilla de consentimiento');return node.props.onChange({target:{checked}})};
 const submit=h=>{const form=nodes(h.tree,node=>node.type==='form').at(-1);assert.ok(form);return form.props.onSubmit({preventDefault(){}})};
 // Estas pruebas recorren la fila de la tabla; la vista de tarjetas tiene su propia prueba.
@@ -113,8 +116,8 @@ test('H17: Escape usa el cierre vigente, pide confirmación tras editar y no cie
 test('H18: compra bloquea formulario entero durante POST y resultado incierto; recuperar no reenvía líneas editadas',async()=>{
  const gate=deferred();let posts=0,original,retries=0;
  const h=harness({role:'admin',onAction:async action=>{posts++;original=clone(action);return gate.promise},onRetryAction:async()=>{retries++;return baseData({compras:[{id:'purchase-1',detalles:original.payload.items,total:5000}]})}});
- try{await h.settle();await openPurchase(h);edit(h,'Proveedor','Proveedor A');edit(h,'Producto','p1');await h.settle();click(h,'Agregar a la compra');await h.settle();const pending=submit(h);await h.settle();assert.ok(modal(h).props.busy);
-  edit(h,'Proveedor','Proveedor B');edit(h,'Producto','p1');click(h,'Agregar a la compra');await h.settle();assert.equal(field(h,'Proveedor').props.value,'Proveedor A');assert.equal(original.payload.items.length,1);
+ try{await h.settle();await openPurchase(h);edit(h,'Proveedor','Proveedor A');await pickProduct(h,'REP-01');click(h,'Agregar a la compra');await h.settle();const pending=submit(h);await h.settle();assert.ok(modal(h).props.busy);
+  edit(h,'Proveedor','Proveedor B');edit(h,'Buscar producto','pastillas');click(h,'Agregar a la compra');await h.settle();assert.equal(field(h,'Proveedor').props.value,'Proveedor A');assert.equal(original.payload.items.length,1);
   const mh=harness({kind:'Modal',props:modal(h).props});try{await mh.settle();assert.ok(nodes(mh.tree,n=>n.type==='fieldset'&&n.props.disabled).length)}finally{mh.dispose()}
   gate.reject(Object.assign(Error('Respuesta incierta'),{uncertain:true}));await pending;await h.settle();assert.ok(modal(h).props.busy);const status=modal(h).props.status;assert.match(text(status),/formulario conserva los datos/);const retry=nodes(status,n=>n.type?.name==='Btn')[0];await retry.props.onClick();await h.settle();assert.equal(posts,1);assert.equal(retries,1);assert.equal(modal(h),undefined);
  }finally{h.dispose()}
@@ -178,4 +181,21 @@ test('INT-07/09: el admin revoca el enlace del comprobante y corrige o borra los
   await h.settle();edit(h,'Nombre o teléfono','Ana');await h.settle();await click(h,'Eliminar datos personales');await h.settle();assert.equal(actions.at(-1).type,'customer.erase');assert.match(confirmations.at(-1),/no se puede deshacer/);
  }finally{h.dispose()}
  const seller=harness({role:'vendedor',data});try{await seller.settle();click(seller,'Buscar cliente o placa');await seller.settle();edit(seller,'Nombre o teléfono','Ana');await seller.settle();assert.equal(named(seller,'Corregir datos'),undefined)}finally{seller.dispose()}
+});
+
+test('Compras: el producto se busca por nombre, referencia o código y Enter elige la coincidencia exacta o única',async()=>{
+ const other={...product,id:'p2',nombre:'Pastillas traseras',referencia:'REP-02',codigo_barras:'7700000000022',precio_compra:4000};
+ const h=harness({role:'admin',data:baseData({prods:[clone(product),other]})});
+ try{await h.settle();await openPurchase(h);
+  assert.equal(nodes(h.tree,n=>n.type==='select'&&nodes(n,c=>c.type==='option'&&/Pastillas/.test(text(c))).length).length,0,'ya no hay una lista desplegable con todo el inventario');
+  edit(h,'Buscar producto','pastillas');await h.settle();
+  assert.equal(nodes(h.tree,n=>n.type==='button'&&/^Elegir /.test(n.props['aria-label']||'')).length,2);
+  field(h,'Buscar producto').props.onKeyDown({key:'Enter',preventDefault(){},currentTarget:{value:'pastillas'}});await h.settle();
+  assert.match(text(h.tree),/Hay 2 productos que coinciden/);
+  await pickProduct(h,'7700000000022');assert.match(text(h.tree),/Producto: Pastillas traseras/);
+  click(h,'Cambiar');await h.settle();edit(h,'Buscar producto','delanteras no');await h.settle();assert.match(text(h.tree),/Ningún producto coincide/);
+  edit(h,'Buscar producto','pastillas');await h.settle();click(h,'Elegir Pastillas de freno');await h.settle();
+  assert.match(text(h.tree),/Producto: Pastillas de freno/);click(h,'Agregar a la compra');await h.settle();
+  assert.match(text(h.tree),/1 × Pastillas de freno/);
+ }finally{h.dispose()}
 });

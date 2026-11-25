@@ -1,8 +1,0 @@
-node_modules/
-dist/
-dist-demo/
-data/
-.env
-*.sqlite*
-test-results/
-playwright-report/

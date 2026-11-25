@@ -57,3 +57,13 @@ export function formatMoneyInput(value){
  const number=Number(value);
  return Number.isFinite(number)?formatNumber(number):String(value);
 }
+
+// Fechas: un solo formato en toda la app, siempre en hora de Colombia.
+// «2026-11-23» (día del negocio) → «23 nov 2026»; un instante ISO → «23 nov 2026, 3:15 p. m.».
+const bogotaDate=new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric'});
+const bogotaDateTime=new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
+const isDay=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value));
+const toDate=value=>{if(value==null||value==='')return null;const date=value instanceof Date?value:new Date(isDay(value)?value+'T12:00:00Z':value);return Number.isNaN(date.getTime())?null:date};
+const tidy=text=>text.replace(/\.(?=\s\d{4})/,'').replace(/\s+de\s+/g,' ');
+export function formatDate(value,fallback='—'){const date=toDate(value);return date?tidy(bogotaDate.format(date)):fallback}
+export function formatDateTime(value,fallback='—'){if(isDay(value))return formatDate(value,fallback);const date=toDate(value);return date?tidy(bogotaDateTime.format(date)):fallback}

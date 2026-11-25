@@ -1,5 +1,5 @@
 import React,{useId,useMemo,useReducer,useState} from 'react';
-import {formatCOP,formatNumber,formatPercent} from './format.mjs';
+import {formatCOP,formatNumber,formatPercent,formatDate} from './format.mjs';
 import {overviewReport} from '../overview-report.mjs';
 import OverviewDateFilter from './OverviewDateFilter.jsx';
 import {initialOverviewDates,overviewDatesReducer,overviewRankingRows} from './overview-filters.mjs';
@@ -8,7 +8,7 @@ import LaborTable from './LaborTable.jsx';
 import './overview-panel.css';
 
 const money=formatCOP,amount=formatNumber,percent=formatPercent;
-const dateLabel=value=>{const date=new Date(value+'T12:00:00Z');return Number.isNaN(date.getTime())?'':date.toLocaleDateString('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric'})};
+const dateLabel=value=>formatDate(value,'');
 const rankingNames={mostSold:'Más vendidos',leastSold:'Menos vendidos',mostProfit:'Mayor ganancia',leastProfit:'Menor ganancia',noSales:'SIN VENTAS'};
 const tools=[['cash','Cierre de caja'],['reports','Reportes y exportaciones'],['replenishment','Preparar reposición'],['mechanics','Mecánicos']];
 const productColumns=[['name','PRODUCTO'],['netUnits','UNIDADES NETAS'],['netRevenue','VENTA NETA','#,##0.00'],['profit','GANANCIA DE PRODUCTOS','#,##0.00'],['costComplete','COSTO COMPLETO']];

@@ -1,6 +1,6 @@
 import MoneyInput from './MoneyInput.jsx';
 import React,{useEffect,useId,useMemo,useRef,useState} from 'react';
-import {formatCOP} from './format.mjs';
+import {formatCOP,formatDateTime} from './format.mjs';
 import {cashDay,salesReport,purchaseReport,inventoryReport,replenishmentReport,portfolioReport,creditPaymentReport,warrantyReport,payablesReport,reportColumns} from '../admin-reports.mjs';
 import {replenishmentOrderItems} from '../compras-proveedores.mjs';
 import {companyPlan} from '../plan-limits.mjs';
@@ -15,7 +15,7 @@ import {PAYMENT_METHODS,BASE_PAYMENT_KEYS,VAT_RATES,saleSettings} from '../sale-
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const money=formatCOP;
-const when=value=>{if(!value)return '—';const date=new Date(String(value).length===10?value+'T12:00:00Z':value);return Number.isNaN(date.getTime())?'—':date.toLocaleString('es-CO',{timeZone:'America/Bogota',dateStyle:'short',...(String(value).length===10?{}:{timeStyle:'short'})})};
+const when=value=>formatDateTime(value);
 // FE-06: the closure reconciles the five payment methods.
 const methods=PAYMENT_METHODS;
 const titles={cash:'Cierre de caja',reports:'Reportes',mechanics:'Mecánicos',replenishment:'Reposición de inventario',settings:'Opciones de venta'};

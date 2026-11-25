@@ -33,7 +33,9 @@ test('checkout usa precios actuales, no modifica datos y comprueba cantidades si
  const before=structuredClone(f.state),items=[{id:f.product.id,quantity:2,price:1}];
  let r=await f.call(f.url+'/checkout',{items});assert.equal(r.status,200);assert.equal(r.body.total,70000);assert.deepEqual(f.state,before);
  assert.match(r.body.url,/^https:\/\/wa.me\/573001234567\?text=/);assert.match(decodeURIComponent(r.body.url),/2 × Aceite/);
- for(const quantity of [0,4,1.5,1000]){r=await f.call(f.url+'/checkout',{items:[{id:f.product.id,quantity}]});assert.equal(r.status,409);assert.ok(!r.body.error.includes('3'))}
+ for(const quantity of [0,1.5,1000]){r=await f.call(f.url+'/checkout',{items:[{id:f.product.id,quantity}]});assert.equal(r.status,409);assert.ok(!r.body.error.includes('3'))}
+ // Más unidades que las existencias (3): se acepta y el negocio confirma por WhatsApp; así no se revela el inventario.
+ r=await f.call(f.url+'/checkout',{items:[{id:f.product.id,quantity:4}]});assert.equal(r.status,200);assert.equal(r.body.total,140000);
  assert.equal((await f.call(f.url+'/checkout',{items:[]})).status,400);
  assert.equal((await f.call(f.url+'/checkout',{items:[...items,...items]})).status,409);
  await f.action(f.admin,{type:'business.change',payload:{kind:'ajuste',id:f.product.id,form:{stock:0,motivo:'Prueba agotado'}}});
@@ -59,4 +61,19 @@ test('la página compartida usa la marca del negocio y escapa texto HTML',()=>{
  const source='<head><meta name="description" content="SCORTA"><link rel="manifest" href="/manifest"><link rel="icon" href="/scorta.png"><title>SCORTA</title></head>';
  const html=catalogHead(source,{name:'Tienda <script>',catalog:{description:'Comillas " y <texto>'}});
  assert.ok(!html.includes('SCORTA')&&!html.includes('<script>')&&!html.includes('rel="manifest"'));assert.match(html,/Tienda &lt;script&gt;/);assert.match(html,/&quot;/);assert.match(catalogHead(source),/Catálogo/);
+});
+
+test('catálogo: precio con IVA igual al de caja y logo servido por URL',async()=>{
+ const f=await fixture();await f.action(f.admin,{type:'catalog.update',form:{enabled:true}});
+ let r=await f.call(f.url);assert.equal(r.body.products[0].precio_venta,35000);
+ // Precios registrados sin IVA: el catálogo suma el 19 % como la caja.
+ const business=f.state.businesses[f.company.id];business.settings={vat:{enabled:true,defaultRate:19,pricesIncludeVat:false}};
+ r=await f.call(f.url);assert.equal(r.body.products[0].precio_venta,41650);
+ r=await f.call(f.url+'/checkout',{items:[{id:f.product.id,quantity:2}]});assert.equal(r.body.total,83300);assert.match(decodeURIComponent(r.body.url),/83.300/);
+ assert.equal(r.body.lines[0].price,41650);
+ assert.equal((await f.call(f.url+'/logo')).status,404,'sin logo');
+ f.state.companies.find(c=>c.id===f.company.id).logo='data:image/png;base64,iVBORw0KGgo=';
+ r=await f.call(f.url);assert.equal(r.body.company.logo,f.url+'/logo');assert.ok(!JSON.stringify(r.body).includes('base64'));
+ r=await f.call(f.url+'/logo');assert.equal(r.status,200);assert.match(r.body.image,/^data:image\/png/);
+ assert.ok(catalogHead('<head><title>x</title></head>',{name:'T',slug:'tienda-uno',logo:'/x'}).includes('href="/api/v2/catalog/tienda-uno/logo"'));
 });

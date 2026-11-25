@@ -7,6 +7,7 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {CONTENT_TYPES,staticCacheControl} from '../server.mjs';
+import {totpCode,totpCounter} from '../totp.mjs';
 
 const script=fileURLToPath(new URL('../server.mjs',import.meta.url)),dist=fileURLToPath(new URL('../dist/',import.meta.url));
 const clean=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(SCORTA_|RENDER_|NODE_ENV$|NODE_TEST_CONTEXT$|PORT$|HOST$|DATA_DIR$)/.test(k)));
@@ -38,6 +39,11 @@ test('INT-10: servidor real en producción — ingreso, empresa, términos y ven
   const act=(actor,action)=>call(actor,'POST','/api/v2/action',{requestId:crypto.randomUUID(),...action});
   let r=await call('owner','POST','/api/v2/login',{company:'Fragola',username:'Steven',password});assert.equal(r.status,200,r.body.error);
   assert.match(r.headers.get('set-cookie'),/HttpOnly; SameSite=Strict; Max-Age=\d+; Secure/);assert.equal(r.headers.get('cache-control'),'no-store');
+  // Production: the owner must enrol an authenticator app before any other action.
+  assert.equal(r.body.session.twoFactorRequired,true);assert.equal(r.body.session.twoFactorEnabled,false);
+  r=await act('owner',{type:'company.create',form:{name:'Bloqueada',contact:'Ana',username:'admin',password,startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:1}});assert.equal(r.status,403);assert.equal(r.body.code,'TWO_FACTOR_SETUP_REQUIRED');
+  r=await act('owner',{type:'twofa.setup'});assert.equal(r.status,200,r.body.error);
+  r=await act('owner',{type:'twofa.enable',form:{code:await totpCode(r.body.twoFactorSetup.secret,totpCounter(Date.now()))}});assert.equal(r.status,200,r.body.error);assert.equal(r.body.session.twoFactorEnabled,true);
   r=await act('owner',{type:'company.create',form:{name:'Moto Real',contact:'Ana',whatsapp:'+573001234567',username:'admin',password,startDate:'2026-01-01',endDate:'2030-12-31',monthlyFee:80000}});assert.equal(r.status,200,r.body.error);
   r=await call('admin','POST','/api/v2/login',{company:'Moto Real',username:'admin',password});assert.equal(r.status,200,r.body.error);assert.equal(r.body.session.termsAccepted,false);
   const product={kind:'producto',form:{nombre:'Llanta 90/90',stock:4,precio_compra:60000,precio_venta:95000}};

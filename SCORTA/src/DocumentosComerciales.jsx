@@ -3,7 +3,7 @@
 // desplazamiento y botones de 44 px. Reutiliza los componentes de Caja/Cartera/Separados.
 import MoneyInput from './MoneyInput.jsx';
 import React,{useMemo,useState} from 'react';
-import {money} from './format.mjs';
+import {money,formatDate} from './format.mjs';
 import {roundMoney,sumMoney} from '../money.mjs';
 import * as venta from '../sale-pricing.mjs';
 import {whatsappLink} from '../caja-credito.mjs';
@@ -16,7 +16,7 @@ import ExcelButton from './ExcelButton.jsx';
 import './caja-credito.css';
 import './documentos-comerciales.css';
 
-const humanDate=value=>{if(!value)return '—';const date=new Date(String(value).length===10?value+'T12:00:00Z':value);return Number.isNaN(date.getTime())?String(value):date.toLocaleDateString('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'short',year:'numeric'})};
+const humanDate=value=>formatDate(value,value?String(value):'—');
 const norm=value=>String(value??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const validAmount=(value,{allowZero=false}={})=>{if(String(value??'').trim()==='')return null;const number=Number(value);return Number.isFinite(number)&&number>=0&&(allowZero||number>0)&&Math.abs(Math.round(number*100)-number*100)<1e-7&&number<=1e12?number:null};
 const positiveInt=value=>{const number=Number(value);return Number.isSafeInteger(number)&&number>0?number:null};
