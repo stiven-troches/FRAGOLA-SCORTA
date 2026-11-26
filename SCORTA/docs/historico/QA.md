@@ -16,7 +16,7 @@ Se incluyen cinco escenarios de navegador en escritorio y móvil en `browser-dem
 
 Los recorridos adicionales de `claridad.spec.mjs` comprueban filtros cerrados al entrar, contador y etiquetas persistentes, restablecer sin borrar la búsqueda, recuperación de todos los resultados, ficha con acciones accesibles, menú móvil y errores de conexión siempre visibles. Se adaptaron las pruebas operativas a la navegación y a las acciones dentro de la ficha, conservando los controles de inventario y reintentos.
 
-Se revisaron las capturas finales con la dirección de diseño: [escritorio](../capturas/inventario-claro-escritorio.png) y [móvil](../capturas/inventario-claro-movil.png). Tras eliminar la transición de selección de sección, la compilación y las capturas confirmaron el resaltado inmediato de Inventario. Dictamen en [REVISION-CLARIDAD.md](REVISION-CLARIDAD.md).
+Se revisaron las capturas finales con la dirección de diseño: [escritorio](capturas-anteriores/inventario-claro-escritorio.png) y [móvil](capturas-anteriores/inventario-claro-movil.png). Tras eliminar la transición de selección de sección, la compilación y las capturas confirmaron el resaltado inmediato de Inventario. Dictamen en [REVISION-CLARIDAD.md](REVISION-CLARIDAD.md).
 
 ## Resultado de la revisión del 11 de noviembre de 2026
 

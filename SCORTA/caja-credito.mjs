@@ -243,12 +243,15 @@ export function applyCashCreditAction(business,actor,action,{now=Date.now(),toda
   }
   if(action.type==='credit.payment'){
     const id=form.customerId;if(typeof id!=='string'||!id||id.length>100)fail('Selecciona el cliente.');
-    const record=array(business.customerRecords).find(item=>item.id===id&&!item.erasedAt);if(!record)fail('Cliente inexistente.',404,'CUSTOMER_NOT_FOUND');
+    // Ley 1581: un cliente borrado (erasedAt) con saldo a crédito sigue siendo cobrable: el abono se registra contra la
+    // cuenta anonimizada («Cliente eliminado»). Sin saldo pendiente, o con saldo a favor (que el borrado elimina), se
+    // comporta como un cliente inexistente.
+    const record=array(business.customerRecords).find(item=>item.id===id);if(!record)fail('Cliente inexistente.',404,'CUSTOMER_NOT_FOUND');
     const method=form.method===FAVOR_METHOD?FAVOR_METHOD:cashMethod(form.method),value=positive(form.amount,'Abono');
     const pending=array(business.ventas).map((sale,index)=>({sale,index})).filter(({sale})=>sale.customerId===id&&!sale.anulada&&finite(sale.credito?.saldo)>0)
       .sort((a,b)=>businessDay(a.sale.fecha).localeCompare(businessDay(b.sale.fecha))||b.index-a.index).map(({sale})=>sale);
     const saldo=sumMoney(pending.map(sale=>sale.credito.saldo));
-    if(!pending.length)fail('El cliente no tiene saldo pendiente.',409,'NO_BALANCE');
+    if(!pending.length){if(record.erasedAt)fail('Cliente inexistente.',404,'CUSTOMER_NOT_FOUND');fail('El cliente no tiene saldo pendiente.',409,'NO_BALANCE')}
     if(value>saldo)fail(`El abono supera el saldo pendiente (${saldo}).`,400,'PAYMENT_EXCEEDS_BALANCE');
     if(method===FAVOR_METHOD){if(value>finite(record.saldoAFavor))fail(`El cliente tiene ${finite(record.saldoAFavor)} de saldo a favor.`,400,'FAVOR_INSUFFICIENT');record.saldoAFavor=roundMoney(finite(record.saldoAFavor)-value)}
     let rest=value;const aplicado=[];

@@ -4,7 +4,8 @@ import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './
 import {salesReport} from './admin-reports.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
-import {readDraft,writeDraft,assertDraftSale,finishDraftSale} from './sale-drafts.mjs';
+import {readDraft,writeDraft,assertDraftSale,finishDraftSale,draftKey,rewriteCustomerDrafts} from './sale-drafts.mjs';
+import {searchProducts,searchSales,searchCustomers} from './platform-search.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 import {moneyAmount,roundMoney,sumMoney} from './money.mjs';
 import {applyCashCreditAction,cashSettings,cleanCashSettings,creditFields,creditAccounts,creditCheck,creditTerms,refundFor,cashMethod} from './caja-credito.mjs';
@@ -14,6 +15,7 @@ import {applyWarrantyAction} from './garantias.mjs';
 import {applyPurchasingAction,attachPurchaseTerms,assertPurchaseCancellable,afterPurchaseCancelled,payableAccounts} from './compras-proveedores.mjs';
 import {companyPlan,cleanPlan,assertFeature,assertLimit,photoCount} from './plan-limits.mjs';
 import {generateTotpSecret,verifyTotp,otpauthUri,totpCounter} from './totp.mjs';
+import {MEDIA_MAX_BYTES,MEDIA_PATH,clientImage,imageWeight,isMediaRef,mediaUrl,sniffImage} from './media-ref.mjs';
 import {dateBogota,nextMonth,renewalProposal} from './src/renewal.mjs';
 import {MAIL_DISABLED_MESSAGE,RECOVERY_REQUESTED_MESSAGE} from './src/recovery.mjs';
 export {dateBogota,renewalProposal};
@@ -21,7 +23,7 @@ export {dateBogota,renewalProposal};
 const encoder = new TextEncoder();
 // BE-07: bump when the terms change; every company admin must accept the new version.
 export const TERMS_VERSION = '2026-11-21';
-// BE-06: temporary per-company cap while photos live inside the JSON state.
+// BE-06: per-company photo cap (BE-30 keeps it; size counted as base64-equivalent characters).
 export const MAX_COMPANY_PHOTOS = 200, MAX_COMPANY_PHOTO_CHARS = 40 * 1024 * 1024;
 const PASSWORD_WINDOW_MS=15*60000,PASSWORD_MAX_FAILURES=5,ACCOUNT_ALERT_FAILURES=5,MAX_SECURITY_EVENTS=500,MAX_OWNER_ORIGINS=50;
 const MAX_IMAGE = 700000;
@@ -134,14 +136,16 @@ async function verifyPassword(user, password) {
   for(let i=0;i<a.length;i++)different|=a[i]^(b[i]||0);
   return different===0;
 }
-function image(v) {
+// BE-30: `known` are the images this company already has (references or legacy data URLs).
+// An unchanged value is kept as is; the browser sends back /media/<companyId>/<id> for a stored one.
+function image(v, known=[]) {
   if (!v) return '';
-  if (typeof v !== 'string' || v.length > MAX_IMAGE || !/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/.test(v)) fail('La imagen debe ser PNG, JPEG, WebP o GIF de hasta 500 KB');
-  const encoded=v.slice(v.indexOf(',')+1),bytes=fromBase64(encoded),mime=v.slice(5,v.indexOf(';'));
-  if(bytes.length>512000)fail('La imagen no puede superar 500 KB');
-  const starts=signature=>signature.every((n,i)=>bytes[i]===n);
-  const valid=mime==='image/png'?starts([137,80,78,71,13,10,26,10]):mime==='image/jpeg'?starts([255,216,255]):mime==='image/gif'?String.fromCharCode(...bytes.slice(0,6))==='GIF87a'||String.fromCharCode(...bytes.slice(0,6))==='GIF89a':mime==='image/webp'?String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP':false;
-  if(!valid)fail('El contenido de la imagen no coincide con su formato');
+  if (known.includes(v)) return v;
+  if (typeof v === 'string' && MEDIA_PATH.test(v)) {const ref=known.find(k=>isMediaRef(k)&&mediaUrl(k)===v);if(!ref)fail('La imagen ya no está disponible. Vuelve a elegirla.');return ref;}
+  if (typeof v !== 'string' || v.length > MAX_IMAGE || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(v)) fail('La imagen debe ser PNG, JPEG o WebP de hasta 500 KB');
+  const bytes=fromBase64(v.slice(v.indexOf(',')+1)),mime=v.slice(5,v.indexOf(';'));
+  if(bytes.length>MEDIA_MAX_BYTES)fail('La imagen no puede superar 500 KB');
+  if(sniffImage(bytes)!==mime)fail('El contenido de la imagen no coincide con su formato');
   return v;
 }
 function phone(v) {const value=optionalText(v,30);if(value&&!/^\+?[0-9 ()-]{6,30}$/.test(value))fail('Número de teléfono inválido');return value.replace(/[ ()-]/g,'');}
@@ -149,7 +153,7 @@ function period(form) {const startDate=date(form.startDate,'Inicio del contrato'
 export function companyStatus(company, now) {const today=dateBogota(now);return !company.enabled?'disabled':today<company.startDate?'scheduled':today>company.endDate?'expired':'active';}
 const publicUser = user => {const {password,version,totp,emailVerification,...safe}=user;return safe;};
 const termsAccepted = company => !company || company.terms?.version===TERMS_VERSION;
-const publicCompany = (company, now, baseUrl) => ({...company,plan:companyPlan(company),status:companyStatus(company,now),daysRemaining:Math.max(0,Math.round((Date.parse(company.endDate)-Date.parse(dateBogota(now)))/86400000)),url:new URL('/c/'+encodeURIComponent(company.slug),baseUrl||'https://scorta.example').href});
+const publicCompany = (company, now, baseUrl) => ({...company,logo:clientImage(company.logo),plan:companyPlan(company),status:companyStatus(company,now),daysRemaining:Math.max(0,Math.round((Date.parse(company.endDate)-Date.parse(dateBogota(now)))/86400000)),url:new URL('/c/'+encodeURIComponent(company.slug),baseUrl||'https://scorta.example').href});
 const admin = actor => actor.role === 'admin' || actor.role === 'owner';
 const owner = actor => {if(actor.role!=='owner')fail('Solo el propietario de SCORTA puede realizar esta acción',403,'FORBIDDEN');};
 const audit = (state,actor,action,companyId,details,now) => {state.audit.unshift({id:id(),fecha:iso(now),usuario:actor.username,userId:actor.id,accion:action,companyId,...details});};
@@ -228,6 +232,15 @@ function aggregates(business) {
 }
 const maskTail=value=>{const text=String(value||'');return text?'•••'+text.slice(-4):''};
 function removeCosts(value) {if(Array.isArray(value))return value.map(removeCosts);if(value&&typeof value==='object'){const next={};for(const [key,item]of Object.entries(value))if(!['precio_compra','costo_unitario','costo_compra','mecanicoPorcentaje','costHistory'].includes(key))next[key]=removeCosts(item);return next;}return value;}
+// BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
+const directoryCard=c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})});
+// Ley 1581: el vendedor solo recibe los últimos 4 caracteres del teléfono y del documento.
+const maskedCard=c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true});
+// Ley 1581: colecciones del sobre del vendedor que copian teléfono o documento de la ficha del cliente.
+// El servidor conserva el dato completo (cobrar un abono, convertir una cotización o entregar un separado
+// se resuelven por customerId en el servidor); al vendedor solo le llegan los últimos 4 caracteres.
+const SELLER_MASKED_LISTS=['ventas','servs','layaways','quotes','warranties','creditPayments','creditAccounts','customers'];
+const maskPersonal=doc=>{if(doc&&typeof doc==='object')for(const key of ['telefono','numeroDocumento'])if(typeof doc[key]==='string'&&doc[key])doc[key]=maskTail(doc[key]);return doc;};
 function envelope(state, actor, now, baseUrl) {
   const support=actor.role!=='owner'&&actor.companyId?activeSupport(state,actor.companyId,now):null;
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact,
@@ -241,13 +254,13 @@ function envelope(state, actor, now, baseUrl) {
   // BE-16: cartera calculada sobre todas las ventas (el vendedor la necesita para cobrar abonos).
   business.creditAccounts=creditAccounts(business,dateBogota(now));
   for(const sale of business.ventas||[]){dropReceiptSecret(sale);delete sale.receiptHash;}
-  // BE-19: reusable customer cards for Nueva venta (no e-mail or consent metadata).
-  business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})}));
+  for(const product of business.prods||[])if(isMediaRef(product.foto))product.foto=mediaUrl(product.foto);
+  business.customerDirectory=(business.customerRecords||[]).filter(c=>!c.erasedAt).map(directoryCard);
   if(actor.role==='vendedor'){
     // Ley 1581: el vendedor busca y elige la ficha, pero no recibe el teléfono ni el documento
     // completos de todo el directorio; solo los últimos 4 caracteres. Al cobrar con la ficha,
     // el servidor completa los datos desde el registro.
-    business.customerDirectory=business.customerDirectory.map(c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true}));
+    business.customerDirectory=business.customerDirectory.map(maskedCard);
     business.mechanics=activeMechanics(business);delete business.cashClosures;
     business.compras=[];
     business.ventas=business.ventas.filter(s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username);
@@ -259,18 +272,55 @@ function envelope(state, actor, now, baseUrl) {
     // BE-15/16: el vendedor ve sus propios movimientos de caja y abonos; los separados son de todo el almacén.
     delete business.suppliers;delete business.purchaseOrders;delete business.supplierPayments;
     business.cashMovements=business.cashMovements.filter(m=>m.userId===actor.id);business.creditPayments=business.creditPayments.filter(p=>p.userId===actor.id);
+    for(const name of SELLER_MASKED_LISTS)for(const doc of business[name]||[])maskPersonal(doc);
     return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:removeCosts(business)};
   }
   Object.assign(business,aggregates(business));
   business.payableAccounts=payableAccounts(business,dateBogota(now));
   return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:business};
 }
+// BE-29: versión (ETag) del sobre de /api/v2/data para la recarga periódica. Se calcula sin
+// armar el sobre, con todo lo que lo determina para ESTE usuario: identidad, rol, empresa y su
+// estado público, contenido del negocio, tickets visibles, soporte activo, versión del borrador,
+// día de Bogotá y la configuración del servidor. Así el 304 depende solo de los datos de la
+// propia empresa (un cambio en otra empresa no obliga a descargar todo de nuevo) y, como el rol
+// y el usuario forman parte de la versión, la copia de un vendedor nunca valida la de un
+// administrador ni la de otra empresa. El contenido del negocio se resume una vez por objeto:
+// el estado en caché es inmutable y cada escritura produce objetos nuevos. Para el propietario
+// (que ve toda la plataforma) la versión es la identidad del estado guardado.
+const BOOT_TAG=id(),contentTags=new WeakMap(),stateTags=new WeakMap();
+async function contentTag(object){let tag=contentTags.get(object);if(!tag){tag=await hash(JSON.stringify(object));contentTags.set(object,tag);}return tag;}
+function stateTag(state){let tag=stateTags.get(state);if(!tag){tag=id();stateTags.set(state,tag);}return tag;}
+async function dataTag(state,actor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor}){
+  const {company,...who}=actor,parts=[BOOT_TAG,TERMS_VERSION,baseUrl||'',!!mailEnabled,!!requireOwnerTwoFactor,dateBogota(now),who,company?[await contentTag(company),companyStatus(company,now)]:null,state.ownerContact??null];
+  if(actor.role==='owner'&&!actor.support)parts.push('owner',stateTag(state));
+  else{const business=state.businesses[actor.companyId];parts.push('company',business?await contentTag(business):'empty',visibleTickets(state,actor),activeSupport(state,actor.companyId,now),state.saleDrafts?.[draftKey(actor)]?.version??0);}
+  return 'W/"'+(await hash(JSON.stringify(parts))).replace(/[+/=]/g,c=>({'+':'-','/':'_','=':''})[c]).slice(0,32)+'"';
+}
+const tagMatches=(header,tag)=>typeof header==='string'&&header.length<=2000&&header.split(',').some(value=>value.trim()===tag);
+// BE-28: búsqueda paginada (GET /api/v2/search/{products|sales|customers}?q=&offset=&limit=).
+// Mismas reglas del sobre: el vendedor ve solo sus ventas, productos sin costos y clientes con
+// teléfono y documento enmascarados; nadie recibe secretos de comprobantes.
+// SEG-10: una foto en el almacén de medios viaja como su URL /media (igual que en el sobre), nunca como referencia.
+const lightProduct=p=>{const next={...p};if(typeof next.foto==='string'&&next.foto.startsWith('data:')){delete next.foto;next.hasPhoto=true;}else if(isMediaRef(next.foto))next.foto=mediaUrl(next.foto);return next;};
+function searchBusiness(state,actor,kind,params){
+  if(!actor.companyId)fail('La búsqueda requiere entrar a una empresa.',403,'FORBIDDEN');
+  const business=state.businesses[actor.companyId]||estadoVacio(),seller=actor.role==='vendedor';
+  let result;
+  if(kind==='products'){result=searchProducts(business.prods||[],params);result.items=result.items.map(p=>{const light=lightProduct(p);return seller?removeCosts(light):structuredClone(light);});}
+  else if(kind==='sales'){
+    const own=s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username;
+    result=searchSales(business.ventas||[],params,seller?{key:actor.id+'|'+actor.username,visible:own}:{});
+    result.items=result.items.map(s=>{const sale=seller?maskPersonal(removeCosts(s)):structuredClone(s);dropReceiptSecret(sale);delete sale.receiptHash;return sale;});
+  }else result=searchCustomers(business.customerRecords||[],params,seller?{key:'masked',card:c=>maskedCard(directoryCard(c))}:{card:directoryCard});
+  return {...result,revision:business.revision};
+}
 function uniqueUser(state,companyId,username,exceptId) {if(state.users.some(u=>u.companyId===companyId&&norm(u.username)===norm(username)&&u.id!==exceptId))fail('Ese usuario ya existe en esta empresa');}
 function companyForm(state,form,old,now) {
   const name=text(form.name??old?.name,'Nombre de empresa',100);
   if(norm(name)===norm(state.ownerCompany)||state.companies.some(c=>c.id!==old?.id&&(norm(c.name)===norm(name)||norm(c.slug)===norm(name))))fail('Ya existe una empresa con ese nombre');
   const email=optionalText(form.email??old?.email,254);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Correo inválido');
-  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:moneyAmount(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
+  const fields={name,contact:optionalText(form.contact??old?.contact),nit:optionalText(form.nit??old?.nit,60),address:optionalText(form.address??old?.address,300),email,whatsapp:phone(form.whatsapp??old?.whatsapp),logo:image(form.logo??old?.logo,[old?.logo].filter(Boolean)),...period({startDate:form.startDate??old?.startDate,endDate:form.endDate??old?.endDate}),monthlyFee:moneyAmount(form.monthlyFee??old?.monthlyFee??0,'Mensualidad')};
   if(old)return {...old,...fields};
   const base=companySlug(name),reserved=new Set([norm(state.ownerCompany),companySlug(state.ownerCompany)]);let slug=base;while(reserved.has(norm(slug))||state.companies.some(c=>c.slug===slug||norm(c.name)===slug))slug=base+'-'+id().slice(0,6);
   return {id:id(),slug,...fields,enabled:true,createdAt:iso(now)};
@@ -341,6 +391,12 @@ function saleDate(business,actor,requested,now) {
 }
 function validatePlate(v) {const plate=optionalText(v,12).toUpperCase().replace(/[\s-]/g,'');if(plate&&!/^[A-Z0-9]{3,10}$/.test(plate))fail('Placa inválida');return plate;}
 function businessContext(state, actor) {if(!actor.companyId)fail('Ingresa como soporte para operar en una empresa',403,'FORBIDDEN');return state.businesses[actor.companyId];}
+// Ley 1581: documentos del almacén (además de ventas y servicios) que guardan datos de un cliente final: los que
+// apuntan a su ficha, los de sus ventas (garantías) y los escritos a mano, sin ficha, con su mismo teléfono o documento.
+function customerDocuments(business,record,saleIds){
+  const own=doc=>doc.customerId===record.id||!doc.customerId&&(!!record.telefono&&doc.telefono===record.telefono||!!record.numeroDocumento&&doc.numeroDocumento===record.numeroDocumento);
+  return {layaways:(business.layaways||[]).filter(own),quotes:(business.quotes||[]).filter(own),warranties:(business.warranties||[]).filter(w=>own(w)||saleIds.has(w.saleId)),creditPayments:(business.creditPayments||[]).filter(own)};
+}
 // Removes every record of one company (shared by company.delete and company.purge).
 function removeCompany(state,company){
   const ids=new Set(state.users.filter(u=>u.companyId===company.id).map(u=>u.id));
@@ -358,11 +414,31 @@ async function issueReceipt(state,companyId,sale,now,baseUrl){
   sale.receiptHash=key;sale.receiptExpiresAt=new Date(expires).toISOString();state.receipts[key]={companyId,saleId:sale.id,expires};
   return {saleId:sale.id,token:value,url:new URL('/receipt/'+value,baseUrl||'https://scorta.example').href,expiresAt:sale.receiptExpiresAt};
 }
+// BE-09 (Ley 1581, consulta): todo lo que el almacén guarda de un cliente final, sin costos
+// internos ni enlaces/hashes de comprobantes.
+export function customerDataExport(business,record,company,now){
+  const id=record.id,sales=(business.ventas||[]).filter(s=>s.customerId===id),saleIds=new Set(sales.map(s=>s.id));
+  const clean=list=>removeCosts(structuredClone(list)).map(doc=>{dropReceiptSecret(doc);delete doc.receiptHash;delete doc.receiptExpiresAt;return doc;});
+  const {consentAt,consentBy,consentMedium,...ficha}=structuredClone(record);
+  return {format:'scorta-customer-data',version:1,exportedAt:iso(now),
+    responsable:{empresa:company.name,nit:company.nit||'',direccion:company.address||'',correo:company.email||'',whatsapp:company.whatsapp||''},
+    cliente:ficha,
+    autorizacionDatos:consentAt?{fecha:consentAt,registradaPor:consentBy||'',medio:consentMedium||''}:null,
+    autorizacionesEnVentas:sales.filter(s=>s.dataConsent).map(s=>({venta:s.id,fecha:s.fecha,...structuredClone(s.dataConsent)})),
+    ventas:clean(sales),
+    servicios:clean((business.servs||[]).filter(s=>s.customerId===id||saleIds.has(s.venta_id))),
+    credito:{cuenta:structuredClone(creditAccounts(business,dateBogota(now)).find(a=>a.customerId===id)||null),abonos:clean((business.creditPayments||[]).filter(p=>p.customerId===id))},
+    separados:clean((business.layaways||[]).filter(l=>l.customerId===id)),
+    cotizaciones:clean((business.quotes||[]).filter(q=>q.customerId===id)),
+    garantias:clean((business.warranties||[]).filter(w=>w.customerId===id||saleIds.has(w.saleId))),
+    historial:structuredClone((business.auditoria||[]).filter(e=>e.documento===id||saleIds.has(e.documento)))};
+}
 // BE-08: full company export without password hashes, TOTP secrets, sessions or receipt hashes.
 export function exportCompany(state,companyId,now){
   const company=companyFor(state,companyId),business=structuredClone(state.businesses[companyId]||estadoVacio());
   for(const sale of business.ventas||[]){dropReceiptSecret(sale);delete sale.receiptHash;}
-  return {format:'scorta-company-export',version:1,exportedAt:iso(now),termsVersion:TERMS_VERSION,company:structuredClone(company),
+  for(const product of business.prods||[])if(isMediaRef(product.foto))product.foto=mediaUrl(product.foto);
+  return {format:'scorta-company-export',version:1,exportedAt:iso(now),termsVersion:TERMS_VERSION,company:{...structuredClone(company),logo:clientImage(company.logo)},
     users:state.users.filter(u=>u.companyId===companyId).map(u=>structuredClone(publicUser(u))),business,
     payments:structuredClone(state.payments.filter(p=>p.companyId===companyId)),supportTickets:structuredClone((state.supportTickets||[]).filter(t=>t.companyId===companyId)),
     saleDrafts:Object.entries(state.saleDrafts||{}).filter(([key])=>JSON.parse(key)[0]===companyId).map(([,value])=>structuredClone(value)),
@@ -609,6 +685,9 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
     if(actor.role==='vendedor'||!admin(actor))fail('Solo el administrador puede corregir o borrar datos de clientes',403,'FORBIDDEN');
     const b=businessContext(state,actor),record=(b.customerRecords||[]).find(c=>c.id===a.id);if(!record||record.erasedAt)fail('Cliente inexistente',404,'NOT_FOUND');
     const sales=b.ventas.filter(s=>s.customerId===record.id),saleIds=new Set(sales.map(s=>s.id)),services=b.servs.filter(s=>s.customerId===record.id||saleIds.has(s.venta_id));
+    // Ley 1581: separados, cotizaciones, garantías y abonos también guardan nombre y teléfono (y a veces documento).
+    const related=customerDocuments(b,record,saleIds),relatedDocs=Object.values(related).flat(),was={id:record.id,telefono:record.telefono||'',numeroDocumento:record.numeroDocumento||''};
+    const draftOf=form=>form.customerId===was.id||!!was.telefono&&form.telefono===was.telefono||!!was.numeroDocumento&&form.numeroDocumento===was.numeroDocumento;
     if(a.type==='customer.update'){
       const nombre=Object.hasOwn(form,'nombre')?text(form.nombre,'Nombre del cliente'):record.nombre,telefono=Object.hasOwn(form,'telefono')?phone(form.telefono):record.telefono,extra=customerFields(form);
       if(telefono&&b.customerRecords.some(c=>c.id!==record.id&&c.telefono===telefono))fail('Ya existe otro cliente con ese teléfono');
@@ -622,14 +701,28 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
       for(const key of ['tipoDocumento','numeroDocumento','correo'])if(Object.hasOwn(extra,key)){if(extra[key])record[key]=extra[key];else delete record[key];}
       if(Object.hasOwn(extra,'tipo')){if(extra.tipo==='mostrador')delete record.tipo;else record.tipo=extra.tipo;}
       for(const doc of [...sales,...services]){doc.cliente=nombre;doc.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')){if(record.numeroDocumento){doc.tipoDocumento=record.tipoDocumento;doc.numeroDocumento=record.numeroDocumento;}else{delete doc.tipoDocumento;delete doc.numeroDocumento;}}}
+      for(const doc of relatedDocs){doc.cliente=nombre;doc.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')&&Object.hasOwn(doc,'numeroDocumento')){if(record.numeroDocumento){doc.tipoDocumento=record.tipoDocumento;doc.numeroDocumento=record.numeroDocumento;}else{delete doc.tipoDocumento;delete doc.numeroDocumento;}}}
+      // Borradores y ventas en espera: solo se corrige lo que el borrador ya traía (nunca se copia un dato nuevo a un vendedor).
+      rewriteCustomerDrafts(state,actor.companyId,{matches:draftOf,heldName:nombre,apply:form=>{form.cliente=nombre;if(form.telefono)form.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')&&form.numeroDocumento){if(record.numeroDocumento){form.tipoDocumento=record.tipoDocumento;form.numeroDocumento=record.numeroDocumento;}else{delete form.tipoDocumento;delete form.numeroDocumento;}}}},stamp(now).getTime());
       businessAudit(b,actor,'cliente_corregido',{documento:record.id,antes,despues:{nombre,telefono,...customerSnapshot(record),...(Object.hasOwn(antes,'cupo')?{cupo:Number(record.creditLimit)||0}:{}),...(Object.hasOwn(antes,'plazo')?{plazo:record.creditDays??null}:{})}},now);
     }else{
       for(const doc of [...sales,...services]){doc.cliente='Cliente eliminado';doc.telefono='';doc.placa='';delete doc.dataConsent;delete doc.tipoDocumento;delete doc.numeroDocumento;}
       for(const sale of sales){revokeReceipts(state,actor.companyId,sale.id);delete sale.receiptHash;delete sale.receiptExpiresAt;}
-      for(const entry of b.auditoria||[])if(saleIds.has(entry.documento)||entry.documento===record.id)for(const side of ['antes','despues'])if(entry[side]&&typeof entry[side]==='object'){for(const key of ['cliente','nombre'])if(Object.hasOwn(entry[side],key))entry[side][key]='Cliente eliminado';for(const key of ['telefono','placa','numeroDocumento','correo','tipoDocumento'])if(Object.hasOwn(entry[side],key))entry[side][key]='';}
+      for(const doc of relatedDocs){doc.cliente='Cliente eliminado';doc.telefono='';if(Object.hasOwn(doc,'placa'))doc.placa='';for(const key of ['dataConsent','tipoDocumento','numeroDocumento','correo'])delete doc[key];}
+      // Borradores y ventas en espera del almacén: se vacían los datos del cliente y la versión sube.
+      rewriteCustomerDrafts(state,actor.companyId,{matches:draftOf,heldName:'Venta en espera',apply:form=>{form.cliente='';form.telefono='';form.placa='';for(const key of ['customerId','numeroDocumento','tipoDocumento','correo','tipoCliente','dataConsent'])delete form[key];}},stamp(now).getTime());
+      const documentIds=new Set([record.id,...saleIds,...services.map(s=>s.id),...relatedDocs.map(d=>d.id)]);
+      for(const entry of b.auditoria||[])if(documentIds.has(entry.documento))for(const side of ['antes','despues'])if(entry[side]&&typeof entry[side]==='object'){for(const key of ['cliente','nombre'])if(Object.hasOwn(entry[side],key))entry[side][key]='Cliente eliminado';for(const key of ['telefono','placa','numeroDocumento','correo','tipoDocumento'])if(Object.hasOwn(entry[side],key))entry[side][key]='';}
       for(const key of Object.keys(record))if(key!=='id')delete record[key];Object.assign(record,{nombre:'Cliente eliminado',telefono:'',erasedAt:iso(now),erasedBy:actor.label});
       businessAudit(b,actor,'cliente_borrado',{documento:record.id,ventas:sales.length,servicios:services.length},now);auditExtra={ventas:sales.length};
     }
+    b.revision++;documentId=record.id;
+  }else if(a.type==='customer.export'){
+    // BE-09 (Ley 1581, consulta): descarga de todo lo guardado de un cliente final; queda auditada.
+    if(actor.role==='vendedor'||!admin(actor))fail('Solo el administrador puede descargar los datos de un cliente',403,'FORBIDDEN');
+    const b=businessContext(state,actor),record=(b.customerRecords||[]).find(c=>c.id===a.id);if(!record||record.erasedAt)fail('Cliente inexistente',404,'NOT_FOUND');
+    extra.customerExport=customerDataExport(b,record,companyFor(state,actor.companyId),now);
+    businessAudit(b,actor,'cliente_consultado',{documento:record.id,motivo:actor.support?.reason||optionalText(form.motivo,300)||'Consulta de datos personales (Ley 1581)'},now);
     b.revision++;documentId=record.id;
   }else if(a.type==='company.renew'){
     const proposal=renewalProposal(company,now),next=period({startDate:form.startDate||proposal.startDate,endDate:form.endDate});
@@ -657,7 +750,7 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
     if(!['producto','compra','ajuste','importar','eliminar','estado','reversion'].includes(payload.kind))fail('Operación inválida; registra ventas desde Nueva venta');
     if(payload.kind==='reversion'&&payload.form?.tipo==='venta')fail('Utiliza la autorización de devolución de venta');
     if(payload.kind==='reversion'&&payload.form?.tipo==='servicio'&&b.servs.some(s=>s.id===payload.id&&s.venta_id))fail('Este servicio está vinculado a una venta. Anula o devuelve desde esa venta.');
-    const original=structuredClone(b),photo=payload.kind==='producto'?image(payload.form?.foto):null;
+    const original=structuredClone(b),photo=payload.kind==='producto'?image(payload.form?.foto,original.prods.map(p=>p.foto).filter(Boolean)):null;
     // BE-13: browser/HTTP adapters (enforceContext) must send the revision they edited.
     if(options.enforceContext&&['ajuste','producto'].includes(payload.kind)&&a.revision==null)fail('Recarga los datos antes de guardar este cambio.',428,'REVISION_REQUIRED');
     // BE-40: una compra con pagos al proveedor no se anula; la compra a crédito es parte del plan.
@@ -677,7 +770,7 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
       else if(payload.kind==='importar'){last.antes={productos:original.prods.length};last.despues={productos:next.prods.length};}
       else {last.antes={productos:original.prods.map(p=>({id:p.id,stock:p.stock}))};last.despues={productos:next.prods.map(p=>({id:p.id,stock:p.stock}))};}
     }
-    if(['producto','importar'].includes(payload.kind)){const size=prods=>prods.reduce((n,p)=>({count:n.count+(p.foto?1:0),chars:n.chars+(p.foto?.length||0)}),{count:0,chars:0}),now_=size(next.prods),was=size(original.prods);
+    if(['producto','importar'].includes(payload.kind)){const size=prods=>prods.reduce((n,p)=>({count:n.count+(p.foto?1:0),chars:n.chars+imageWeight(p.foto)}),{count:0,chars:0}),now_=size(next.prods),was=size(original.prods);
       if(now_.count>MAX_COMPANY_PHOTOS&&now_.count>was.count||now_.chars>MAX_COMPANY_PHOTO_CHARS&&now_.chars>was.chars)fail('La empresa alcanzó el límite de fotos ('+MAX_COMPANY_PHOTOS+' fotos o 40 MB en total). Quita o reduce fotos de otros productos antes de agregar más.',400,'PHOTO_LIMIT');
       // BE-37: productos y fotos según el plan de la empresa.
       const target=companyFor(state,actor.companyId);assertLimit(target,'maxProducts',next.prods.length,original.prods.length);assertLimit(target,'maxPhotos',now_.count,was.count);}
@@ -807,6 +900,23 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     const receipt=path.match(/^\/api\/v2\/receipt\/([A-Za-z0-9_-]{43})$/);
     if(method==='GET'&&receipt){const ref=state.receipts[await hash(receipt[1])];if(!ref||ref.expires<=stamp(now).getTime())fail('El enlace del comprobante venció o no existe',404,'RECEIPT_EXPIRED');const company=companyFor(state,ref.companyId),sale=state.businesses[company.id]?.ventas.find(s=>s.id===ref.saleId);if(!sale)fail('Comprobante inexistente',404);return response(200,{company:{name:company.name,logo:company.logo,email:company.email,whatsapp:company.whatsapp,nit:company.nit||'',address:company.address||''},sale:publicReceiptSale(sale),expiresAt:new Date(ref.expires).toISOString()});}
+    // BE-30: /media/<companyId>/<mediaId>. Public when the image is in an open catalog (or is its logo);
+    // otherwise only a session of that company (the owner, in support, too) sees it. The owner also
+    // sees every company logo. Anything else is 404, so other tenants learn nothing.
+    const media=method==='GET'&&path.match(MEDIA_PATH);
+    if(media){
+      const [,companyId,mediaId]=media,company=state.companies.find(c=>c.id===companyId),unavailable=()=>fail('Imagen no disponible',404,'NOT_FOUND');
+      if(!company)unavailable();
+      const same=value=>isMediaRef(value)&&value.mediaId===mediaId,isLogo=same(company.logo);
+      const ref=isLogo?company.logo:(state.businesses[companyId]?.prods||[]).find(p=>same(p.foto))?.foto;
+      if(!ref)unavailable();
+      let open=false;try{const shop=catalogCompany(state,company.slug,stamp(now));open=isLogo||catalogProducts(state,shop).some(p=>same(p.foto));}catch{}
+      if(open)return response(200,{media:ref,public:true});
+      // SEG-10: without a valid session the answer is 404 too, so it does not reveal that the image exists.
+      let viewer;try{viewer=resolveActor(state,request.token?state.sessions[await hash(request.token)]:null,now);}catch{unavailable();}
+      if(viewer.companyId!==companyId&&!(viewer.role==='owner'&&!viewer.support&&isLogo))unavailable();
+      return response(200,{media:ref,public:false});
+    }
     if(method==='POST'){
       if(!body||typeof body!=='object'||Array.isArray(body))fail('Datos inválidos');
       state=structuredClone(input);
@@ -835,7 +945,7 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
         // BE-33: account-wide failures (any origin); one alert per 15-minute window.
         const accountKey=await hash('account|'+companyName+'|'+username),failures=state.accountFailures??={},account=failures[accountKey],active=account?.until>timestamp;
         const next=failures[accountKey]={count:active?account.count+1:1,until:active?account.until:timestamp+LOGIN_ACCOUNT_WINDOW_MS,alerted:!!(active&&account.alerted)};
-        if(next.count>=ACCOUNT_ALERT_FAILURES&&!next.alerted){next.alerted=true;securityEvent(state,'login_failures',{companyId:companyId??null,empresa:company?.name||(isOwner?state.ownerCompany:optionalText(body.company,100)),usuario:optionalText(body.username,60),intentos:next.count},now);}
+        if(next.count>=ACCOUNT_ALERT_FAILURES&&!next.alerted){next.alerted=true;securityEvent(state,'login_failures',{companyId:companyId??null,empresa:company?.name||(isOwner?state.ownerCompany:optionalText(body.company,100)),...(!company&&!isOwner?{empresaInexistente:true}:{}),usuario:optionalText(body.username,60),...(!user?{usuarioInexistente:true}:{}),intentos:next.count},now);}
         pruneLoginTracking(state,timestamp);return response(401,{error,code});
       };
       if(!valid)return reject('Empresa, usuario o contraseña incorrectos','INVALID_CREDENTIALS');
@@ -886,6 +996,14 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
     }
     if(path==='/api/v2/draft'&&method==='GET')return response(200,readDraft(state,actor));
     if(path==='/api/v2/draft'&&method==='POST')return response(200,writeDraft(state,actor,body,stamp(now).getTime()));
+    const search=path.match(/^\/api\/v2\/search\/(products|sales|customers)$/);
+    if(method==='GET'&&search)return response(200,searchBusiness(state,actor,search[1],url.searchParams));
+    // BE-29: con request.etag el sobre lleva su versión; si coincide con If-None-Match, 304 sin cuerpo.
+    if(method==='GET'&&path==='/api/v2/data'&&request.etag){
+      const etag=await dataTag(state,actor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor});
+      if(tagMatches(request.ifNoneMatch,etag))return response(304,null,{etag});
+      return response(200,envelope(state,actor,now,baseUrl),{etag});
+    }
     if(method==='GET'&&(path==='/api/v2/session'||path==='/api/v2/data'))return response(200,envelope(state,actor,now,baseUrl));
     if(method==='POST'&&path==='/api/v2/logout'){delete state.sessions[sessionKey];return response(200,{ok:true},{token:null});}
     if(method==='POST'&&path==='/api/v2/password'){
@@ -909,11 +1027,15 @@ export async function platformRequest(input,request,{now,baseUrl='https://scorta
       const extra=await applyAction(state,actor,session,body,now,baseUrl,{enforceContext:!!request.enforceContext,requireDataConsent,mailEnabled});
       if(extra.failure)return response(extra.failure.status,{error:extra.failure.error,code:extra.failure.code});
       if(requestKey)state.requests[requestKey]={fingerprint,createdAt:iso(now)};
-      const result=envelope(state,resolveActor(state,session,now),now,baseUrl);
+      const nextActor=resolveActor(state,session,now),result=envelope(state,nextActor,now,baseUrl);
       // SEG-03: the clear receipt link exists only in this response (never stored).
       if(extra.receiptLink){result.receiptLink=extra.receiptLink;const sale=result.state?.ventas?.find(s=>s.id===extra.receiptLink.saleId);if(sale)Object.assign(sale,{receiptToken:extra.receiptLink.token,receiptUrl:extra.receiptLink.url,receiptExpiresAt:extra.receiptLink.expiresAt});}
-      for(const key of ['twoFactorSetup','export','revoked','warning','document'])if(Object.hasOwn(extra,key))result[key]=extra[key];
-      return response(200,result,extra.outbox?.length?{outbox:extra.outbox}:{});
+      const extraKeys=['twoFactorSetup','export','customerExport','revoked','warning','document'].filter(key=>Object.hasOwn(extra,key));
+      for(const key of extraKeys)result[key]=extra[key];
+      // BE-29: la respuesta de una acción es el mismo sobre de /api/v2/data; con su versión la
+      // siguiente recarga ya puede responder 304. No se versiona si lleva datos de un solo uso.
+      const tagged=request.etag&&!extra.receiptLink&&!extraKeys.length?{etag:await dataTag(state,nextActor,now,{baseUrl,mailEnabled,requireOwnerTwoFactor})}:{};
+      return response(200,result,{...(extra.outbox?.length?{outbox:extra.outbox}:{}),...tagged});
     }
     fail('Ruta inexistente',404,'NOT_FOUND');
   }catch(error){

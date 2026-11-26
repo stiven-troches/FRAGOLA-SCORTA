@@ -7,8 +7,9 @@ Actualizado: 21 de noviembre de 2026. Empieza por [LEEME.md](../LEEME.md) (insta
 | Documento | Para qué |
 |---|---|
 | [OPERACION.md](OPERACION.md) | Render: arquitectura, variables, respaldos, restauración, RPO/RTO, runbook de incidentes, monitoreo, despliegues. Anexo de instalación propia (Docker/Caddy). |
+| [SALIDA-DE-RENDER.md](SALIDA-DE-RENDER.md) | Plan para mover SCORTA de Render a Fly.io, Railway o un VPS en menos de un día, con corte de DNS y rollback. |
 | [seguridad.md](seguridad.md) | Estado actual de la seguridad: roles, sesiones, soporte, límites, cabeceras. |
-| [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) | Plan de respuesta a incidentes de seguridad y simulacro. |
+| [INCIDENTES-SEGURIDAD.md](INCIDENTES-SEGURIDAD.md) | Plan de respuesta a incidentes de seguridad, simulacro y ejercicio de mesa (contraseña del propietario filtrada). |
 | [SECRETOS.md](SECRETOS.md) | Inventario de secretos y llaves, rotación y qué hacer si se filtran. |
 | [LICENCIAS.md](LICENCIAS.md) | Licencias de las dependencias y titularidad del código. |
 
@@ -20,7 +21,24 @@ Actualizado: 21 de noviembre de 2026. Empieza por [LEEME.md](../LEEME.md) (insta
 | [PLAN-PRODUCTO.md](PLAN-PRODUCTO.md) | Objetivos de experiencia y criterios de aceptación. |
 | [DISENO.md](DISENO.md) | Sistema visual. |
 | [DEMO.md](DEMO.md) | Demo pública con datos ficticios. |
-| [capturas/](capturas/) | Capturas de pantalla (de una versión anterior de la interfaz; FE-24). |
+| [capturas/](capturas/) | Capturas de pantalla actuales con datos ficticios (ver «Capturas de pantalla»). |
+
+## Capturas de pantalla
+
+Pantallas actuales, generadas con `npm run build && npm run build:demo && npm run capturas` (script `scripts/capturas.mjs`). Se toman en la demo compilada, con datos ficticios guardados solo en el navegador; el catálogo público, que la demo no incluye, se toma en un servidor local temporal con la misma semilla ficticia. Nunca se usan datos reales de clientes. Escritorio a 1440 px y celular a 390 px.
+
+| Pantalla | Escritorio | Celular |
+|---|---|---|
+| Ingreso | [ingreso-escritorio.png](capturas/ingreso-escritorio.png) | [ingreso-movil.png](capturas/ingreso-movil.png) |
+| Panel del propietario | [propietario-escritorio.png](capturas/propietario-escritorio.png) | [propietario-movil.png](capturas/propietario-movil.png) |
+| Nueva venta con carrito | [venta-carrito-escritorio.png](capturas/venta-carrito-escritorio.png) | [venta-carrito-movil.png](capturas/venta-carrito-movil.png) |
+| Inventario en tarjetas | [inventario-tarjetas-escritorio.png](capturas/inventario-tarjetas-escritorio.png) | [inventario-tarjetas-movil.png](capturas/inventario-tarjetas-movil.png) |
+| Inventario en tabla | [inventario-tabla-escritorio.png](capturas/inventario-tabla-escritorio.png) | [inventario-tabla-movil.png](capturas/inventario-tabla-movil.png) |
+| Cierre de caja | [cierre-caja-escritorio.png](capturas/cierre-caja-escritorio.png) | [cierre-caja-movil.png](capturas/cierre-caja-movil.png) |
+| Comprobante de venta | [comprobante-escritorio.png](capturas/comprobante-escritorio.png) | [comprobante-movil.png](capturas/comprobante-movil.png) |
+| Catálogo público | [catalogo-publico-escritorio.png](capturas/catalogo-publico-escritorio.png) | [catalogo-publico-movil.png](capturas/catalogo-publico-movil.png) |
+
+Las capturas de la interfaz anterior se conservan en [historico/capturas-anteriores/](historico/capturas-anteriores/).
 
 ## Calidad y piloto
 

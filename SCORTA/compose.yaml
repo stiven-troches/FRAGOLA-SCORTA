@@ -1,15 +1,62 @@
+# Instalación propia (VPS) con Caddy. Compose lee el archivo `.env` de esta carpeta (copia .env.example)
+# y pasa al contenedor TODAS las variables que lee el servidor. El `.env` no entra a la imagen
+# (.dockerignore) y no se monta: lo único que llega a la app es lo que se lista aquí.
+# Si el código empieza a leer una variable nueva, agrégala aquí y en .env.example
+# (tests/ops-compose-env.test.mjs lo comprueba).
+# Valor vacío (${VAR:-}) = no definida para la app. NODE_ENV, HOST, PORT y DATA_DIR los fija el Dockerfile.
 services:
   app:
     build: .
     restart: unless-stopped
     environment:
-      SCORTA_OWNER_COMPANY: ${SCORTA_OWNER_COMPANY:-Fragola}
-      SCORTA_OWNER_USER: ${SCORTA_OWNER_USER:-Steven}
-      SCORTA_OWNER_NAME: ${SCORTA_OWNER_NAME:-Steven}
+      # --- Propietario de la plataforma ---
+      # Obligatorios SOLO en el primer arranque (cuando no existe platform.sqlite). Al restaurar una
+      # plataforma existente (docs/SALIDA-DE-RENDER.md) o tras el primer arranque, déjalos vacíos:
+      # SCORTA_OWNER_PASSWORD ya no se usa (el servidor avisa en el log para que la borres).
+      SCORTA_OWNER_COMPANY: ${SCORTA_OWNER_COMPANY:-}
+      SCORTA_OWNER_USER: ${SCORTA_OWNER_USER:-}
+      SCORTA_OWNER_NAME: ${SCORTA_OWNER_NAME:-}
       SCORTA_OWNER_EMAIL: ${SCORTA_OWNER_EMAIL:-}
-      SCORTA_OWNER_PASSWORD: ${SCORTA_OWNER_PASSWORD:?Define la contraseña del propietario de al menos 8 caracteres con número, mayúscula, minúscula y símbolo}
-      SCORTA_OWNER_CONTACT: ${SCORTA_OWNER_CONTACT:-Contacta al propietario de SCORTA para renovar tu acceso}
+      SCORTA_OWNER_PASSWORD: ${SCORTA_OWNER_PASSWORD:-}
+      SCORTA_OWNER_CONTACT: ${SCORTA_OWNER_CONTACT:-}
       SCORTA_PUBLIC_URL: https://${DOMAIN:?Define el dominio}
+      # --- IP real del cliente (detrás de Caddy, que reemplaza X-Forwarded-For con la IP que ve) ---
+      SCORTA_CLIENT_IP_HEADER: ${SCORTA_CLIENT_IP_HEADER:-x-forwarded-for}
+      SCORTA_TRUSTED_PROXY_HOPS: ${SCORTA_TRUSTED_PROXY_HOPS:-1}
+      SCORTA_LOG_IP_HEADERS: ${SCORTA_LOG_IP_HEADERS:-}
+      # --- Operación ---
+      SCORTA_MAINTENANCE: ${SCORTA_MAINTENANCE:-}
+      SCORTA_VERSION: ${SCORTA_VERSION:-}
+      SCORTA_REQUIRE_TERMS: ${SCORTA_REQUIRE_TERMS:-}
+      SCORTA_REQUIRE_OWNER_2FA: ${SCORTA_REQUIRE_OWNER_2FA:-}
+      SCORTA_HEALTH_TOKEN: ${SCORTA_HEALTH_TOKEN:-}
+      SCORTA_ALERT_5XX_THRESHOLD: ${SCORTA_ALERT_5XX_THRESHOLD:-}
+      SCORTA_TEST_COMPANY: ${SCORTA_TEST_COMPANY:-0}
+      SCORTA_TEST_COMPANY_PRODUCTION: ${SCORTA_TEST_COMPANY_PRODUCTION:-0}
+      # --- Respaldo externo cifrado (en producción, sin estas variables /healthz da warning y llega una
+      # alerta por correo; SCORTA_OFFSITE_BACKUP=off es el opt-out explícito) ---
+      SCORTA_OFFSITE_BACKUP: ${SCORTA_OFFSITE_BACKUP:-}
+      SCORTA_BACKUP_KEY: ${SCORTA_BACKUP_KEY:-}
+      SCORTA_BACKUP_INTERVAL_MIN: ${SCORTA_BACKUP_INTERVAL_MIN:-60}
+      SCORTA_BACKUP_PING_URL: ${SCORTA_BACKUP_PING_URL:-}
+      SCORTA_S3_ENDPOINT: ${SCORTA_S3_ENDPOINT:-}
+      SCORTA_S3_BUCKET: ${SCORTA_S3_BUCKET:-}
+      SCORTA_S3_REGION: ${SCORTA_S3_REGION:-auto}
+      SCORTA_S3_ACCESS_KEY_ID: ${SCORTA_S3_ACCESS_KEY_ID:-}
+      SCORTA_S3_SECRET_ACCESS_KEY: ${SCORTA_S3_SECRET_ACCESS_KEY:-}
+      SCORTA_S3_PREFIX: ${SCORTA_S3_PREFIX:-}
+      # --- Fotos y logos (R2). Vacías = se guardan en el volumen /data/media ---
+      SCORTA_MEDIA_S3_ENDPOINT: ${SCORTA_MEDIA_S3_ENDPOINT:-}
+      SCORTA_MEDIA_S3_BUCKET: ${SCORTA_MEDIA_S3_BUCKET:-}
+      SCORTA_MEDIA_S3_REGION: ${SCORTA_MEDIA_S3_REGION:-auto}
+      SCORTA_MEDIA_S3_ACCESS_KEY_ID: ${SCORTA_MEDIA_S3_ACCESS_KEY_ID:-}
+      SCORTA_MEDIA_S3_SECRET_ACCESS_KEY: ${SCORTA_MEDIA_S3_SECRET_ACCESS_KEY:-}
+      SCORTA_MEDIA_S3_PREFIX: ${SCORTA_MEDIA_S3_PREFIX:-}
+      # --- Correo (recuperación de contraseña y alertas al propietario) ---
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SCORTA_MAIL_FROM: ${SCORTA_MAIL_FROM:-}
+      SCORTA_MAIL_WEBHOOK_URL: ${SCORTA_MAIL_WEBHOOK_URL:-}
+      SCORTA_MAIL_WEBHOOK_SECRET: ${SCORTA_MAIL_WEBHOOK_SECRET:-}
     volumes:
       - inventory:/data
   proxy:
@@ -26,4 +73,3 @@ services:
 volumes:
   inventory:
   certificates:
-

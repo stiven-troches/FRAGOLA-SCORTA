@@ -20,13 +20,16 @@ Cloudflare (DNS, proxy y TLS del dominio propio)        ← opcional hasta tener
 Render · Web Service (Node 24, 1 sola instancia, región EE. UU.)
    └─ server.mjs
         ├─ /api/v2/*  → platform-server.mjs → platform.mjs → DATA_DIR/platform.sqlite
+        ├─ /media/<empresa>/<id> → fotos y logos (R2 si SCORTA_MEDIA_S3_* existe; si no, DATA_DIR/media)
         ├─ /healthz   → estado del servicio (lo usan Render y UptimeRobot)
         └─ archivos de la app (dist/)
    └─ Disco persistente de Render montado en DATA_DIR (p. ej. /var/data)
         ├─ platform.sqlite          ← TODAS las empresas, usuarios, ventas y auditoría
-        └─ backups/startup-*.sqlite ← copia local al arrancar (últimas 5)
+        ├─ backups/startup-*.sqlite ← copia local al arrancar (últimas 5)
+        └─ media/<empresa>/<sha256>.<ext> ← fotos y logos, solo si no hay R2 para imágenes (BE-30)
    │
    ├─ cada hora → respaldo cifrado → almacenamiento S3 compatible (Cloudflare R2)
+   │                                  ├─ incluye DATA_DIR/media cuando las imágenes están en disco
    │                                  └─ aviso a Healthchecks.io (éxito o fallo)
    └─ logs (una línea JSON por petición) → panel de Render
 ```
@@ -35,7 +38,7 @@ Puntos clave:
 
 - **Una sola base**: `platform.sqlite` guarda todo. Si se daña o se pierde, se pierden todas las empresas hasta restaurar.
 - **Una sola instancia**: con disco, Render no permite varias instancias ni deploys sin corte. Cada deploy corta el servicio entre unos segundos y un par de minutos.
-- **`motoshop.sqlite`** es la base heredada. El servidor todavía la abre, pero la plataforma no la usa. Los comandos `backup.mjs` y `restore.mjs` solo sirven para esa base: **no respaldan la plataforma**.
+- **`motoshop.sqlite`** es la base del modo antiguo, ya retirado (BE-38). El servidor solo la lee una vez, sin modificarla, si al preparar una plataforma nueva todavía existe, para copiar sus datos comerciales a «Almacén principal». Después puedes archivarla. No hay rutas `/api/*` heredadas ni comandos `backup.mjs`/`restore.mjs`: usa `platform-backup.mjs`.
 - **GitHub** guarda el código y corre las pruebas (CI). No guarda datos de clientes.
 
 ---
@@ -61,11 +64,11 @@ Se configuran en Render → servicio → *Environment*. Las marcadas como **secr
 
 | Variable | Valor | Notas |
 |---|---|---|
-| `SCORTA_OWNER_COMPANY` | nombre de la empresa propietaria | Cambia el valor por defecto (`Fragola`) (US-10). |
-| `SCORTA_OWNER_USER` | usuario del propietario | Cambia el valor por defecto (`Steven`) (US-10). |
+| `SCORTA_OWNER_COMPANY` | nombre de la empresa propietaria | Defínela en el primer arranque (US-10). Si queda vacía el código usa el nombre de ejemplo `Fragola`; ni `compose.yaml` ni `.env.example` traen ya ese valor. |
+| `SCORTA_OWNER_USER` | usuario del propietario | Defínelo en el primer arranque (US-10). Si queda vacío el código usa el de ejemplo `Steven`. |
 | `SCORTA_OWNER_NAME` | nombre visible | |
 | `SCORTA_OWNER_PASSWORD` | **secreto** | Solo crea al propietario cuando la base es nueva. **Bórrala de Render después del primer arranque** (ver [SECRETOS.md](SECRETOS.md)). Cambiarla después no cambia la contraseña. |
-| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». |
+| `SCORTA_OWNER_EMAIL`, `SCORTA_OWNER_CONTACT` | opcionales | El contacto se muestra a los almacenes en «Mi suscripción». `SCORTA_OWNER_EMAIL` además recibe las alertas por correo (sección 6). |
 
 ### IP real del cliente (límite de intentos)
 
@@ -91,9 +94,37 @@ Se configuran en Render → servicio → *Environment*. Las marcadas como **secr
 | `SCORTA_S3_SECRET_ACCESS_KEY` | **secreto** | |
 | `SCORTA_S3_PREFIX` | p. ej. `produccion` | Carpeta dentro del bucket. Usa otro prefijo para staging. |
 | `SCORTA_BACKUP_INTERVAL_MIN` | `60` | Minutos entre respaldos. |
+| `SCORTA_OFFSITE_BACKUP` | vacío (normal) · `off` | **Opt-out explícito** del respaldo externo (también `0`, `false`, `no`). Úsalo solo si de verdad no quieres respaldo fuera del disco: el servidor lo anota en el log (`offsite-backup-opt-out`) y no avisa. Sin esto, en producción un respaldo sin configurar es una falla (ver abajo). |
 | `SCORTA_BACKUP_PING_URL` | URL de Healthchecks.io | Se llama después de cada respaldo (y `/fail` si falla). |
 
-Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCESS_KEY_ID`, `SCORTA_S3_SECRET_ACCESS_KEY` o `SCORTA_BACKUP_KEY`, el respaldo externo **queda apagado** y el log muestra `offsite-backup-disabled` con la lista de las que faltan.
+Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCESS_KEY_ID`, `SCORTA_S3_SECRET_ACCESS_KEY` o `SCORTA_BACKUP_KEY`, el respaldo externo **queda apagado** y el log muestra `offsite-backup-disabled` con la lista de las que faltan. Con `NODE_ENV=production` eso se trata como una falla, aunque el servidor arranque igual:
+
+- el log lo registra como **error** (no como `warn`);
+- `/healthz` responde `warning:true` (el detalle con token trae `offsiteBackup:{enabled,optOut,warning,missing}`; `capacityWarning` es solo el de disco/estado);
+- llega al propietario la alerta por correo `offsite-backup-disabled` (si el correo está configurado), y se recuerda cada hora mientras siga así (si el correo falla, se reintenta cada minuto).
+
+Si de verdad no quieres respaldo externo, pon `SCORTA_OFFSITE_BACKUP=off`: no hay error, ni alerta, ni `warning`, pero los datos solo viven en el disco y en la copia local al arrancar.
+
+### Fotos y logos (BE-30)
+
+Las fotos de productos y los logos ya **no viven dentro de `platform.sqlite`**: el estado guarda solo una referencia `{mediaId, companyId, type, bytes}` y el navegador las pide a `/media/<empresa>/<sha256>.<ext>`. Solo se aceptan WebP, PNG o JPEG de hasta 500 KB (se revisa la firma real del archivo); el tope por empresa sigue en 200 fotos / 40 MB y los límites del plan.
+
+| Variable | Valor | Notas |
+|---|---|---|
+| `SCORTA_MEDIA_S3_ENDPOINT` | `https://<cuenta>.r2.cloudflarestorage.com` | Endpoint S3 de **R2 (recomendado en producción)**. |
+| `SCORTA_MEDIA_S3_BUCKET` | p. ej. `scorta-media` | Bucket **distinto** al de respaldos y **sin** regla de borrado por antigüedad: las imágenes se guardan una sola vez. |
+| `SCORTA_MEDIA_S3_REGION` | `auto` (R2) | Opcional; por defecto `auto`. |
+| `SCORTA_MEDIA_S3_ACCESS_KEY_ID` | **secreto** | Token de R2 con **lectura y escritura** solo en ese bucket. |
+| `SCORTA_MEDIA_S3_SECRET_ACCESS_KEY` | **secreto** | |
+| `SCORTA_MEDIA_S3_PREFIX` | p. ej. `produccion` | Opcional. Usa otro prefijo (o bucket) para staging. |
+
+- **Con R2** (las 4 variables obligatorias): las imágenes se suben y se leen de R2 con firma SigV4; el servidor guarda en memoria las más usadas (32 MB). R2 no es público: todo pasa por la app, que aplica las reglas de acceso. Activa el versionado del bucket si quieres poder recuperar una imagen borrada.
+- **Sin R2**: se guardan en `DATA_DIR/media/` en el disco persistente. **Esa carpeta no está dentro de `platform.sqlite`**: el respaldo externo horario la sube cifrada (ver sección 3). Sin respaldo externo configurado, las imágenes solo existen en el disco de Render.
+- **Configuración a medias** (falta alguna de las 4): el log muestra `media-s3-incomplete` y se usa el disco. Al arrancar aparece `media-config` con `backend` `s3` o `disk`.
+- **Migración automática**: en cada arranque, los data URL que aún estén en la base (empresas antiguas, empresa de prueba) se mueven al almacén y se cambian por referencias (`media-migration` en el log). Es idempotente. Si R2 falla (tiempo de espera de 10 s por subida), el data URL se queda y sigue funcionando; se reintenta en segundo plano cada 5 minutos (`media-retry` en el log) o en el siguiente arranque. Cada escritura sube solo las imágenes que trae. Un GIF heredado no se migra y sigue sirviéndose como antes.
+- **Pasar de disco a R2**: configura las variables y reinicia. Las imágenes que solo están en `DATA_DIR/media` se suben a R2 la primera vez que alguien las pide; mantén la carpeta hasta que todas se hayan servido una vez (o súbela con `rclone` a `<bucket>/<prefijo>/<empresa>/<archivo>`).
+- **Quién ve cada imagen**: sin sesión, solo el logo y las fotos de productos visibles en un catálogo **publicado y vigente** (`Cache-Control: public, max-age=3600`). El resto exige sesión de **esa** empresa (o del propietario en soporte; el propietario ve además los logos de todas) y se entrega con `private, no-cache` (revalidación por `ETag`). Sin sesión válida o desde otra empresa la respuesta es 404, igual que una imagen inexistente. `/media` tiene el mismo tope por origen que el catálogo (600 por minuto). El comprobante público sigue llevando el logo incrustado.
+- **Empresa eliminada o purgada**: se borra su carpeta `DATA_DIR/media/<empresa>`. En R2 no se borran solas: elimina el prefijo `<prefijo>/<id-empresa>/` desde el panel de R2 (hazlo en la purga por fin de contrato).
 
 ### Correo de recuperación (SEG-13)
 
@@ -111,9 +142,7 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 - El log muestra `mail-config` al arrancar (`enabled:true|false`), `mail-sent` y `mail-failed` con el destinatario enmascarado (`l***@dominio.com`). Si aparece `mail-failed`, revisa la llave, el dominio verificado y el panel de Resend.
 - Prueba tras configurar: entra, verifica tu correo en «Mi perfil», cierra sesión y usa «¿Olvidaste tu contraseña?».
 
-### Solo para el servidor heredado
-
-`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` crean el primer usuario de `motoshop.sqlite`. No hacen falta en la plataforma multiempresa.
+`SCORTA_ADMIN_USER` y `SCORTA_ADMIN_PASSWORD` eran del modo antiguo «motoshop», retirado (BE-38). Ya no se usan: bórralas de Render si siguen definidas.
 
 ### Ajustes del servicio en Render
 
@@ -129,10 +158,13 @@ Si falta cualquiera de `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_ACCE
 | Tipo | Cuándo | Dónde | Retención | Protege contra |
 |---|---|---|---|---|
 | **Externo cifrado** | Cada hora (`SCORTA_BACKUP_INTERVAL_MIN`); el primero 2 minutos después de arrancar | Bucket R2: `<prefijo>/AAAA/MM/DD/scorta-<fecha-hora>.sqlite.enc` | 30 días (regla de ciclo de vida del bucket, OPS-01) | Pérdida del disco, de la cuenta de Render, borrado o daño |
+| **Imágenes en disco** (solo sin R2 para imágenes) | Con cada respaldo externo, antes de la base | Bucket de respaldos: `<prefijo>/media/<empresa>/<sha256>.<ext>.enc` | Cada imagen se sube una vez y se vuelve a subir cada 7 días, así la regla de 30 días nunca deja una imagen viva sin copia | Pérdida del disco. Las imágenes en R2 no se copian aquí: R2 ya está fuera de Render |
 | **Local al arrancar** | En cada arranque y deploy, antes de abrir la base | `DATA_DIR/backups/startup-*.sqlite` | Las últimas 5 | Un deploy que daña datos; es lo más rápido para volver atrás |
 | **Snapshot de Render** | Diario (lo hace Render) | Dentro de Render | La que fije Render | Errores del disco. No es una copia externa (OPS-11) |
 
-Cómo funciona el respaldo externo: toma una copia consistente de `platform.sqlite`, la comprime, la cifra con AES-256-GCM usando `SCORTA_BACKUP_KEY` y la sube al bucket. Después avisa a Healthchecks.io. Si algo falla, escribe `offsite-backup-failed` en el log y avisa del fallo.
+Cómo funciona el respaldo externo: si las imágenes están en disco, primero sube cifradas las de `DATA_DIR/media` que falten (un manifiesto `DATA_DIR/media/.offsite-*.json` recuerda cuáles ya subió). Luego toma una copia consistente de `platform.sqlite`, la comprime, la cifra con AES-256-GCM usando `SCORTA_BACKUP_KEY` y la sube al bucket. Después avisa a Healthchecks.io. Si algo falla (base o imágenes), escribe `offsite-backup-failed` en el log y avisa del fallo.
+
+> **Producción: usa R2 para las imágenes** (`SCORTA_MEDIA_S3_*`). Con imágenes en disco el respaldo funciona, pero restaurar exige descargar y descifrar también la carpeta `media/` del bucket (paso 8 de la sección 5) y el disco de 1 GB se llena antes.
 
 **Respaldo manual** (desde Render Shell):
 
@@ -174,7 +206,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    - Si el problema empezó con el último deploy: usa el más reciente de `DATA_DIR/backups/startup-*.sqlite` (ya está descifrado y en el disco).
    - Si no: en el panel de R2, entra al bucket, al prefijo y a la fecha, y elige el último archivo `.sqlite.enc` **anterior** al problema. Anota su nombre y hora.
 3. **Activa el mantenimiento.** Render → *Environment* → `SCORTA_MAINTENANCE=1` → *Save*. Render reinicia el servicio sin abrir la base.
-4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **503 a propósito**: UptimeRobot avisará (es esperado; pausa el monitor) y Render puede marcar el deploy como fallido. Si Render no deja el servicio arriba, borra temporalmente el *Health Check Path* y vuelve a ponerlo al terminar (paso 9).
+4. **Comprueba el mantenimiento.** Abre la app: debe mostrar «SCORTA está en mantenimiento». En el log aparece `maintenance-mode`. En este modo `/healthz` responde **200** con `{"ok":false,"maintenance":true}` para que Render no marque el deploy como fallido; la app y `/api/*` responden 503. UptimeRobot no avisará por el código HTTP: pausa el monitor durante la restauración y reactívalo al terminar (paso 9).
 5. **Entra por Render Shell** (servicio → *Shell*).
 6. **Lleva el respaldo al disco** (si viene de R2). Descárgalo desde el panel de R2 a tu PC y súbelo al servidor, o usa una URL temporal firmada de R2 con `curl -o "$DATA_DIR/restaurar.sqlite.enc" '<url-firmada>'`. La URL firmada debe vencer en minutos.
 7. **Descifra:**
@@ -188,7 +220,13 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
    node platform-backup.mjs restore $DATA_DIR/restaurar.sqlite $DATA_DIR/platform.sqlite --offline
    ```
    El comando valida el respaldo, guarda la base anterior como `platform.sqlite.previous-<número>`, borra las sesiones y las ventas pendientes del respaldo y elimina archivos `-wal`/`-shm` vacíos. Si dice que hay archivos WAL/SHM con datos o que la plataforma está abierta, **detente**: el servicio no está en mantenimiento.
-9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Si quitaste el *Health Check Path*, vuelve a poner `/healthz` y reactiva el monitor de UptimeRobot.
+
+   **Imágenes (solo si están en disco y el disco se perdió):** descarga del bucket de respaldos la carpeta `<prefijo>/media/` completa (p. ej. con `rclone copy r2:<bucket>/<prefijo>/media ./media-enc`) y restáurala:
+   ```sh
+   node platform-backup.mjs decrypt-media ./media-enc $DATA_DIR/media
+   ```
+   Comprueba la huella sha256 de cada imagen. Con R2 para imágenes no hace falta: siguen en su bucket.
+9. **Quita el mantenimiento.** Borra `SCORTA_MAINTENANCE` (o déjala vacía) → *Save*. Render reinicia y abre la base restaurada. Reactiva el monitor de UptimeRobot.
 10. **Verifica:**
     - `https://<dominio>/healthz` responde 200.
     - Entras como propietario y ves todas las empresas.
@@ -212,7 +250,7 @@ Condiciones para cumplirlos: respaldo horario funcionando y vigilado (Healthchec
 | Errores del servidor | Logs de Render | Busca `"level":"error"`, `offsite-backup-failed`, `offsite-backup-disabled`. Render guarda pocos días: envíalos a un servicio externo cuando se pueda (OPS-07). | Revisión semanal |
 | Gasto | Render y Cloudflare | Alerta de facturación (US-45). | Correo del dueño |
 
-`/healthz` responde 200 si la base abre bien y 503 si no (también 503 en modo mantenimiento, con `"maintenance":true`). Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
+`/healthz` responde 200 si la base abre bien y 503 si no. En modo mantenimiento responde 200 a propósito, con `"ok":false` y `"maintenance":true`, para que el *Health Check* de Render no falle mientras restauras. Sin credenciales solo devuelve `ok`, `version`, `startedAt` y `warning`. El detalle completo exige la cabecera `Authorization: Bearer <SCORTA_HEALTH_TOKEN>` (define esa variable en Render con 16 caracteres o más; sin ella el detalle queda desactivado):
 
 ```powershell
 curl.exe -H "Authorization: Bearer TU_TOKEN" https://<dominio>/healthz
@@ -227,11 +265,17 @@ El detalle incluye:
 | `disk.usedPct` | Porcentaje de disco usado |
 | `latencyP95Ms` | Tiempo de respuesta p95 de la API |
 | `lastBackup` | Último respaldo (local o externo), hora y si salió bien |
-| `warning` | `true` si el disco supera 80 % o el estado supera 20 MB |
+| `warning` | `true` si el disco supera 80 % o el estado supera 20 MB, **o** si en producción el respaldo externo está apagado sin opt-out. También sale en el `/healthz` público (sin token) |
+| `capacityWarning` | Solo la parte de capacidad (disco/estado) del `warning` |
+| `offsiteBackup` | `enabled` (activo), `optOut` (`SCORTA_OFFSITE_BACKUP=off`), `warning` (apagado sin opt-out en producción) y `missing` (nombres de las variables que faltan; nunca sus valores) |
 
 Consúltalo con el token una vez por semana y revisa `warning` y `lastBackup`.
 
-Eventos útiles en el log de Render: `capacity-warning` (disco > 80 % o estado > 20 MB), `startup-backup` (copia local al arrancar), `offsite-backup-enabled`, `offsite-backup`, `offsite-backup-failed`, `offsite-backup-disabled`, `maintenance-mode`. Las líneas de peticiones guardan método, ruta, estado y duración; **no guardan la IP** salvo que actives `SCORTA_LOG_IP_HEADERS=1`.
+El mismo detalle se ve sin token en el panel del propietario, tarjeta **«Estado del servidor»** (OPS-19): la sirve `GET /api/v2/owner/server-status`, que exige la sesión del propietario (con la verificación en dos pasos cuando es obligatoria) y separa el último respaldo local y el externo.
+
+**Alertas por correo (BE-11, BE-33, OPS-07).** Si el correo está configurado (Resend o webhook, sección 2) y `SCORTA_OWNER_EMAIL` tiene un correo válido, el servidor también envía al propietario estas alertas: capacidad (`capacity-warning`, revisada cada 15 minutos), muchos intentos fallidos de ingreso, ingreso del propietario desde un origen nuevo, inicio de un modo soporte, fallo del respaldo externo (`offsite-backup-failed`), respaldo externo apagado en producción (`offsite-backup-disabled`) y una ráfaga de errores del servidor (10 respuestas 5xx en 5 minutos; el umbral se cambia con `SCORTA_ALERT_5XX_THRESHOLD`). Llega como máximo un correo por tipo de alerta y empresa/cuenta cada hora, **contada desde el último envío correcto**: si el proveedor de correo falla, la alerta no se silencia (el aviso siguiente la reintenta; tras un fallo se espera 30 segundos) y los envíos fallidos no gastan el cupo (los intentos contra empresas inexistentes cuentan como una sola) y, en total, 10 correos por hora. El correo nunca lleva llaves, cookies, IP, direcciones web ni datos de clientes de los almacenes; si la empresa o el usuario no existen muestra «(empresa inexistente)» / «(usuario inexistente)» en vez del texto escrito por quien intentó ingresar. El log muestra `alert-mail-config` al arrancar y `alert-mail-sent`, `alert-mail-throttled` o `alert-mail-failed`. Sin correo configurado, las alertas siguen solo en el log y en el panel del propietario.
+
+Eventos útiles en el log de Render: `capacity-warning` (disco > 80 % o estado > 20 MB), `startup-backup` (copia local al arrancar), `offsite-backup-enabled`, `offsite-backup`, `offsite-backup-failed`, `offsite-backup-disabled` (en producción con nivel `error`), `offsite-backup-opt-out`, `maintenance-mode`. Las líneas de peticiones guardan método, ruta, estado y duración; **no guardan la IP** salvo que actives `SCORTA_LOG_IP_HEADERS=1`.
 
 **Página de estado (opcional):** UptimeRobot permite publicar una página de estado gratuita con el monitor de `/healthz`. Comparte ese enlace con los almacenes.
 
@@ -296,7 +340,7 @@ Pasos comunes a todo incidente:
 1. Lee el error en el log:
    - `S3 respondió 403`: llave de R2 vencida, revocada o sin permiso. Crea una nueva (ver [SECRETOS.md](SECRETOS.md)) y actualiza las variables.
    - `S3 respondió 404`: el bucket no existe o el nombre está mal.
-   - `Falta SCORTA_BACKUP_KEY` u `offsite-backup-disabled`: falta una variable.
+   - `Falta SCORTA_BACKUP_KEY` u `offsite-backup-disabled` (también llega por correo como «Respaldo externo apagado en producción» y deja `warning:true` en `/healthz`): falta una variable; la lista viene en `missing`.
 2. Mientras se arregla, haz un respaldo manual (sección 3) y descárgalo a tu PC.
 3. Confirma que Healthchecks vuelve a verde en la siguiente hora.
 
@@ -346,6 +390,8 @@ Pasos comunes a todo incidente:
 **Cuándo:** antes del primer cliente (OPS-02) y luego cada 3 meses (enero, abril, julio, octubre).
 **Objetivo:** comprobar que los respaldos sirven, que la llave funciona y medir el RTO real.
 
+**Ensayo automático del procedimiento (sin datos reales):** `npm run ensayo:restauracion` arranca SCORTA con datos ficticios en una carpeta temporal, lo respalda cifrado, lo descifra con la CLI, comprueba que una llave equivocada se rechaza, restaura con `--offline`, arranca sobre lo restaurado y compara empresas y usuarios. Debe terminar con `RESULTADO: OK`. Primer ensayo: 25 de noviembre de 2026, OK (unos 2 s con una base pequeña). No reemplaza el ensayo con un respaldo real del bucket (pasos 1 a 6).
+
 1. Descarga del bucket el respaldo `.sqlite.enc` más reciente.
 2. En tu PC (con Node 24 y el código de SCORTA), en una carpeta vacía:
    ```sh
@@ -367,7 +413,7 @@ Pasos comunes a todo incidente:
 
 - [ ] Plan pago con disco, `DATA_DIR` y región elegida (US-05, US-06, US-07).
 - [ ] Un deploy de prueba: los datos sobreviven.
-- [ ] Variables del respaldo configuradas; el log muestra `offsite-backup-enabled` y luego `offsite-backup`.
+- [ ] Variables del respaldo configuradas; el log muestra `offsite-backup-enabled` y luego `offsite-backup`, y `/healthz` no trae `warning:true`.
 - [ ] Healthchecks.io y UptimeRobot avisando al celular (US-44).
 - [ ] Llave de cifrado guardada fuera de Render.
 - [ ] Primer ensayo de restauración hecho y RTO medido (OPS-02).
@@ -381,7 +427,7 @@ Pasos comunes a todo incidente:
 
 Esta opción **no se usa en Render**. Sirve si algún día se instala SCORTA en un servidor propio o en el computador de un almacén. Los archivos `Dockerfile`, `compose.yaml` y `Caddyfile` siguen en el repositorio.
 
-1. En el servidor, copia `.env.example` a `.env` y completa `DOMAIN`, las variables del propietario y las del respaldo. Deja `.env` legible solo por la cuenta del servicio.
+1. En el servidor, copia `.env.example` a `.env` y completa `DOMAIN`, las variables del propietario (empresa, usuario, nombre y contraseña **del primer arranque**; sin valores por defecto) y las del respaldo externo (o `SCORTA_OFFSITE_BACKUP=off`). `compose.yaml` pasa al contenedor **todas** las variables que lee el servidor (respaldo, correo, `SCORTA_HEALTH_TOKEN`, imágenes en R2, etc.; una prueba lo comprueba): no hace falta `env_file` ni un `compose.override.yaml`. `SCORTA_OWNER_PASSWORD` es opcional en compose: bórrala de `.env` tras el primer arranque o déjala vacía al restaurar una plataforma existente. Deja `.env` legible solo por la cuenta del servicio.
 2. Apunta el dominio al servidor y abre los puertos 80 y 443.
 3. Valida sin mostrar secretos: `docker compose config --quiet`.
 4. Inicia: `docker compose up -d --build`. Caddy obtiene el certificado HTTPS y envía el tráfico a la app; el puerto 3000 no se publica.
@@ -389,7 +435,8 @@ Esta opción **no se usa en Render**. Sirve si algún día se instala SCORTA en 
    ```sh
    docker compose exec -T app node --input-type=module -e "import {accessSync,constants} from 'node:fs'; accessSync('/data',constants.R_OK|constants.W_OK); console.log('Directorio persistente accesible')"
    ```
-6. Detrás de Caddy, usa `SCORTA_CLIENT_IP_HEADER=x-forwarded-for` y `SCORTA_TRUSTED_PROXY_HOPS=1`.
+6. Detrás de Caddy, `compose.yaml` ya usa por defecto `SCORTA_CLIENT_IP_HEADER=x-forwarded-for` y `SCORTA_TRUSTED_PROXY_HOPS=1` (Caddy reemplaza el `X-Forwarded-For` del cliente por la IP que ve). Compruébalo una vez con `SCORTA_LOG_IP_HEADERS=1`.
+7. Después de iniciar, mira `docker compose logs app`: debe aparecer `offsite-backup-enabled` (o `offsite-backup-opt-out`), no `offsite-backup-disabled`.
 
 **Respaldo:** el mismo respaldo externo cifrado funciona si configuras las variables `SCORTA_S3_*` y `SCORTA_BACKUP_KEY`. Respaldo manual:
 

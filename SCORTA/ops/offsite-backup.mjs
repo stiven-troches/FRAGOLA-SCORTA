@@ -12,6 +12,8 @@
 // tag (magic..iv) are authenticated as AAD.
 import {createCipheriv,createDecipheriv,createHash,createHmac,randomBytes,scryptSync} from 'node:crypto';
 import {gzipSync,gunzipSync} from 'node:zlib';
+import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 
 const MAGIC=Buffer.from('SCBK'),VERSION=1,SCRYPT={N:2**15,r:8,p:1,maxmem:64*1024*1024};
 // warn/error and startup lines go to stderr: stdout's first line announces readiness.
@@ -62,46 +64,115 @@ export function objectKey(prefix,date=new Date()){
   const iso=date.toISOString(),clean=String(prefix||'').replace(/^\/+|\/+$/g,'');
   return (clean?clean+'/':'')+`${iso.slice(0,4)}/${iso.slice(5,7)}/${iso.slice(8,10)}/scorta-${iso.replaceAll(':','-')}.sqlite.enc`;
 }
-export async function putObject({endpoint,bucket,region,accessKeyId,secretAccessKey},key,body,{date=new Date(),fetchImpl=fetch}={}){
-  const url=endpoint.replace(/\/+$/,'')+'/'+encodeURIComponent(bucket)+'/'+encodeKey(key);
-  const headers=signV4({method:'PUT',url,headers:{'content-type':'application/octet-stream'},payloadHash:sha256(body),accessKeyId,secretAccessKey,region,date});
+const objectUrl=(endpoint,bucket,key)=>endpoint.replace(/\/+$/,'')+'/'+encodeURIComponent(bucket)+'/'+encodeKey(key);
+export async function putObject({endpoint,bucket,region,accessKeyId,secretAccessKey},key,body,{date=new Date(),fetchImpl=fetch,contentType='application/octet-stream',timeoutMs=120000}={}){
+  const url=objectUrl(endpoint,bucket,key);
+  const headers=signV4({method:'PUT',url,headers:{'content-type':contentType},payloadHash:sha256(body),accessKeyId,secretAccessKey,region,date});
   delete headers.host;
-  const response=await fetchImpl(url,{method:'PUT',headers,body,signal:AbortSignal.timeout(120000)});
+  const response=await fetchImpl(url,{method:'PUT',headers,body,signal:AbortSignal.timeout(timeoutMs)});
   if(!response.ok)throw Error(`S3 respondió ${response.status}: ${(await response.text().catch(()=>'')).slice(0,300)}`);
   return url;
+}
+/** BE-30: GET firmado (SigV4). Devuelve los bytes o null si el objeto no existe (404). */
+export async function getObject({endpoint,bucket,region,accessKeyId,secretAccessKey},key,{date=new Date(),fetchImpl=fetch}={}){
+  const url=objectUrl(endpoint,bucket,key);
+  const headers=signV4({method:'GET',url,payloadHash:sha256(''),accessKeyId,secretAccessKey,region,date});
+  delete headers.host;
+  const response=await fetchImpl(url,{method:'GET',headers,signal:AbortSignal.timeout(30000)});
+  if(response.status===404)return null;
+  if(!response.ok)throw Error(`S3 respondió ${response.status}: ${(await response.text().catch(()=>'')).slice(0,300)}`);
+  return Buffer.from(await response.arrayBuffer());
 }
 
 export function offsiteConfig(env=process.env){
   const config={endpoint:env.SCORTA_S3_ENDPOINT,bucket:env.SCORTA_S3_BUCKET,region:env.SCORTA_S3_REGION||'auto',accessKeyId:env.SCORTA_S3_ACCESS_KEY_ID,secretAccessKey:env.SCORTA_S3_SECRET_ACCESS_KEY,prefix:env.SCORTA_S3_PREFIX||'',key:env.SCORTA_BACKUP_KEY,intervalMin:Number(env.SCORTA_BACKUP_INTERVAL_MIN)||60,pingUrl:env.SCORTA_BACKUP_PING_URL||''};
   const missing=['SCORTA_S3_ENDPOINT','SCORTA_S3_BUCKET','SCORTA_S3_ACCESS_KEY_ID','SCORTA_S3_SECRET_ACCESS_KEY','SCORTA_BACKUP_KEY'].filter(name=>!env[name]);
   if(!missing.length&&!/^https?:\/\//.test(config.endpoint))missing.push('SCORTA_S3_ENDPOINT (http/https)');
-  return {config,missing};
+  // SCORTA_OFFSITE_BACKUP=off: quien de verdad no quiere respaldo externo lo dice; sin eso, en producción
+  // un respaldo sin configurar es una falla operativa (warning en /healthz y alerta por correo).
+  const optOut=/^(?:off|0|false|no|disabled)$/i.test(String(env.SCORTA_OFFSITE_BACKUP||'').trim());
+  return {config,missing,optOut};
 }
 // OPS-03: Healthchecks.io style dead-man's switch. Never throws.
 export async function ping(url,ok,fetchImpl=fetch){
   if(!url)return;
   try{await fetchImpl(url.replace(/\/+$/,'')+(ok?'':'/fail'),{method:'GET',signal:AbortSignal.timeout(10000)});}catch(error){log('warn','backup-ping-failed',{error:String(error?.message||error)});}
 }
-/** One backup run: snapshot -> encrypt -> upload -> ping. Returns {at,ok,key?,bytes?,error?}. */
-export async function runOffsiteBackup(store,config,{date=new Date(),fetchImpl=fetch}={}){
+// BE-30: product photos and logos on disk (DATA_DIR/media, used when R2 media is not configured)
+// are not inside platform.sqlite. Each image is encrypted with the same key and uploaded to
+// <prefix>/media/<companyId>/<sha256>.<ext>.enc. Names are content hashes, so an image is uploaded
+// once and then again every MEDIA_REFRESH_MS: a bucket lifecycle rule that deletes objects older
+// than 30 days must never leave a live image without a copy. A manifest per destination remembers
+// what was uploaded and when.
+export const MEDIA_REFRESH_MS=7*86400000;
+const MEDIA_FILE=/^[a-f0-9]{64}\.(?:webp|png|jpg)$/,MEDIA_COMPANY=/^[A-Za-z0-9_-]{1,100}$/;
+export const mediaObjectKey=(prefix,relative)=>{const clean=String(prefix||'').replace(/^\/+|\/+$/g,'');return (clean?clean+'/':'')+'media/'+relative+'.enc';};
+export async function syncMediaOffsite(mediaDir,config,{date=new Date(),fetchImpl=fetch}={}){
+  const result={uploaded:0,total:0};
+  if(!mediaDir||!existsSync(mediaDir))return result;
+  const destination=sha256([config.endpoint,config.bucket,config.prefix].join('|')).slice(0,16),manifest=resolve(mediaDir,'.offsite-'+destination+'.json');
+  let sent={};try{sent=JSON.parse(readFileSync(manifest,'utf8'));}catch{}
+  const save=()=>{const pending=manifest+'.tmp';writeFileSync(pending,JSON.stringify(sent),{mode:0o600});renameSync(pending,manifest);};
+  try{
+    for(const company of readdirSync(mediaDir,{withFileTypes:true})){
+      if(!company.isDirectory()||!MEDIA_COMPANY.test(company.name))continue;
+      for(const name of readdirSync(resolve(mediaDir,company.name))){
+        if(!MEDIA_FILE.test(name))continue;
+        const relative=company.name+'/'+name;result.total++;
+        if(sent[relative]&&date.getTime()-sent[relative]<MEDIA_REFRESH_MS)continue;
+        await putObject(config,mediaObjectKey(config.prefix,relative),encryptBackup(readFileSync(resolve(mediaDir,relative)),config.key),{date,fetchImpl});
+        sent[relative]=date.getTime();result.uploaded++;
+      }
+    }
+    for(const relative of Object.keys(sent))if(!existsSync(resolve(mediaDir,relative)))delete sent[relative];
+  }finally{if(result.uploaded||existsSync(manifest))save();}
+  return result;
+}
+/** Restores downloaded <companyId>/<sha256>.<ext>.enc files into DATA_DIR/media (checks every hash). */
+export function decryptMediaFolder(source,target,secret){
+  let restored=0;
+  for(const company of readdirSync(source,{withFileTypes:true})){
+    if(!company.isDirectory()||!MEDIA_COMPANY.test(company.name))continue;
+    for(const name of readdirSync(resolve(source,company.name))){
+      const plain=name.replace(/\.enc$/,'');if(!name.endsWith('.enc')||!MEDIA_FILE.test(plain))continue;
+      const bytes=decryptBackup(readFileSync(resolve(source,company.name,name)),secret);
+      if(sha256(bytes)!==plain.split('.')[0])throw Error('La imagen '+company.name+'/'+plain+' no coincide con su huella');
+      mkdirSync(resolve(target,company.name),{recursive:true,mode:0o700});writeFileSync(resolve(target,company.name,plain),bytes,{mode:0o600});restored++;
+    }
+  }
+  return restored;
+}
+/** One backup run: media (if on disk) -> snapshot -> encrypt -> upload -> ping. Returns {at,ok,key?,bytes?,media?,error?}. */
+export async function runOffsiteBackup(store,config,{date=new Date(),fetchImpl=fetch,mediaDir=null}={}){
   const at=date.toISOString();
   try{
+    // Images first: every reference in the database snapshot already has its copy.
+    const media=mediaDir?await syncMediaOffsite(mediaDir,config,{date,fetchImpl}):null;
     const sealed=encryptBackup(await store.snapshot(),config.key),key=objectKey(config.prefix,date);
     await putObject(config,key,sealed,{date,fetchImpl});
-    log('info','offsite-backup',{key,bytes:sealed.length});await ping(config.pingUrl,true,fetchImpl);
-    return {at,ok:true,key,bytes:sealed.length};
+    log('info','offsite-backup',{key,bytes:sealed.length,...(media?{media}:{})});await ping(config.pingUrl,true,fetchImpl);
+    return {at,ok:true,key,bytes:sealed.length,...(media?{media}:{})};
   }catch(error){
     log('error','offsite-backup-failed',{error:String(error?.message||error)});await ping(config.pingUrl,false,fetchImpl);
     return {at,ok:false,error:String(error?.message||error)};
   }
 }
 /** Starts the hourly loop. Disabled (logged once) when any variable is missing. */
-export function startOffsiteBackup(store,{env=process.env,onResult=()=>{},firstDelayMs=120000,fetchImpl=fetch}={}){
-  const {config,missing}=offsiteConfig(env);
-  if(!store||missing.length){log('warn','offsite-backup-disabled',{missing:store?missing:['platform.sqlite']});return {enabled:false,stop(){}};}
+// mediaDir: DATA_DIR/media when product photos and logos live on disk (null when they are in R2).
+// production: in production a disabled backup is an error and the result carries warning:true so the
+// server can show it in /healthz and email an alert; SCORTA_OFFSITE_BACKUP=off is the explicit opt-out.
+export function startOffsiteBackup(store,{env=process.env,onResult=()=>{},firstDelayMs=120000,fetchImpl=fetch,mediaDir=null,production=env.NODE_ENV==='production'}={}){
+  const {config,missing,optOut}=offsiteConfig(env);
+  if(optOut){log('notice','offsite-backup-opt-out',{message:'SCORTA_OFFSITE_BACKUP=off: no hay respaldo externo; solo existe la copia local al arrancar'});return {enabled:false,optOut:true,warning:false,missing:[],stop(){}};}
+  if(!store||missing.length){
+    const list=store?missing:['platform.sqlite'];
+    if(production)log('error','offsite-backup-disabled',{missing:list,message:'PRODUCCIÓN SIN RESPALDO EXTERNO: faltan variables. Defínelas o pon SCORTA_OFFSITE_BACKUP=off si de verdad no lo quieres'});
+    else log('warn','offsite-backup-disabled',{missing:list});
+    return {enabled:false,optOut:false,warning:production,missing:list,stop(){}};
+  }
   let timer=null,stopped=false;
-  const loop=async()=>{if(stopped)return;onResult(await runOffsiteBackup(store,config,{fetchImpl}));if(!stopped)timer=setTimeout(loop,config.intervalMin*60000);};
+  const loop=async()=>{if(stopped)return;onResult(await runOffsiteBackup(store,config,{fetchImpl,mediaDir}));if(!stopped)timer=setTimeout(loop,config.intervalMin*60000);};
   timer=setTimeout(loop,firstDelayMs);
-  log('notice','offsite-backup-enabled',{intervalMin:config.intervalMin,bucket:config.bucket,prefix:config.prefix,ping:!!config.pingUrl});
-  return {enabled:true,config,stop(){stopped=true;clearTimeout(timer);}};
+  log('notice','offsite-backup-enabled',{intervalMin:config.intervalMin,bucket:config.bucket,prefix:config.prefix,ping:!!config.pingUrl,media:!!mediaDir});
+  return {enabled:true,optOut:false,warning:false,missing:[],config,stop(){stopped=true;clearTimeout(timer);}};
 }

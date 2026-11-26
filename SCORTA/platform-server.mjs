@@ -6,14 +6,19 @@ import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync,gzipSync,constants as zlibConstants} from 'node:zlib';
 import {createPlatform,platformRequest,PLATFORM_SESSION_TTL_MS} from './platform.mjs';
+import {externalizeMedia,pendingMedia} from './media-store.mjs';
+import {MEDIA_PATH,isMediaRef} from './media-ref.mjs';
 
 const COOKIE='scorta_platform';
 const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
 // Respuestas de la API: comprimidas si el navegador lo acepta y, en la recarga periódica de
 // datos (GET /api/v2/data), 304 sin cuerpo cuando el contenido no cambió desde la copia del cliente.
+// etag: texto = versión calculada por el motor (BE-29); true = resumen del cuerpo serializado.
+const API_VARY='Accept-Encoding, Cookie, X-SCORTA-Company';
 export function sendJson(req,res,status,body,{etag=false}={}){
-  const text=JSON.stringify(body),headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:'Accept-Encoding, Cookie, X-SCORTA-Company'};
-  if(etag&&status===200){
+  const text=JSON.stringify(body),headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:API_VARY};
+  if(typeof etag==='string'&&status===200)headers.ETag=etag;
+  else if(etag&&status===200){
     headers.ETag='W/"'+createHash('sha256').update(text).digest('base64url').slice(0,32)+'"';
     if(String(req.headers['if-none-match']||'').split(',').map(v=>v.trim()).includes(headers.ETag)){res.writeHead(304,headers);res.end();return;}
   }
@@ -34,11 +39,18 @@ function lockHolderRunning(pid){
   try{process.kill(pid,0);}catch(error){if(error.code!=='EPERM')return false;}
   try{return /node/i.test(readFileSync(`/proc/${pid}/cmdline`,'utf8'));}catch{return true;}
 }
-export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false}={}){
+// BE-33: onSecurityEvents(events) recibe, después de confirmar cada escritura, los eventos de
+// seguridad nuevos (los más recientes primero) para avisar por correo al propietario.
+// BE-30: media = createMediaStore(...). With it, logos and product photos leave the JSON state:
+// the data URLs already stored are moved on every start (idempotent) and the new ones of each write
+// in that write. SEG-10: a write never retries other companies' pending images; those are retried in
+// the background (at most once every mediaRetryMs) with the uploads outside the write queue.
+export async function openPlatformStore(file,{owner,ownerContact='',legacyState,withTestCompany=false,onSecurityEvents=null,media=null,mediaRetryMs=5*60000}={}){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   const pidFile=file+'.pid';
   if(existsSync(pidFile)){if(lockHolderRunning(Number(readFileSync(pidFile,'utf8'))))throw Error('La plataforma ya está abierta. Detén la instancia antes de abrir otra.');rmSync(pidFile,{force:true});}
   writeFileSync(pidFile,String(process.pid),{flag:'wx',mode:0o600});
+  let startupPending=false;
   const db=new DatabaseSync(file);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS platform(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL, storage_version INTEGER NOT NULL DEFAULT 0)');
   try{
     const prior=db.prepare('SELECT data FROM platform WHERE id=1').get();
@@ -46,6 +58,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     state.sessions??={};if(ownerContact)state.ownerContact=ownerContact;
     // Una semilla rota (p. ej. faltan las fotos de public/test-shop) no debe impedir el arranque.
     if(withTestCompany){try{state=await seedTestCompany(state);}catch(error){console.error(JSON.stringify({level:'error',event:'test-company-seed-failed',error:String(error?.message||error)}));}}
+    if(media){const moved=await externalizeMedia(state,media);if(moved.moved||moved.failed)console.error(JSON.stringify({level:moved.failed?'warn':'info',at:new Date().toISOString(),event:'media-migration',backend:media.kind,...moved}));startupPending=moved.failed>0;}
     if(!prior)db.prepare('INSERT INTO platform(id,data) VALUES(1,?)').run(JSON.stringify(state));
     else db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1').run(JSON.stringify(state));
     try{chmodSync(file,0o600);}catch{}
@@ -58,13 +71,51 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
   let queue=Promise.resolve(),closed=false,cache={version:-1,state:null};
   const versionStmt=db.prepare('SELECT storage_version FROM platform WHERE id=1'),rowStmt=db.prepare('SELECT data,storage_version FROM platform WHERE id=1');
   function current(){const version=versionStmt.get().storage_version;if(cache.version===version)return cache;const row=rowStmt.get();cache={version:row.storage_version,state:JSON.parse(row.data)};return cache;}
+  // SEG-10: pending images (failed uploads, other companies) are retried here, not in every write.
+  let retryTimer=null,lastRetry=Date.now();
+  function scheduleMediaRetry(){
+    if(!media||retryTimer||closed)return;
+    retryTimer=setTimeout(retryMedia,Math.max(0,lastRetry+mediaRetryMs-Date.now()));retryTimer.unref?.();
+  }
+  async function retryMedia(){
+    retryTimer=null;lastRetry=Date.now();if(closed)return;
+    const ready=new Set();let failed=0;
+    // Uploads outside the queue: a slow R2 never blocks writes.
+    for(const [companyId,values]of pendingMedia(current().state))for(const value of values){if(closed)return;try{if(await media.putDataUrl(companyId,value))ready.add(companyId+'\n'+value);else failed++;}catch{failed++;}}
+    if(ready.size&&!closed){
+      // Already stored: inside the queue the same put is a cache hit (R2) or an existing file (disk).
+      const run=queue.then(async()=>{
+        if(closed)return;
+        const snap=current(),next=structuredClone(snap.state),moved=await externalizeMedia(next,media,{include:(companyId,value)=>ready.has(companyId+'\n'+value)});
+        if(!moved.moved||closed)return;
+        const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(next),snap.version);
+        if(changed.changes)cache={version:snap.version+1,state:next};
+      });
+      queue=run.catch(()=>{});
+      await run.catch(error=>console.error(JSON.stringify({level:'error',event:'media-retry-failed',error:String(error?.message||error)})));
+    }
+    console.error(JSON.stringify({level:failed?'warn':'info',at:new Date().toISOString(),event:'media-retry',backend:media.kind,moved:ready.size,failed}));
+    if(failed)scheduleMediaRetry();
+  }
+  if(startupPending)scheduleMediaRetry();
   async function operation(payload,options){
     if(closed)throw Error('La plataforma está cerrada');
     const snap=current(),result=await platformRequest(snap.state,payload,options);
     if(result.state!==snap.state){
+      let pending=false;
+      if(media){
+        // Only the images this write brought; if one fails the write keeps its data URL.
+        const before=pendingMedia(snap.state);
+        await externalizeMedia(result.state,media,{include:(companyId,value)=>!before.get(companyId)?.has(value)});
+        pending=pendingMedia(result.state).size>0;
+      }
       if(closed)throw Error('La plataforma está cerrada');
       db.exec('BEGIN IMMEDIATE');
       try{const changed=db.prepare('UPDATE platform SET data=?,storage_version=storage_version+1 WHERE id=1 AND storage_version=?').run(JSON.stringify(result.state),snap.version);if(!changed.changes){db.exec('ROLLBACK');return {status:409,body:{error:'Otra solicitud actualizó los datos. Reintenta la operación.',code:'REVISION_CONFLICT'}};}db.exec('COMMIT');cache={version:snap.version+1,state:result.state};}catch(error){try{db.exec('ROLLBACK');}catch{}throw error;}
+      if(pending)scheduleMediaRetry();
+      if(onSecurityEvents){const known=snap.state.securityEvents?.[0]?.id,fresh=[];for(const event of result.state.securityEvents||[]){if(event.id===known)break;fresh.push(event);}if(fresh.length){try{onSecurityEvents(structuredClone(fresh));}catch{}}}
+      // A deleted or purged company takes its images on disk with it.
+      if(media)for(const company of snap.state.companies)if(!result.state.companies.some(c=>c.id===company.id)){try{media.removeCompany(company.id);}catch(error){console.error(JSON.stringify({level:'error',event:'media-remove-failed',companyId:company.id,error:String(error?.message||error)}));}}
     }
     const {state,...publicResult}=result;return publicResult;
   }
@@ -74,7 +125,7 @@ export async function openPlatformStore(file,{owner,ownerContact='',legacyState,
     const result=queue.then(()=>operation(payload,options));queue=result.catch(()=>{});return result;
   }
   const stats=()=>({sizeBytes:db.prepare('PRAGMA page_count').get().page_count*db.prepare('PRAGMA page_size').get().page_size,stateBytes:db.prepare('SELECT length(CAST(data AS BLOB)) AS n FROM platform WHERE id=1').get().n});
-  return {request,stats,health:()=>!closed&&db.prepare('SELECT 1 AS ok').get().ok===1,readPrivate:()=>JSON.parse(db.prepare('SELECT data FROM platform WHERE id=1').get().data),async snapshot(){await queue;const directory=mkdtempSync(resolve(tmpdir(),'scorta-platform-')),target=resolve(directory,'platform.sqlite');try{await backup(db,target);validatePlatformDatabase(target);return readFileSync(target);}finally{rmSync(directory,{recursive:true,force:true});}},close(){closed=true;db.close();rmSync(pidFile,{force:true});}};
+  return {request,stats,health:()=>!closed&&db.prepare('SELECT 1 AS ok').get().ok===1,readPrivate:()=>JSON.parse(db.prepare('SELECT data FROM platform WHERE id=1').get().data),async snapshot(){await queue;const directory=mkdtempSync(resolve(tmpdir(),'scorta-platform-')),target=resolve(directory,'platform.sqlite');try{await backup(db,target);validatePlatformDatabase(target);return readFileSync(target);}finally{rmSync(directory,{recursive:true,force:true});}},close(){closed=true;clearTimeout(retryTimer);db.close();rmSync(pidFile,{force:true});}};
 }
 // SEG-02: x-forwarded-for is appended by every proxy, so only the entry added by our
 // own trusted proxy (counted from the right) is reliable; the leftmost one is whatever
@@ -93,7 +144,17 @@ export const ipHeaderDiagnostics=req=>({level:'info',at:new Date().toISOString()
 // configurado Y SCORTA_PUBLIC_URL (el enlace nunca se arma con la cabecera Host del cliente).
 // Se envían después de confirmar la escritura y sin esperar, para que el tiempo de respuesta
 // no revele si la cuenta existe.
-export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null}={}){
+// BE-30: sends an image of the media store. Content-addressed ids never change, so the ETag comes
+// from the id and a matching If-None-Match answers 304 without reading the file or R2.
+async function sendMedia(req,res,media,ref,cacheControl){
+  const etag='"'+ref.mediaId.split('.')[0].slice(0,32)+'"';
+  if(media&&req.headers['if-none-match']===etag){res.writeHead(304,{'Cache-Control':cacheControl,ETag:etag});res.end();return;}
+  const bytes=media?await media.get(ref):null;
+  if(!bytes){json(res,404,{error:'Imagen no disponible'});return;}
+  res.setHeader('Cache-Control',cacheControl);res.setHeader('ETag',etag);
+  res.writeHead(200,{'Content-Type':ref.type,'Content-Length':String(bytes.length)});res.end(req.method==='HEAD'?undefined:bytes);
+}
+export function createPlatformHandler({store,production=false,publicUrl,clock=Date.now,clientIpHeader,trustedProxyHops=1,requireTerms=false,requireDataConsent=false,requireOwnerTwoFactor=false,mailer=null,onMail=null,serverStatus=null,media=null}={}){
   const mailEnabled=!!(mailer?.enabled&&publicUrl),resetBaseUrl=publicUrl?new URL(publicUrl).origin:undefined;
   const limitedPaths=new Set(['/api/v2/login','/api/v2/password/forgot','/api/v2/password/reset']);
   const cookie=(value,age)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${production?'; Secure':''}`;
@@ -105,9 +166,35 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
   const ipHeader=typeof clientIpHeader==='string'&&clientIpHeader.trim()?clientIpHeader.trim().toLowerCase():null;
   const hops=Math.trunc(Number(trustedProxyHops))||1,clientAddress=req=>clientAddressFrom(req,ipHeader,hops);
   const loginOrigins=new Map(),loginWindowMs=60000,loginOriginLimit=120,maxOrigins=1000;
-  const catalogReads=new Map(),catalogCheckouts=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
+  const catalogReads=new Map(),catalogCheckouts=new Map(),mediaReads=new Map(),catalogReadLimit=600,catalogCheckoutLimit=20;
+  // Tope por origen en una ventana de un minuto: true (y 429 + Retry-After ya enviado) si se superó.
+  const rateLimited=(bucket,limit,req,res)=>{
+    const timestamp=Number(clock());
+    for(const [key,value]of bucket)if(value.until<=timestamp)bucket.delete(key);
+    const key=clientAddress(req),previous=bucket.get(key);
+    if(previous&&previous.count>=limit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
+    if(!previous&&bucket.size>=maxOrigins)bucket.delete(bucket.keys().next().value);
+    bucket.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+    return false;
+  };
   return async(req,res)=>{
-    const url=new URL(req.url,'http://localhost'),path=url.pathname;if(!path.startsWith('/api/v2/'))return false;
+    const url=new URL(req.url,'http://localhost'),path=url.pathname;
+    if(MEDIA_PATH.test(path)){
+      try{
+        if(!['GET','HEAD'].includes(req.method)){json(res,405,{error:'Método no permitido'});return true;}
+        // SEG-10: /media también recorre el catálogo y lee el archivo; mismo tope por origen que las lecturas del catálogo.
+        if(rateLimited(mediaReads,catalogReadLimit,req,res))return true;
+        if(!store){json(res,404,{error:'Imagen no disponible'});return true;}
+        const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'=')),token=match?.slice(COOKIE.length+1);
+        const result=await store.request({method:'GET',path,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null});
+        if(result.status!==200){json(res,result.status,result.body);return true;}
+        // SEG-10: an image stops being public when the product leaves the catalog, so no long/immutable
+        // cache: public 1 h; private always revalidates (the ETag answers 304 without re-sending it).
+        await sendMedia(req,res,media,result.body.media,result.body.public?'public, max-age=3600':'private, no-cache');
+      }catch(error){console.error(JSON.stringify({level:'error',at:new Date().toISOString(),method:req.method,path,error:String(error?.stack||error)}));json(res,500,{error:'Error interno del servidor. Intenta de nuevo.',code:'INTERNAL_ERROR'});}
+      return true;
+    }
+    if(!path.startsWith('/api/v2/'))return false;
     try{
       const protocol=production||req.socket.encrypted?'https':'http';
       const origin=publicUrl?new URL(publicUrl).origin:`${protocol}://${req.headers.host}`;
@@ -116,14 +203,22 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){json(res,415,{error:'La solicitud debe utilizar JSON'});return true;}
       }
       if(!store){json(res,503,{error:'Configura SCORTA_OWNER_PASSWORD para preparar la plataforma',code:'SETUP_REQUIRED'});return true;}
+      // OPS-19: estado del servidor para el panel del propietario (solo lectura). Exige la
+      // sesión del propietario fuera de soporte; nunca usa ni expone SCORTA_HEALTH_TOKEN.
+      if(path==='/api/v2/owner/server-status'){
+        if(req.method!=='GET'){json(res,405,{error:'Método no permitido'});return true;}
+        if(typeof serverStatus!=='function'){json(res,404,{error:'Ruta inexistente',code:'NOT_FOUND'});return true;}
+        const raw=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        const session=await store.request({method:'GET',path:'/api/v2/session',token:/^[A-Za-z0-9_-]{43}$/.test(raw||'')?raw:null,clientKey:clientAddress(req)},{...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{})});
+        if(session.status!==200){if(session.status===401&&raw)res.setHeader('Set-Cookie',cookie('',0));json(res,session.status,{error:session.body?.error||'Tu sesión terminó.',...(session.body?.code?{code:session.body.code}:{})});return true;}
+        const s=session.body.session;
+        if(s?.role!=='owner'||s.companyId||s.mustChangePassword||requireOwnerTwoFactor&&!s.twoFactorEnabled){json(res,403,{error:'Solo el propietario de la plataforma puede ver el estado del servidor.',code:'FORBIDDEN'});return true;}
+        sendJson(req,res,200,{status:await serverStatus()});return true;
+      }
       // Catálogo público (sin sesión): tope por origen para que nadie sature la cola de la plataforma.
       if(path.startsWith('/api/v2/catalog/')){
-        const timestamp=Number(clock()),checkout=req.method==='POST',limit=checkout?catalogCheckoutLimit:catalogReadLimit,bucket=checkout?catalogCheckouts:catalogReads;
-        for(const [key,value]of bucket)if(value.until<=timestamp)bucket.delete(key);
-        const key=clientAddress(req),previous=bucket.get(key);
-        if(previous&&previous.count>=limit){const retryAfterSeconds=Math.max(1,Math.ceil((previous.until-timestamp)/1000));res.setHeader('Retry-After',String(retryAfterSeconds));json(res,429,{error:'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',code:'RATE_LIMITED',retryAfterSeconds});return true;}
-        if(!previous&&bucket.size>=maxOrigins)bucket.delete(bucket.keys().next().value);
-        bucket.set(key,{count:(previous?.count||0)+1,until:previous?.until||timestamp+loginWindowMs});
+        const checkout=req.method==='POST';
+        if(rateLimited(checkout?catalogCheckouts:catalogReads,checkout?catalogCheckoutLimit:catalogReadLimit,req,res))return true;
       }
       if(limitedPaths.has(path)&&req.method==='POST'){
         const timestamp=Number(clock());
@@ -142,12 +237,16 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
       const match=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='));
       const token=match?.slice(COOKIE.length+1);
       const hasContext=Object.hasOwn(req.headers,'x-scorta-company');
-      const result=await store.request({method:req.method,path:path+url.search,body,token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
+      // BE-29: la recarga de datos y las acciones devuelven la versión del sobre; If-None-Match
+      // coincidente en GET /api/v2/data responde 304 sin armar ni enviar el sobre.
+      const versioned=req.method==='GET'&&path==='/api/v2/data'||req.method==='POST'&&path==='/api/v2/action';
+      const result=await store.request({method:req.method,path:path+url.search,body,...(versioned?{etag:true,...(req.method==='GET'&&req.headers['if-none-match']?{ifNoneMatch:String(req.headers['if-none-match'])}:{})}:{}),token:/^[A-Za-z0-9_-]{43}$/.test(token||'')?token:null,clientKey:clientAddress(req),enforceContext:true,...(hasContext?{expectedCompanyId:req.headers['x-scorta-company']}:{})},{baseUrl:origin,...(requireTerms?{requireTerms:true}:{}),...(requireDataConsent?{requireDataConsent:true}:{}),...(requireOwnerTwoFactor?{requireOwnerTwoFactor:true}:{}),...(mailEnabled?{mailEnabled:true,resetBaseUrl}:{})});
       if(mailEnabled&&Array.isArray(result.outbox)&&result.outbox.length){const sending=mailer.sendAll(result.outbox).catch(()=>[]);onMail?.(sending);}
       if(Object.hasOwn(result,'token'))res.setHeader('Set-Cookie',cookie(result.token||'',result.token?Math.floor(PLATFORM_SESSION_TTL_MS/1000):0));
       else if(result.status===401&&token)res.setHeader('Set-Cookie',cookie('',0));
       if(result.status===429&&Number.isFinite(result.body?.retryAfterSeconds))res.setHeader('Retry-After',String(result.body.retryAfterSeconds));
       if(req.method==='GET'&&/^\/api\/v2\/catalog\/[^/]+\/(?:photo\/[^/]+|logo)$/.test(path)&&result.status===200){
+        if(isMediaRef(result.body.image)){await sendMedia(req,res,media,result.body.image,'public, max-age=300, stale-while-revalidate=86400');return true;}
         const image=result.body.image?.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/);
         if(!image){json(res,404,{error:'Imagen no disponible'});return true;}
         // Imágenes públicas: caché corta en el navegador/CDN y validación por contenido.
@@ -156,7 +255,13 @@ export function createPlatformHandler({store,production=false,publicUrl,clock=Da
         if(req.headers['if-none-match']===etag){res.statusCode=304;res.end();return true;}
         res.setHeader('Content-Type',image[1]);res.end(bytes);return true;
       }
-      sendJson(req,res,result.status,result.body,{etag:req.method==='GET'&&path==='/api/v2/data'});return true;
+      // The public receipt keeps its logo inline (printable and offline), as before BE-30.
+      if(req.method==='GET'&&path.startsWith('/api/v2/receipt/')&&isMediaRef(result.body?.company?.logo)){
+        const ref=result.body.company.logo,bytes=media?await media.get(ref).catch(()=>null):null;
+        result.body={...result.body,company:{...result.body.company,logo:bytes?'data:'+ref.type+';base64,'+bytes.toString('base64'):''}};
+      }
+      if(result.status===304&&versioned){res.writeHead(304,{'Cache-Control':'no-store',Vary:API_VARY,...(result.etag?{ETag:result.etag}:{})});res.end();return true;}
+      sendJson(req,res,result.status,result.body,{etag:versioned&&typeof result.etag==='string'?result.etag:false});return true;
     }catch(error){
       // Expected failures carry a status; anything else is an internal fault: log it
       // and never expose its message (SQLite/Node internals) to the client.

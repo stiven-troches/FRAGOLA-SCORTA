@@ -1,3 +1,7 @@
 {$DOMAIN} {
+  # Caddy no confía en ningún proxy delante (no hay `trusted_proxies`): descarta el X-Forwarded-For que
+  # mande el cliente y deja solo la IP que él ve. Por eso la app usa SCORTA_CLIENT_IP_HEADER=x-forwarded-for
+  # con SCORTA_TRUSTED_PROXY_HOPS=1 (compose.yaml). Si pones otro proxy (p. ej. Cloudflare) delante de
+  # Caddy, revisa docs/OPERACION.md antes de cambiar nada.
   reverse_proxy app:3000
 }

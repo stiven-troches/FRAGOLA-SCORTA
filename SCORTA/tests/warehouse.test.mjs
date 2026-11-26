@@ -1,17 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {openStore} from '../server.mjs';
+import {memoryStore} from './memory-store.mjs';
 
 function warehouse(run) {
-  const directory = mkdtempSync(join(tmpdir(), 'scorta-operacion-'));
-  const store = openStore(join(directory, 'operacion.sqlite'));
+  const store = memoryStore();
   const send = (kind, form = {}, items = [], extra = {}, actor = 'admin-prueba') =>
     store.change({kind, form, items, revision: store.read().revision, ...extra}, actor);
-  try {run({store, send});}
-  finally {store.close(); rmSync(directory, {recursive: true, force: true});}
+  run({store, send});
 }
 
 test('jornada: entradas, venta a dos precios, taller, merma y reversiones concilian con conteo independiente', () => warehouse(({store, send}) => {

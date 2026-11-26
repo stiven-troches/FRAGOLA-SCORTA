@@ -101,3 +101,41 @@ test('OPS-01/03: credenciales inválidas fallan, se registra y se avisa a <url>/
   t.after(()=>loop.stop());assert.equal(loop.enabled,true);
   await done;loop.stop();assert.equal(results[0].ok,true);assert.equal(s3.puts.at(-1).problem,null);
 });
+
+test('OPS-01: en producción, un respaldo externo sin configurar es un aviso (warning) con error claro en el log',t=>{
+  const lines=quiet(t),store={snapshot:async()=>Buffer.alloc(0)};
+  const loop=startOffsiteBackup(store,{env:{NODE_ENV:'production',SCORTA_S3_BUCKET:'b'}});
+  assert.equal(loop.enabled,false);assert.equal(loop.warning,true);assert.equal(loop.optOut,false);
+  assert.deepEqual(loop.missing,['SCORTA_S3_ENDPOINT','SCORTA_S3_ACCESS_KEY_ID','SCORTA_S3_SECRET_ACCESS_KEY','SCORTA_BACKUP_KEY']);
+  const entry=lines.map(l=>JSON.parse(l)).find(l=>l.event==='offsite-backup-disabled');
+  assert.ok(entry);assert.equal(entry.level,'error');assert.deepEqual(entry.missing,loop.missing);
+  assert.match(entry.message,/SCORTA_OFFSITE_BACKUP=off/);
+  // Solo falta la llave de cifrado: también es aviso.
+  const noKey=startOffsiteBackup(store,{env:env('http://127.0.0.1:1',{NODE_ENV:'production',SCORTA_BACKUP_KEY:''})});
+  assert.equal(noKey.warning,true);assert.deepEqual(noKey.missing,['SCORTA_BACKUP_KEY']);
+  // Fuera de producción sigue siendo un warn sin aviso.
+  const dev=startOffsiteBackup(store,{env:{SCORTA_S3_BUCKET:'b'}});
+  assert.equal(dev.enabled,false);assert.equal(dev.warning,false);
+  assert.equal(JSON.parse(lines.filter(l=>l.includes('offsite-backup-disabled')).at(-1)).level,'warn');
+});
+
+test('OPS-01: SCORTA_OFFSITE_BACKUP=off es el opt-out explícito (sin aviso, con aviso informativo al arrancar)',t=>{
+  for(const value of ['off','OFF','0','false','no']){
+    assert.equal(offsiteConfig({SCORTA_OFFSITE_BACKUP:value}).optOut,true,value);
+  }
+  for(const value of [undefined,'','on','1','true','si'])assert.equal(offsiteConfig({SCORTA_OFFSITE_BACKUP:value}).optOut,false,String(value));
+  const lines=quiet(t),store={snapshot:async()=>Buffer.alloc(0)};
+  const loop=startOffsiteBackup(store,{env:{NODE_ENV:'production',SCORTA_OFFSITE_BACKUP:'off'}});
+  assert.equal(loop.enabled,false);assert.equal(loop.optOut,true);assert.equal(loop.warning,false);
+  const entry=lines.map(l=>JSON.parse(l)).find(l=>l.event==='offsite-backup-opt-out');
+  assert.ok(entry);assert.equal(entry.level,'notice');
+  assert.ok(!lines.some(l=>l.includes('"offsite-backup-disabled"')));
+  // El opt-out gana aunque las variables estén completas: no se programa ningún respaldo.
+  const full=startOffsiteBackup(store,{env:env('http://127.0.0.1:1',{NODE_ENV:'production',SCORTA_OFFSITE_BACKUP:'off'}),firstDelayMs:0});
+  assert.equal(full.enabled,false);assert.equal(full.optOut,true);
+});
+
+test('OPS-01: configurado correctamente, el respaldo externo queda activo y sin aviso, también en producción',t=>{
+  quiet(t);const loop=startOffsiteBackup({snapshot:async()=>Buffer.alloc(0)},{env:env('http://127.0.0.1:1',{NODE_ENV:'production'}),firstDelayMs:3600000});
+  t.after(()=>loop.stop());assert.equal(loop.enabled,true);assert.equal(loop.warning,false);
+});

@@ -55,6 +55,9 @@ async function openPg({url, schema, max = 10, statementTimeoutMs = 15000}) {
     options: options.join(' '),
     types: {getTypeParser: (oid, format) => parsers[oid] ?? pg.types.getTypeParser(oid, format)},
   });
+  // Sin este manejador, un error de una conexión INACTIVA del pool (Postgres reinicia, corte de red)
+  // se emite como 'error' sin oyente y tumba el proceso. Se registra y el pool abre otra conexión.
+  pool.on('error', error => console.error('[db] error en una conexión inactiva del pool:', error?.message ?? error));
   const wrap = handle => ({
     async query(text, params = []) {
       const result = await handle.query(text, params);

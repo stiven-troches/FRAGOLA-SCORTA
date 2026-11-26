@@ -1,5 +1,6 @@
 import {sumMoney,roundMoney} from './money.mjs';
 import {listPrice,saleSettings} from './sale-pricing.mjs';
+import {isMediaRef,mediaUrl} from './media-ref.mjs';
 
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status,code:'CATALOG_ERROR'})};
 const text=(v,max=300)=>String(v??'').trim().slice(0,max);
@@ -32,10 +33,11 @@ export function catalogProducts(state,company){return (state.businesses[company.
 // El catálogo muestra el mismo precio final que cobra la caja: con IVA sumado si la empresa
 // registra sus precios sin IVA incluido.
 const publicPrice=(state,company)=>{const settings=saleSettings(state.businesses[company.id]);return p=>listPrice(p,'mostrador',settings)};
+// BE-30: imágenes ya movidas al almacén de medios: URL /media inmutable; las heredadas siguen por la API.
 export function publicCatalog(state,company){
  const base='/api/v2/catalog/'+encodeURIComponent(company.slug),price=publicPrice(state,company);
- return {company:{name:company.name,logo:company.logo?base+'/logo':'',slug:company.slug,address:company.address||'',whatsapp:whatsappNumber(company.whatsapp),catalog:cleanCatalog({},company.catalog)},
- products:catalogProducts(state,company).map(p=>({id:p.id,nombre:p.nombre,categoria:p.categoria||'General',referencia:p.referencia||'',marca:p.marca||'',descripcion:p.descripcion||p.compatibilidad||'',modelo:p.modelo||'',precio_venta:price(p),foto:p.foto?base+'/photo/'+encodeURIComponent(p.id):''}))};
+ return {company:{name:company.name,logo:isMediaRef(company.logo)?mediaUrl(company.logo):company.logo?base+'/logo':'',slug:company.slug,address:company.address||'',whatsapp:whatsappNumber(company.whatsapp),catalog:cleanCatalog({},company.catalog)},
+ products:catalogProducts(state,company).map(p=>({id:p.id,nombre:p.nombre,categoria:p.categoria||'General',referencia:p.referencia||'',marca:p.marca||'',descripcion:p.descripcion||p.compatibilidad||'',modelo:p.modelo||'',precio_venta:price(p),foto:isMediaRef(p.foto)?mediaUrl(p.foto):p.foto?base+'/photo/'+encodeURIComponent(p.id):''}))};
 }
 export function catalogCheckout(state,company,items){
  const phone=whatsappNumber(company.whatsapp);if(!phone)fail('El negocio todavía no ha configurado su WhatsApp.');

@@ -7,6 +7,7 @@ import {PostgresRepository} from '../db/repository.mjs';
 import {generateSynthetic, measure} from '../db/synthetic.mjs';
 import {buildSampleState} from '../db/sample-state.mjs';
 import {salesReport} from '../admin-reports.mjs';
+import {roundMoney} from '../money.mjs';
 
 const NOW = '2026-11-21T15:00:00.000Z', TODAY = '2026-11-21';
 let ctx;
@@ -80,7 +81,7 @@ test('stock insuficiente revierte toda la venta', async () => {
   error => error.code === 'STOCK_INSUFFICIENT');
   assert.equal(await stockOf(shop.company.id, shop.filtro.id), filtro);
   await assert.rejects(repo.createSale({fecha: TODAY, now: NOW, paymentMethod: 'efectivo', items: [{producto_id: 'no-existe', cantidad: 1, precio_unitario: 1}]}), error => error.code === 'PRODUCT_NOT_FOUND');
-  await assert.rejects(repo.createSale({fecha: TODAY, now: NOW, paymentMethod: 'cheque', items: [{producto_id: shop.filtro.id, cantidad: 1, precio_unitario: 1}]}), /efectivo, transferencia o tarjeta/);
+  await assert.rejects(repo.createSale({fecha: TODAY, now: NOW, paymentMethod: 'cheque', items: [{producto_id: shop.filtro.id, cantidad: 1, precio_unitario: 1}]}), /efectivo, transferencia, tarjeta, Nequi o Daviplata/);
   await assert.rejects(repo.createSale({fecha: '2026-11-19', now: NOW, paymentMethod: 'efectivo', items: [{producto_id: shop.filtro.id, cantidad: 1, precio_unitario: 1}]}), error => error.code === 'CASH_ALREADY_CLOSED');
 });
 
@@ -156,6 +157,11 @@ test('generador sintético y medición a escala pequeña', async () => {
   assert.equal(generated.counts.products, 400);
   assert.equal(generated.counts.sales, 300);
   assert.equal(generated.counts.stock_movements, generated.counts.sale_lines);
+  // DM-12: medios reales y una de cada diez ventas pagada en dos medios; el reporte por medio los suma bien.
+  assert.ok(generated.counts.sale_payments > generated.counts.sales && generated.counts.sale_payments < generated.counts.sales * 1.3, 'una venta de cada diez, en dos medios');
+  const report = await new PostgresRepository(ctx.db).forCompany(generated.ids[0]).salesReport({from: '2000-01-01', to: '2100-01-01'});
+  assert.ok(report.paymentTotals.nequi > 0 && report.paymentTotals.daviplata > 0, 'Nequi y Daviplata en el reporte');
+  assert.equal(roundMoney(report.days.reduce((sum, day) => sum + day.net, 0)), report.totals.net);
   const results = await measure(ctx.db, {ids: generated.ids, endDate: generated.endDate, products: 200, samples: 3, warmup: 1});
   for (const key of ['search', 'createSale', 'listSales', 'report30']) assert.ok(results[key].p50 >= 0 && results[key].p95 >= results[key].p50);
   await assert.rejects(generateSynthetic(ctx.db, {companies: 1, products: 1, months: 1, salesPerDay: 1, prefix: 'tst'}), /Ya existen/);
