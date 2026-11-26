@@ -76,3 +76,38 @@ test('alertas: la plataforma entrega los eventos de seguridad nuevos tras confir
     r=await store.request({method:'POST',path:'/api/v2/login',body:owner,clientKey:'origen-e'});assert.equal(r.status,200);
   }finally{store?.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('alertas: el throttle solo se registra tras un envío correcto (un fallo no silencia la alerta una hora)',async()=>{
+  let now=Date.UTC(2026,10,25,12),fail=true;const sent=[],logs=[];
+  const mailer={enabled:true,async send(message){if(fail)throw Error('503 proveedor caído');sent.push(message);return true;}};
+  const alerter=createAlerter({mailer,to:'dueno@example.com',clock:()=>now,log:entry=>logs.push(entry)});
+  assert.equal(await alerter.notify('offsite-backup-disabled',{subject:'Respaldo apagado'}),'failed');
+  // El proveedor se recupera un minuto después: la alerta debe salir, no quedar «throttled».
+  fail=false;now+=60000;
+  assert.equal(await alerter.notify('offsite-backup-disabled',{subject:'Respaldo apagado'}),'sent');
+  assert.equal(sent.length,1);
+  // Ya enviada, ahora sí se limita durante una hora.
+  now+=60000;assert.equal(await alerter.notify('offsite-backup-disabled',{subject:'Respaldo apagado'}),'throttled');
+  assert.equal(logs.filter(l=>l.event==='alert-mail-failed').length,1);
+});
+
+test('alertas: los envíos fallidos no gastan el cupo por hora',async()=>{
+  let now=Date.UTC(2026,10,25,12),fail=true;const sent=[];
+  const mailer={enabled:true,async send(message){if(fail)throw Error('caído');sent.push(message);return true;}};
+  const alerter=createAlerter({mailer,to:'dueno@example.com',clock:()=>now,maxPerWindow:2});
+  for(let i=0;i<5;i++)assert.equal(await alerter.notify('tipo-'+i,{subject:'x'}),'failed');
+  fail=false;
+  assert.equal(await alerter.notify('tipo-a',{subject:'x'}),'sent');
+  assert.equal(await alerter.notify('tipo-b',{subject:'x'}),'sent');
+  assert.equal(await alerter.notify('tipo-c',{subject:'x'}),'throttled','el cupo de 2 correos enviados sí se respeta');
+});
+
+test('alertas: dos avisos simultáneos del mismo tipo envían un solo correo',async()=>{
+  const sent=[];let release;const gate=new Promise(r=>release=r);
+  const mailer={enabled:true,async send(message){await gate;sent.push(message);return true;}};
+  const alerter=createAlerter({mailer,to:'dueno@example.com',clock:()=>Date.UTC(2026,10,25,12)});
+  const first=alerter.notify('capacity-warning',{subject:'x'}),second=alerter.notify('capacity-warning',{subject:'x'});
+  release();
+  assert.deepEqual((await Promise.all([first,second])).sort(),['sent','throttled']);
+  assert.equal(sent.length,1);
+});

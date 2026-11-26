@@ -30,7 +30,7 @@ export async function generateSynthetic(db, {companies = 3, products = 30000, mo
   const days = months * 30, ids = Array.from({length: companies}, (_, i) => `${prefix}-c${String(i + 1).padStart(2, '0')}`);
   const existing = await db.query('SELECT id FROM companies WHERE id = ANY($1::text[])', [ids]);
   if (existing.rowCount) throw Error('Ya existen empresas sintéticas con esos ids; usa otro --prefix o una base vacía.');
-  const counts = {companies, products: 0, sales: 0, sale_lines: 0, stock_movements: 0};
+  const counts = {companies, products: 0, sales: 0, sale_lines: 0, stock_movements: 0, sale_payments: 0};
   for (const [index, companyId] of ids.entries()) {
     const started = Date.now();
     await db.transaction(async tx => {
@@ -63,6 +63,15 @@ export async function generateSynthetic(db, {companies = 3, products = 30000, mo
       await tx.query(`UPDATE sales s SET subtotal_productos = x.t, total = x.t
         FROM (SELECT sale_id, sum(cantidad * precio_unitario) AS t FROM sale_lines WHERE company_id = $1 GROUP BY sale_id) x
         WHERE s.company_id = $1 AND s.id = x.sale_id`, [companyId]);
+      // DM-12: medios reales (Nequi y Daviplata incluidos); una de cada diez ventas se paga dividida en dos medios (60 / 40 %).
+      counts.sale_payments += (await tx.query(`WITH s AS (
+          SELECT company_id, id, total, (hashtext(id) & 2147483647) % 10 AS dv, 1 + (hashtext(id || 'm') & 2147483647) % 5 AS m1, 1 + (hashtext(id || 'n') & 2147483647) % 5 AS m2
+          FROM sales WHERE company_id = $1), methods AS (SELECT ARRAY['efectivo','transferencia','tarjeta','nequi','daviplata'] AS list)
+        INSERT INTO sale_payments(company_id, sale_id, line_no, method, amount)
+        SELECT s.company_id, s.id, 0, methods.list[s.m1], CASE WHEN s.dv = 0 THEN round(s.total * 0.6, 2) ELSE s.total END FROM s, methods
+        UNION ALL
+        SELECT s.company_id, s.id, 1, methods.list[1 + s.m1 % 5], s.total - round(s.total * 0.6, 2) FROM s, methods WHERE s.dv = 0`, [companyId])).rowCount;
+      await tx.query(`UPDATE sales s SET payment_method = p.method FROM sale_payments p WHERE s.company_id = $1 AND p.company_id = s.company_id AND p.sale_id = s.id AND p.line_no = 0`, [companyId]);
       await tx.query(`INSERT INTO reversals(company_id, doc_type, doc_id, seq, id, fecha, fecha_comercial, usuario, motivo, parcial, detalles)
         SELECT s.company_id, 'venta', s.id, 0, s.id || '-r', s.created_at + interval '1 hour', s.fecha, 'admin', 'Sintética', NOT s.anulada,
           coalesce((SELECT json_agg(json_build_object('index', line_no, 'cantidad', CASE WHEN s.anulada THEN cantidad - devuelto ELSE devuelto END))
@@ -94,7 +103,7 @@ export async function measure(db, {ids, endDate, products, samples = 100, warmup
   const results = {};
   results.search = await timeIt(samples, warmup, i => pick(i).searchProducts({q: terms[i % terms.length], limit: 50}));
   results.createSale = await timeIt(samples, warmup, i => pick(i).createSale({fecha: endDate, now: Date.parse(endDate + 'T20:00:00Z') + i, usuario: 'medicion', userId: 'u-medicion',
-    paymentMethod: ['efectivo', 'transferencia', 'tarjeta'][i % 3],
+    paymentMethod: ['efectivo', 'transferencia', 'tarjeta', 'nequi', 'daviplata'][i % 5],
     items: Array.from({length: 1 + i % 3}, (_, n) => ({producto_id: 'p' + (1 + (i * 7919 + n * 104729) % products), cantidad: 1, precio_unitario: 10000})),
     requestId: `medicion-${i}-${crypto.randomUUID()}`, fingerprint: 'f'}));
   results.listSales = await timeIt(samples, warmup, i => pick(i).listSales({from: addDays(endDate, -29 - (i % 30)), to: addDays(endDate, -(i % 30)), limit: 100}));

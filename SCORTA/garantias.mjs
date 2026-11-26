@@ -52,10 +52,11 @@ export function warrantyTerm(product,sale,today){
   const vence=addDays(businessDay(sale.fecha),dias);
   return {dias,vence,fueraDePlazo:vence<today};
 }
-/** Unidades de una línea que todavía pueden reclamarse (vendidas − devueltas − en garantía). */
+/** Unidades de una línea que todavía pueden reclamarse (vendidas − devueltas − en garantía).
+ *  Una garantía resuelta con «devolución» ya está contada en `devuelto` de la línea: no se resta dos veces. */
 export function claimableUnits(business,sale,index){
   const line=sale?.detalles?.[index];if(!line)return 0;
-  const used=array(business.warranties).filter(item=>item.saleId===sale.id&&item.lineIndex===index&&item.decision?.tipo!=='rechazo').reduce((sum,item)=>sum+finite(item.cantidad),0);
+  const used=array(business.warranties).filter(item=>item.saleId===sale.id&&item.lineIndex===index&&!['rechazo','devolucion'].includes(item.decision?.tipo)).reduce((sum,item)=>sum+finite(item.cantidad),0);
   return Math.max(0,finite(line.cantidad)-finite(line.devuelto)-used);
 }
 const warrantyFor=(business,id)=>{const warranty=array(business.warranties).find(item=>item.id===id);if(!warranty)fail('Garantía inexistente.',404,'NOT_FOUND');return warranty};

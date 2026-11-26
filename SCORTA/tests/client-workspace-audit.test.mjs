@@ -221,3 +221,61 @@ test('BE-28: con catálogo grande, inventario y Nueva venta buscan en el servido
   assert.match(text(h.tree),/1034 restantes/);
  }finally{h.dispose();globalThis.fetch=original}
 });
+
+// PUNTO 6: Enter en un campo no debe cobrar la venta ni registrar la compra (envío implícito del
+// formulario). El manejador onKeyDown del formulario cancela ese envío con preventDefault; en el
+// navegador real lo confirma browser-checks/enter-no-cobra.spec.mjs.
+const enterOn=(form,target)=>{let prevented=0;form.props.onKeyDown({key:'Enter',target,preventDefault(){prevented++}});return prevented};
+const inputOf=node=>({tagName:'INPUT',type:node.props.type||'text'});
+const saleForm=h=>nodes(h.tree,n=>n.type==='form'&&String(n.props.className).includes('cw-checkout-layout'))[0];
+
+test('Enter en Cantidad, Cliente, Teléfono, Placa y Buscar cliente NO envía el formulario de venta; el buscador y el botón sí actúan',async()=>{
+ const actions=[];
+ const h=harness({initialDraft:draft({saleForm:{...baseForm(),placa:'ABC12D'}}),onAction:async action=>{actions.push(clone(action));return baseData({ventas:[]})}});
+ try{
+  await h.settle();
+  const form=saleForm(h);assert.ok(form,'formulario de venta');assert.equal(typeof form.props.onKeyDown,'function');assert.equal(typeof form.props.onSubmit,'function');
+  const qty=nodes(h.tree,n=>n.type==='input'&&n.props['aria-label']===`Cantidad de ${product.nombre}`)[0];
+  const targets={Cantidad:inputOf(qty),Cliente:inputOf(field(h,'Cliente')),'Teléfono':inputOf(field(h,'Teléfono')),Placa:inputOf(field(h,'Placa asociada a esta venta')),'Buscar cliente registrado':inputOf(field(h,'Buscar cliente registrado'))};
+  for(const [name,target] of Object.entries(targets))assert.equal(enterOn(form,target),1,`Enter en ${name} debe cancelar el envío implícito`);
+  // La casilla de consentimiento y los campos de fecha/número también están protegidos.
+  assert.equal(enterOn(form,{tagName:'INPUT',type:'checkbox'}),1);
+  // Otras teclas, botones (Enter = clic) y el área de texto no se tocan.
+  assert.equal((()=>{let n=0;form.props.onKeyDown({key:'a',target:targets.Cliente,preventDefault(){n++}});return n})(),0);
+  assert.equal(enterOn(form,{tagName:'BUTTON',type:'submit'}),0,'Enter sobre un botón sigue haciendo clic');
+  assert.equal(enterOn(form,{tagName:'INPUT',type:'submit'}),0);
+  assert.equal(enterOn(form,{tagName:'TEXTAREA'}),0,'el área de texto conserva el salto de línea');
+  assert.equal(actions.length,0,'ningún Enter cobró la venta');
+  // El buscador de producto sigue interceptando su propio Enter (lector de códigos).
+  const search=nodes(h.tree,n=>n.type==='input'&&n.props['aria-label']==='Buscar producto para agregar al carrito')[0];
+  let searchPrevented=0;search.props.onKeyDown({key:'Enter',preventDefault(){searchPrevented++}});assert.equal(searchPrevented,1,'el buscador atiende Enter');
+  assert.equal(actions.length,0);
+  // El botón sigue siendo de envío (clic y Tab + Enter/Espacio); F9 también cobra.
+  const button=nodes(h.tree,n=>n.type==='button'&&text(n)==='Registrar venta')[0];assert.equal(button.props.type,'submit');
+ }finally{h.dispose()}
+});
+
+test('F9 cobra la venta y el botón «Registrar venta» (clic o Enter sobre el botón) también',async()=>{
+ const actions=[];const h=harness({initialDraft:draft(),onAction:async action=>{actions.push(clone(action));return baseData()}});
+ try{await h.settle();fire('keydown',{key:'F9',target:{}});await h.settle();assert.equal(actions.length,1,'F9 cobra');assert.equal(actions[0].type,'sale.create')}finally{h.dispose()}
+});
+
+test('el envío del formulario (clic o Enter sobre el botón) sigue cobrando',async()=>{
+ const actions=[];const h=harness({initialDraft:draft(),onAction:async action=>{actions.push(clone(action));return baseData()}});
+ try{await h.settle();await submit(h);await h.settle();assert.equal(actions.length,1);assert.equal(actions[0].type,'sale.create')}finally{h.dispose()}
+});
+
+test('Compra: Enter en Cantidad, Costo, Proveedor o Fecha NO registra la compra; el botón sí y el buscador sigue agregando',async()=>{
+ const actions=[];const h=harness({role:'admin',onAction:async action=>{actions.push(clone(action));return baseData()}});
+ try{
+  await h.settle();await openPurchase(h);edit(h,'Proveedor','Proveedor A');await pickProduct(h,'REP-01');
+  edit(h,'Cantidad recibida','2');edit(h,'Costo por unidad (COP)','5000');await h.settle();
+  const form=nodes(h.tree,n=>n.type==='form').at(-1);assert.equal(typeof form.props.onKeyDown,'function');
+  for(const label of ['Cantidad recibida','Costo por unidad (COP)','Proveedor','Fecha'])assert.equal(enterOn(form,inputOf(field(h,label))),1,`Enter en ${label}`);
+  assert.equal(enterOn(form,{tagName:'BUTTON',type:'submit'}),0);
+  assert.equal(actions.length,0,'ningún Enter registró la compra');
+  click(h,'Agregar a la compra');await h.settle();
+  const button=nodes(h.tree,n=>n.type==='button'&&text(n)==='Registrar compra')[0];assert.ok(button);
+  await submit(h);await h.settle();assert.equal(actions.length,1);assert.equal(actions[0].payload.kind,'compra');
+ }finally{h.dispose()}
+});

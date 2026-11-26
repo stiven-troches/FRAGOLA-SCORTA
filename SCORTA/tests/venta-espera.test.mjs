@@ -50,7 +50,7 @@ test('cobrar conserva las ventas en espera y el cobro protegido con datos del cl
   const held=[heldEntry(S.product,'Cliente 1')];
   ok(await save(f,S.seller,0,draft(S.product,{cart:items,saleForm,pendingSale:pending,held})));
   let r=await f.call(S.seller,'/api/v2/action',pending);ok(r);
-  const record=r.body.state.ventas[0];assert.equal(record.numeroDocumento,'1020304050');assert.equal(record.vueltas,20000);assert.equal(record.paymentMethod,'nequi');
+  const record=r.body.state.ventas[0];assert.equal(record.numeroDocumento,'•••4050','Ley 1581: el vendedor recibe el documento enmascarado');assert.equal(f.state.businesses[S.company.id].ventas[0].numeroDocumento,'1020304050');assert.equal(record.vueltas,20000);assert.equal(record.paymentMethod,'nequi');
   const saved=await f.call(S.seller,'/api/v2/draft');ok(saved);
   assert.equal(saved.body.draft.pendingSale,null);assert.equal(saved.body.draft.cart.length,0);assert.equal(saved.body.draft.held.length,1);assert.equal(saved.body.draft.held[0].nombre,'Cliente 1');
   assert.equal(saved.body.version,r.body.draftVersion);

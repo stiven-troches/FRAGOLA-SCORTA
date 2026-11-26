@@ -1,9 +1,15 @@
 # Plan de corte a Postgres
 
-Estado al 2026-11-21: **preparación terminada**. Ya existen el esquema (`db/migrations/001_inicial.sql`), el
-migrador (`db/migrate.mjs`), el importador y el verificador (`db/import-json.mjs`, `db/verify.mjs`),
-el repositorio (`db/repository.mjs`) y el generador sintético (`db/synthetic.mjs`), con pruebas en PGlite
-y en el job `postgres:16` del CI. **Nada de esto está conectado a la app.**
+Estado al 2026-11-25: **preparación terminada**. Ya existen el esquema (`db/migrations/001_inicial.sql` y
+`002_modelo_completo.sql`), el migrador (`db/migrate.mjs`), el importador, el exportador inverso y el verificador
+(`db/import-json.mjs`, `db/export-json.mjs`, `db/verify.mjs`), el repositorio (`db/repository.mjs`) y el generador
+sintético (`db/synthetic.mjs`), con pruebas en PGlite y en el job `postgres:16` del CI. **Nada de esto está conectado
+a la app.**
+
+La migración 002 (DM-12) cierra el modelo: medios de pago reales (`payment_methods`), pagos divididos
+(`sale_payments`), IVA y descuentos, caja, crédito y sus saldos, separados, cotizaciones, garantías, proveedores,
+órdenes de compra y pagos a proveedores tienen tabla propia, y **todas viajan y se verifican** (conteos y totales por
+empresa, y el libro de caja por medio de pago de cada día). Ver MODELO.md §3 y §5.
 
 Esfuerzo en días de un desarrollador con pruebas (d). Total estimado: **≈ 24-30 d**.
 
@@ -35,7 +41,7 @@ las acciones que todavía no se hayan migrado siguen usando el estado JSON recon
 | 7 | `mechanic.*`, `cash.close` | mechanics; reporte SQL del día | mechanics / cash_closures (UNIQUE company_id, date) → audit_log |
 | 8 | `ticket.*`, `customer.update/erase`, `terms.accept` | support_tickets, customers, sales, services | ticket_messages, customers, sales/services (anonimización), receipts, audit_log, terms_acceptances |
 | 9 | Plataforma: `company.*`, `user.*`, `sessions.revoke`, `twofa.*`, `support.*`, renovaciones | companies, users, sessions, payments | companies → users → payments → sessions → audit_log(platform) → security_events |
-| 10 | `company.export` / `purge`, `exportCompany` | todas las tablas de una empresa | purge = `DELETE FROM companies` (cascada) + certificado en audit_log |
+| 10 | `company.export` / `purge`, `exportCompany` | todas las tablas de una empresa | purge = **`repo.purgeCompany(companyId, {certificate: true})`**, NO `DELETE FROM companies`: borra por `company_id` y en una transacción también `audit_log` (ambos alcances), `security_events`, `sessions` (propias y de soporte), `idempotency_keys`, `receipts`, `sale_drafts` y las tablas nuevas, devuelve conteos por tabla y deja solo el certificado en `audit_log` (`tests/pg-purga.test.mjs`) |
 
 Reglas:
 
@@ -92,16 +98,25 @@ Ventana nocturna (por ejemplo, 23:00-01:00, hora de Bogotá), avisada con 48 hor
 
 - **Durante la ventana**: si falla la verificación o el smoke test, se vuelve a `SCORTA_DB=sqlite`. El
   archivo SQLite no se tocó.
-- **Después de abrir (primeros 7 días)**: exportador inverso `db/export-json.mjs` (pendiente,
-  2 d), que reconstruye el JSON desde Postgres; `db/verify.mjs` en sentido contrario valida que no se
-  pierde nada. Así se puede volver a SQLite sin perder las ventas hechas en Postgres.
+- **Después de abrir (primeros 7 días)**: exportador inverso `db/export-json.mjs` (**hecho**), que
+  reconstruye el JSON desde Postgres (mismo orden y mismos campos; `tests/pg-modelo-completo.test.mjs` prueba
+  importar → exportar → comparar sin pérdida). Falta solo el paso de escribir ese JSON en `platform.sqlite` y
+  ensayarlo en staging (≈ 1 d). Así se puede volver a SQLite sin perder las ventas hechas en Postgres.
 - La base Postgres de la ventana fallida no se borra: queda para diagnóstico. Nunca se ejecuta
-  `migrate down` con datos; la migración 001 se niega por diseño.
+  `migrate down` con datos; las migraciones 001 y 002 se niegan por diseño.
 - Tras 30 días estables: retirar el adaptador SQLite y el interruptor.
 
 ## Pendientes que este plan no cubre
 
 - BE-30: logos y fotos fuera de la base (hoy, `companies.logo` y `products.foto` como data URL).
-- RLS como segunda capa (ver MODELO.md, §2), en la migración 002, cuando exista el rol `scorta_app`.
+- RLS como segunda capa (ver MODELO.md, §2), en la migración 003, cuando exista el rol `scorta_app`.
+- La app todavía no usa `repo.createSale` con crédito/IVA/descuentos: el repositorio los acepta ya con los datos que
+  reciba, pero los precios y topes (lista del cliente, tope de descuento del vendedor) los sigue calculando
+  `sale-pricing.mjs` en el servidor; al cortar `sale.create` hay que llamar a `priceSaleItems` y pasar el resultado.
+- Ensayo en staging con un `platform.sqlite` real: `node db/import-json.mjs ... --verify` (incluye el libro de caja de
+  todos los días; con 12 meses × 30 empresas conviene medir su duración o usar `--no-cash` en la ventana y correrlo
+  después).
+- Purga: la auditoría de plataforma de la empresa se borra con la empresa (solo queda el certificado); en SQLite
+  `removeCompany` la conserva. Decidir una sola regla al corte (MODELO.md §3.1).
 - DM-11: particionado (plan en MODELO.md, §6), cuando `sales` o `stock_movements` superen ~10 M filas.
 - Bajar el tope de `moneyAmount` a `< 1e12` (límite de `NUMERIC(14,2)`).

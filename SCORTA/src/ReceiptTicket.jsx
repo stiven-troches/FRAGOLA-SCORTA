@@ -10,7 +10,7 @@ function saveFile(html,sale){const url=URL.createObjectURL(new Blob([html],{type
 function openPrepared(win,url){if(win){win.opener=null;win.location.href=url}else window.open(url,'_blank','noopener,noreferrer')}
 /** onRenew() pide un enlace nuevo (acción sale.receipt) y devuelve {url,expiresAt} o la URL. */
 export default function ReceiptTicket({sale={},company={},onError,onRenew,busy=false,publicView=false}){
- const[width,setWidth]=useState(80),[phone,setPhone]=useState(sale.telefono||sale.phone||''),[error,setError]=useState(''),[copied,setCopied]=useState(false);
+ const[width,setWidth]=useState(80),[phone,setPhone]=useState(()=>{const known=String(sale.telefono||sale.phone||'');return known.includes('•')?'':known}),[error,setError]=useState(''),[copied,setCopied]=useState(false);
  const report=message=>{setError(message);onError?.(message)};
  const html=()=>receiptDocument({sale,company,width});
  const download=()=>{setError('');saveFile(html(),sale)};

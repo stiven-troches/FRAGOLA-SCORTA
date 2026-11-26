@@ -108,15 +108,22 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&p
  const requireOwnerTwoFactor=process.env.SCORTA_REQUIRE_OWNER_2FA==='1'||process.env.NODE_ENV==='production'&&process.env.SCORTA_REQUIRE_OWNER_2FA!=='0';
  const offsite=startOffsiteBackup(platformStore,{mediaDir:media.kind==='disk'?media.dir:null,onResult:result=>{lastBackup={at:result.at,ok:result.ok,kind:'offsite'};backups.offsite={at:result.at,ok:result.ok};
   if(!result.ok)alerter.notify('offsite-backup-failed',{subject:'Falló el respaldo externo cifrado',lines:['Último intento: '+result.at,'Error: '+scrub(result.error,300),'El respaldo local al arrancar sigue disponible; revisa las variables SCORTA_S3_* y el bucket.']});}});
+ // En producción, un respaldo externo apagado sin opt-out (SCORTA_OFFSITE_BACKUP=off) es un warning de /healthz
+ // y una alerta por correo `offsite-backup-disabled` (el error ya se registró al arrancar).
+ let offsiteAlertAt=0,offsiteAlertOk=false;
+ const offsiteDisabledAlert=async()=>{offsiteAlertAt=Date.now();offsiteAlertOk=(await alerter.notify('offsite-backup-disabled',{subject:'Respaldo externo apagado en producción',lines:['El servidor corre sin respaldo externo cifrado: si se pierde el disco, se pierden los datos.','Variables que faltan: '+(offsite.missing.length?offsite.missing.join(', '):'ninguna'),'Defínelas en el servidor y reinícialo; si de verdad no quieres respaldo externo, pon SCORTA_OFFSITE_BACKUP=off.']}))!=='failed';};
+ if(offsite.warning)offsiteDisabledAlert();
  const latency=latencyWindow(500),logIpHeaders=process.env.SCORTA_LOG_IP_HEADERS==='1';let warned=0;
  const health=()=>{
   let ok=false,db=null;
   try{ok=!!platformStore?.health();db=platformStore?platformStore.stats():null;}catch(error){opsLog('error','healthz-failed',{error:String(error?.stack||error)});}
-  const usedPct=diskUsedPct(dataDir),warning=(usedPct??0)>80||(db?.stateBytes??0)>20*1024*1024;
-  if(warning&&Date.now()-warned>3600000){warned=Date.now();opsLog('warn','capacity-warning',{diskUsedPct:usedPct,stateBytes:db?.stateBytes??null,message:'Disco por encima del 80 % o estado mayor a 20 MB'});
+  const usedPct=diskUsedPct(dataDir),capacityWarning=(usedPct??0)>80||(db?.stateBytes??0)>20*1024*1024,warning=capacityWarning||offsite.warning;
+  if(capacityWarning&&Date.now()-warned>3600000){warned=Date.now();opsLog('warn','capacity-warning',{diskUsedPct:usedPct,stateBytes:db?.stateBytes??null,message:'Disco por encima del 80 % o estado mayor a 20 MB'});
    alerter.notify('capacity-warning',{subject:'Capacidad del servidor en alerta',lines:['Disco usado: '+(usedPct==null?'sin dato':usedPct+' %'),'Estado de la plataforma: '+(db?.stateBytes==null?'sin dato':(db.stateBytes/1048576).toFixed(1)+' MB'),'Umbrales: disco 80 % · estado 20 MB']});}
-  if(!warning)warned=0;
-  return {ok,version,startedAt,db,disk:{usedPct},latencyP95Ms:latency.p95(),lastBackup,warning};
+  if(!capacityWarning)warned=0;
+  // Si el correo no salió (o no hay correo), se reintenta cada minuto; una vez enviado, se recuerda cada hora.
+  if(offsite.warning&&Date.now()-offsiteAlertAt>(offsiteAlertOk?3600000:60000)){opsLog('error','offsite-backup-disabled',{missing:offsite.missing,reminder:true,message:'Producción sin respaldo externo'});offsiteDisabledAlert();}
+  return {ok,version,startedAt,db,disk:{usedPct},latencyP95Ms:latency.p95(),lastBackup,warning,capacityWarning,offsiteBackup:{enabled:!!offsite.enabled,optOut:!!offsite.optOut,warning:!!offsite.warning,missing:offsite.missing||[]}};
  };
  // OPS-19: read-only server status for the owner panel (same data as the /healthz detail).
  const serverStatus=()=>({...health(),uptimeSeconds:Math.round(process.uptime()),backups:{local:backups.local,offsite:backups.offsite,offsiteEnabled:!!offsite.enabled},alertMail:alerter.enabled});

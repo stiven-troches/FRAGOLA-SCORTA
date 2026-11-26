@@ -164,6 +164,51 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # QA PUNTO 10(a): cobertura de la INTERFAZ (src/**) medida en el navegador con los specs de Playwright.
+  # Opcional y NO bloqueante (continue-on-error): repite el proyecto de escritorio con una compilación sin
+  # minificar, así que cuesta unos minutos extra. El 85 % de `npm run test:coverage` es de lógica de servidor;
+  # esta cifra es distinta (ver SCORTA/docs/qa/COBERTURA-INTERFAZ.md). Falla internamente si baja del umbral
+  # mínimo de browser-checks/coverage-ui.mjs, pero el job no impide fusionar.
+  ui-coverage:
+    name: UI coverage (Playwright, informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    if: ${{ github.event_name != 'pull_request' }}
+    defaults:
+      run:
+        working-directory: SCORTA
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: SCORTA/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build application (dist/ is required by the browser fixture)
+        run: npm run build
+      - name: Restore CI browser cache
+        id: browser-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-scorta-playwright-${{ hashFiles('SCORTA/package-lock.json') }}
+      - name: Install CI Chromium
+        timeout-minutes: 5
+        run: npx playwright install --with-deps chromium
+      - name: Measure UI coverage
+        run: npm run test:coverage:ui
+      - name: Upload UI coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorta-ui-coverage
+          path: SCORTA/test-results/ui-coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
   # OPS-17: preparado para la migración a Postgres. Se salta solo si aún no hay tests/pg-*.test.mjs.
   postgres:
     name: Postgres suite

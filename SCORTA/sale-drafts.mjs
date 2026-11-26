@@ -78,6 +78,25 @@ export function assertDraftSale(state,actor,action){
   catch{fail('La venta no coincide con el cobro pendiente. Comprueba la operación guardada.',409,'DRAFT_CONFLICT')}
   for(const key of ['form','items','labor'])if(!same(saved[key],charged[key]))fail('La venta no coincide con el cobro pendiente. Comprueba la operación guardada.',409,'DRAFT_CONFLICT');
 }
+// Ley 1581: corrige o borra los datos de un cliente en los borradores y ventas en espera de la empresa
+// (formularios de venta actual, de cada venta en espera y del cobro pendiente). `matches(form)` decide si
+// el formulario es de ese cliente; `apply(form)` lo reescribe; `heldName` reemplaza el nombre de una venta
+// en espera cuando era el nombre escrito del cliente. Si algo cambió, la versión del borrador sube para que
+// ninguna pestaña con la copia anterior vuelva a guardar los datos viejos. Devuelve cuántos borradores cambiaron.
+export function rewriteCustomerDrafts(state,companyId,{matches,apply,heldName},now){
+  let changed=0;
+  for(const [key,entry] of Object.entries(state.saleDrafts||{})){
+    let scope;try{scope=JSON.parse(key)}catch{continue}
+    const draft=entry?.draft;if(scope[0]!==companyId||!draft||typeof draft!=='object')continue;
+    let touched=false;
+    const rewrite=form=>{if(!form||typeof form!=='object'||!matches(form))return null;const was=String(form.cliente??'').trim().toLowerCase();apply(form);touched=true;return was;};
+    rewrite(draft.saleForm);
+    for(const held of Array.isArray(draft.held)?draft.held:[]){const was=rewrite(held?.saleForm);if(was!==null&&was&&String(held.nombre??'').trim().toLowerCase()===was)held.nombre=heldName;}
+    rewrite(draft.pendingSale?.form);
+    if(touched){entry.version=(Number(entry.version)||0)+1;entry.updatedAt=new Date(now??Date.now()).toISOString();changed++;}
+  }
+  return changed;
+}
 export function finishDraftSale(state,actor,action,saleId,now){
   if(!action.draftRequestId)return;
   const prior=readDraft(state,actor),held=prior.draft?.held;

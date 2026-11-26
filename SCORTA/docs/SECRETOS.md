@@ -34,7 +34,7 @@ Actualizado: 21 de noviembre de 2026. Este documento dice **qué** secretos exis
 
 ### Borrar `SCORTA_OWNER_PASSWORD` de Render después del primer arranque
 
-Esta variable **solo** se usa cuando `platform.sqlite` no existe. Después de que el servicio arranque por primera vez con disco y puedas entrar como propietario:
+Esta variable **solo** se usa cuando `platform.sqlite` no existe. En `compose.yaml` no es obligatoria (vacía = no definida), así que borrarla del `.env` no rompe el arranque. Después de que el servicio arranque por primera vez con disco y puedas entrar como propietario:
 
 1. Entra a SCORTA como propietario y cambia la contraseña en «Mi perfil» por una nueva del gestor.
 2. Render → servicio → *Environment* → borra `SCORTA_OWNER_PASSWORD` → *Save*.
@@ -52,7 +52,7 @@ Guárdala primero en el gestor (con la fecha en el nombre, p. ej. «SCORTA backu
 
 ## Qué no es secreto
 
-`SCORTA_PUBLIC_URL`, `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_REGION`, `SCORTA_S3_PREFIX`, `SCORTA_MEDIA_S3_ENDPOINT`, `SCORTA_MEDIA_S3_BUCKET`, `SCORTA_MEDIA_S3_REGION`, `SCORTA_MEDIA_S3_PREFIX`, `SCORTA_CLIENT_IP_HEADER` y los nombres de usuario no son secretos, pero no hace falta publicarlos.
+`SCORTA_PUBLIC_URL`, `SCORTA_OFFSITE_BACKUP`, `SCORTA_TRUSTED_PROXY_HOPS`, `SCORTA_S3_ENDPOINT`, `SCORTA_S3_BUCKET`, `SCORTA_S3_REGION`, `SCORTA_S3_PREFIX`, `SCORTA_MEDIA_S3_ENDPOINT`, `SCORTA_MEDIA_S3_BUCKET`, `SCORTA_MEDIA_S3_REGION`, `SCORTA_MEDIA_S3_PREFIX`, `SCORTA_CLIENT_IP_HEADER` y los nombres de usuario no son secretos, pero no hace falta publicarlos.
 
 ## Registro de rotaciones
 

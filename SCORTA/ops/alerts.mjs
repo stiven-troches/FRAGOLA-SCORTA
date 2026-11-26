@@ -3,13 +3,13 @@
 // SCORTA_OWNER_EMAIL queda desactivado y las alertas siguen solo en el log.
 //
 // Reglas:
-// - Como máximo un correo por tipo de alerta y empresa/cuenta real cada hora (throttleMs) y, en total,
+// - Como máximo un correo (enviado con éxito) por tipo de alerta y empresa/cuenta real cada hora (throttleMs) y, en total,
 //   ALERT_MAX_PER_WINDOW correos por hora: un ataque señuelo no silencia la alerta de otra cuenta ni
 //   inunda el buzón (SEG-10).
 // - El texto se arma solo con campos permitidos: nunca secretos, cookies, tokens, IP ni
 //   datos de clientes finales de los almacenes.
 const EMAIL=/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-export const ALERT_THROTTLE_MS=60*60*1000,ALERT_MAX_PER_WINDOW=10;
+export const ALERT_THROTTLE_MS=60*60*1000,ALERT_MAX_PER_WINDOW=10,ALERT_FAILURE_RETRY_MS=30*1000;
 // Dominios sueltos (www.x.co, x.com/ruta); no los nombres de archivo habituales en los errores.
 const BARE_DOMAIN=/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?!(?:mjs|cjs|js|json|sqlite|db|enc|tmp|log|txt|png|jpe?g|webp|gif|html?|css|md)\b)[a-z]{2,24}\b(?:\/\S*)?/gi;
 
@@ -25,19 +25,24 @@ export function scrub(value,max=200){
 
 export function createAlerter({mailer,to,clock=Date.now,throttleMs=ALERT_THROTTLE_MS,maxPerWindow=ALERT_MAX_PER_WINDOW,log=()=>{},version=''}={}){
   const recipient=String(to||'').trim(),enabled=!!(mailer?.enabled&&EMAIL.test(recipient)&&recipient.length<=254);
-  const last=new Map(),sent=[];
+  const last=new Map(),sent=[],pending=new Set(),retryAfter=new Map();
   /** Envía (sin lanzar nunca) una alerta. Devuelve 'sent' | 'throttled' | 'disabled' | 'failed'. */
   // key: empresa/cuenta real de la alerta (securityAlert); sin key, el tipo solo.
+  // El límite por hora (last/sent) se registra SOLO tras un envío correcto: si el proveedor falla, la
+  // alerta no queda silenciada una hora. Mientras hay un envío del mismo slot en curso, o durante
+  // ALERT_FAILURE_RETRY_MS tras un fallo, otro aviso igual se descarta para no martillar al proveedor.
   async function notify(type,{subject,lines=[],key=''}={}){
     if(!enabled)return 'disabled';
     const now=Number(clock()),slot=key?type+'|'+key:type,previous=last.get(slot);
     for(const [k,at]of last)if(now-at>=throttleMs)last.delete(k);
+    for(const [k,at]of retryAfter)if(now>=at)retryAfter.delete(k);
     while(sent.length&&now-sent[0]>=throttleMs)sent.shift();
-    if(previous!=null&&now-previous<throttleMs||sent.length>=maxPerWindow){log({level:'info',event:'alert-mail-throttled',type});return 'throttled';}
-    last.set(slot,now);sent.push(now);
+    if(previous!=null&&now-previous<throttleMs||sent.length>=maxPerWindow||pending.has(slot)||retryAfter.has(slot)){log({level:'info',event:'alert-mail-throttled',type});return 'throttled';}
+    pending.add(slot);
     const text=['Alerta de SCORTA: '+subject,'',...lines.map(line=>'- '+line),'','Tipo: '+type,'Hora (UTC): '+new Date(now).toISOString(),...(version?['Versión: '+version]:[]),'','Revisa el panel del propietario y los logs del servidor. No recibirás otra alerta igual durante una hora.'].join('\n');
-    try{await mailer.send({to:recipient,subject:'[SCORTA] '+subject,text});log({level:'info',event:'alert-mail-sent',type});return 'sent';}
-    catch(error){log({level:'error',event:'alert-mail-failed',type,error:scrub(error?.message||error)});return 'failed';}
+    try{await mailer.send({to:recipient,subject:'[SCORTA] '+subject,text});last.set(slot,now);sent.push(now);log({level:'info',event:'alert-mail-sent',type});return 'sent';}
+    catch(error){retryAfter.set(slot,now+ALERT_FAILURE_RETRY_MS);log({level:'error',event:'alert-mail-failed',type,error:scrub(error?.message||error)});return 'failed';}
+    finally{pending.delete(slot);}
   }
   return {enabled,notify};
 }

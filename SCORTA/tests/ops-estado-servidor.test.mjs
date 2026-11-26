@@ -56,3 +56,9 @@ test('estado del servidor: la tarjeta muestra versión, disco, base, latencia y 
   assert.match(warning,/Atención: el disco supera el 80 %/);assert.match(warning,/Desactivado/);assert.match(warning,/Sin respaldo en este arranque/);
   const shell=renderToStaticMarkup(React.createElement(ui.ServerStatus));assert.match(shell,/Estado del servidor/);assert.match(shell,/Actualizar|Consultando/);
 });
+
+test('estado del servidor: respaldo externo apagado no se confunde con falta de disco',()=>{
+  const html=renderToStaticMarkup(React.createElement(ui.ServerStatusView,{status:{...status,warning:true,capacityWarning:false,offsiteBackup:{enabled:false,warning:true,missing:['SCORTA_S3_BUCKET']}}}));
+  assert.doesNotMatch(html,/el disco supera el 80 %/);assert.match(html,/Sin alertas de capacidad/);
+  assert.match(html,/respaldo externo está apagado/);assert.match(html,/SCORTA_S3_BUCKET/);
+});

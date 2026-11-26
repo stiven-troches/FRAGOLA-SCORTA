@@ -4,7 +4,7 @@ import {activeMechanics,mechanicForLabor,applyAdminControl,reportDates} from './
 import {salesReport} from './admin-reports.mjs';
 import {passwordPolicyError} from './password-policy.mjs';
 import {visibleTickets,applyTicketAction} from './support-tickets.mjs';
-import {readDraft,writeDraft,assertDraftSale,finishDraftSale,draftKey} from './sale-drafts.mjs';
+import {readDraft,writeDraft,assertDraftSale,finishDraftSale,draftKey,rewriteCustomerDrafts} from './sale-drafts.mjs';
 import {searchProducts,searchSales,searchCustomers} from './platform-search.mjs';
 import {aplicarCambio, estadoVacio} from './inventory.mjs';
 import {moneyAmount,roundMoney,sumMoney} from './money.mjs';
@@ -236,6 +236,11 @@ function removeCosts(value) {if(Array.isArray(value))return value.map(removeCost
 const directoryCard=c=>({id:c.id,nombre:c.nombre,telefono:c.telefono||'',tipo:customerType(c.tipo),tipoDocumento:c.tipoDocumento||'',numeroDocumento:c.numeroDocumento||'',...(Number(c.creditLimit)>0?{creditLimit:Number(c.creditLimit)}:{}),...(c.creditDays?{creditDays:c.creditDays}:{}),...(Number(c.saldoAFavor)>0?{saldoAFavor:Number(c.saldoAFavor)}:{})});
 // Ley 1581: el vendedor solo recibe los últimos 4 caracteres del teléfono y del documento.
 const maskedCard=c=>({...c,telefono:maskTail(c.telefono),numeroDocumento:maskTail(c.numeroDocumento),masked:true});
+// Ley 1581: colecciones del sobre del vendedor que copian teléfono o documento de la ficha del cliente.
+// El servidor conserva el dato completo (cobrar un abono, convertir una cotización o entregar un separado
+// se resuelven por customerId en el servidor); al vendedor solo le llegan los últimos 4 caracteres.
+const SELLER_MASKED_LISTS=['ventas','servs','layaways','quotes','warranties','creditPayments','creditAccounts','customers'];
+const maskPersonal=doc=>{if(doc&&typeof doc==='object')for(const key of ['telefono','numeroDocumento'])if(typeof doc[key]==='string'&&doc[key])doc[key]=maskTail(doc[key]);return doc;};
 function envelope(state, actor, now, baseUrl) {
   const support=actor.role!=='owner'&&actor.companyId?activeSupport(state,actor.companyId,now):null;
   const session={userId:actor.id,username:actor.username,name:actor.name,role:actor.role,companyId:actor.companyId,company:actor.company?publicCompany(actor.company,now,baseUrl):null,passwordChangedAt:actor.passwordChangedAt,email:actor.email||'',emailVerified:!!actor.emailVerified,support:actor.support||null,ownerContact:state.ownerContact,
@@ -267,6 +272,7 @@ function envelope(state, actor, now, baseUrl) {
     // BE-15/16: el vendedor ve sus propios movimientos de caja y abonos; los separados son de todo el almacén.
     delete business.suppliers;delete business.purchaseOrders;delete business.supplierPayments;
     business.cashMovements=business.cashMovements.filter(m=>m.userId===actor.id);business.creditPayments=business.creditPayments.filter(p=>p.userId===actor.id);
+    for(const name of SELLER_MASKED_LISTS)for(const doc of business[name]||[])maskPersonal(doc);
     return {session,revision:business.revision,tickets:visibleTickets(state,actor),draftVersion:readDraft(state,actor).version,state:removeCosts(business)};
   }
   Object.assign(business,aggregates(business));
@@ -305,7 +311,7 @@ function searchBusiness(state,actor,kind,params){
   else if(kind==='sales'){
     const own=s=>s.userId===actor.id||!s.userId&&s.usuario===actor.username;
     result=searchSales(business.ventas||[],params,seller?{key:actor.id+'|'+actor.username,visible:own}:{});
-    result.items=result.items.map(s=>{const sale=seller?removeCosts(s):structuredClone(s);dropReceiptSecret(sale);delete sale.receiptHash;return sale;});
+    result.items=result.items.map(s=>{const sale=seller?maskPersonal(removeCosts(s)):structuredClone(s);dropReceiptSecret(sale);delete sale.receiptHash;return sale;});
   }else result=searchCustomers(business.customerRecords||[],params,seller?{key:'masked',card:c=>maskedCard(directoryCard(c))}:{card:directoryCard});
   return {...result,revision:business.revision};
 }
@@ -385,6 +391,12 @@ function saleDate(business,actor,requested,now) {
 }
 function validatePlate(v) {const plate=optionalText(v,12).toUpperCase().replace(/[\s-]/g,'');if(plate&&!/^[A-Z0-9]{3,10}$/.test(plate))fail('Placa inválida');return plate;}
 function businessContext(state, actor) {if(!actor.companyId)fail('Ingresa como soporte para operar en una empresa',403,'FORBIDDEN');return state.businesses[actor.companyId];}
+// Ley 1581: documentos del almacén (además de ventas y servicios) que guardan datos de un cliente final: los que
+// apuntan a su ficha, los de sus ventas (garantías) y los escritos a mano, sin ficha, con su mismo teléfono o documento.
+function customerDocuments(business,record,saleIds){
+  const own=doc=>doc.customerId===record.id||!doc.customerId&&(!!record.telefono&&doc.telefono===record.telefono||!!record.numeroDocumento&&doc.numeroDocumento===record.numeroDocumento);
+  return {layaways:(business.layaways||[]).filter(own),quotes:(business.quotes||[]).filter(own),warranties:(business.warranties||[]).filter(w=>own(w)||saleIds.has(w.saleId)),creditPayments:(business.creditPayments||[]).filter(own)};
+}
 // Removes every record of one company (shared by company.delete and company.purge).
 function removeCompany(state,company){
   const ids=new Set(state.users.filter(u=>u.companyId===company.id).map(u=>u.id));
@@ -673,6 +685,9 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
     if(actor.role==='vendedor'||!admin(actor))fail('Solo el administrador puede corregir o borrar datos de clientes',403,'FORBIDDEN');
     const b=businessContext(state,actor),record=(b.customerRecords||[]).find(c=>c.id===a.id);if(!record||record.erasedAt)fail('Cliente inexistente',404,'NOT_FOUND');
     const sales=b.ventas.filter(s=>s.customerId===record.id),saleIds=new Set(sales.map(s=>s.id)),services=b.servs.filter(s=>s.customerId===record.id||saleIds.has(s.venta_id));
+    // Ley 1581: separados, cotizaciones, garantías y abonos también guardan nombre y teléfono (y a veces documento).
+    const related=customerDocuments(b,record,saleIds),relatedDocs=Object.values(related).flat(),was={id:record.id,telefono:record.telefono||'',numeroDocumento:record.numeroDocumento||''};
+    const draftOf=form=>form.customerId===was.id||!!was.telefono&&form.telefono===was.telefono||!!was.numeroDocumento&&form.numeroDocumento===was.numeroDocumento;
     if(a.type==='customer.update'){
       const nombre=Object.hasOwn(form,'nombre')?text(form.nombre,'Nombre del cliente'):record.nombre,telefono=Object.hasOwn(form,'telefono')?phone(form.telefono):record.telefono,extra=customerFields(form);
       if(telefono&&b.customerRecords.some(c=>c.id!==record.id&&c.telefono===telefono))fail('Ya existe otro cliente con ese teléfono');
@@ -686,11 +701,18 @@ async function applyAction(state,actor,session,a,now,baseUrl,options={}) {
       for(const key of ['tipoDocumento','numeroDocumento','correo'])if(Object.hasOwn(extra,key)){if(extra[key])record[key]=extra[key];else delete record[key];}
       if(Object.hasOwn(extra,'tipo')){if(extra.tipo==='mostrador')delete record.tipo;else record.tipo=extra.tipo;}
       for(const doc of [...sales,...services]){doc.cliente=nombre;doc.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')){if(record.numeroDocumento){doc.tipoDocumento=record.tipoDocumento;doc.numeroDocumento=record.numeroDocumento;}else{delete doc.tipoDocumento;delete doc.numeroDocumento;}}}
+      for(const doc of relatedDocs){doc.cliente=nombre;doc.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')&&Object.hasOwn(doc,'numeroDocumento')){if(record.numeroDocumento){doc.tipoDocumento=record.tipoDocumento;doc.numeroDocumento=record.numeroDocumento;}else{delete doc.tipoDocumento;delete doc.numeroDocumento;}}}
+      // Borradores y ventas en espera: solo se corrige lo que el borrador ya traía (nunca se copia un dato nuevo a un vendedor).
+      rewriteCustomerDrafts(state,actor.companyId,{matches:draftOf,heldName:nombre,apply:form=>{form.cliente=nombre;if(form.telefono)form.telefono=telefono;if(Object.hasOwn(extra,'numeroDocumento')&&form.numeroDocumento){if(record.numeroDocumento){form.tipoDocumento=record.tipoDocumento;form.numeroDocumento=record.numeroDocumento;}else{delete form.tipoDocumento;delete form.numeroDocumento;}}}},stamp(now).getTime());
       businessAudit(b,actor,'cliente_corregido',{documento:record.id,antes,despues:{nombre,telefono,...customerSnapshot(record),...(Object.hasOwn(antes,'cupo')?{cupo:Number(record.creditLimit)||0}:{}),...(Object.hasOwn(antes,'plazo')?{plazo:record.creditDays??null}:{})}},now);
     }else{
       for(const doc of [...sales,...services]){doc.cliente='Cliente eliminado';doc.telefono='';doc.placa='';delete doc.dataConsent;delete doc.tipoDocumento;delete doc.numeroDocumento;}
       for(const sale of sales){revokeReceipts(state,actor.companyId,sale.id);delete sale.receiptHash;delete sale.receiptExpiresAt;}
-      for(const entry of b.auditoria||[])if(saleIds.has(entry.documento)||entry.documento===record.id)for(const side of ['antes','despues'])if(entry[side]&&typeof entry[side]==='object'){for(const key of ['cliente','nombre'])if(Object.hasOwn(entry[side],key))entry[side][key]='Cliente eliminado';for(const key of ['telefono','placa','numeroDocumento','correo','tipoDocumento'])if(Object.hasOwn(entry[side],key))entry[side][key]='';}
+      for(const doc of relatedDocs){doc.cliente='Cliente eliminado';doc.telefono='';if(Object.hasOwn(doc,'placa'))doc.placa='';for(const key of ['dataConsent','tipoDocumento','numeroDocumento','correo'])delete doc[key];}
+      // Borradores y ventas en espera del almacén: se vacían los datos del cliente y la versión sube.
+      rewriteCustomerDrafts(state,actor.companyId,{matches:draftOf,heldName:'Venta en espera',apply:form=>{form.cliente='';form.telefono='';form.placa='';for(const key of ['customerId','numeroDocumento','tipoDocumento','correo','tipoCliente','dataConsent'])delete form[key];}},stamp(now).getTime());
+      const documentIds=new Set([record.id,...saleIds,...services.map(s=>s.id),...relatedDocs.map(d=>d.id)]);
+      for(const entry of b.auditoria||[])if(documentIds.has(entry.documento))for(const side of ['antes','despues'])if(entry[side]&&typeof entry[side]==='object'){for(const key of ['cliente','nombre'])if(Object.hasOwn(entry[side],key))entry[side][key]='Cliente eliminado';for(const key of ['telefono','placa','numeroDocumento','correo','tipoDocumento'])if(Object.hasOwn(entry[side],key))entry[side][key]='';}
       for(const key of Object.keys(record))if(key!=='id')delete record[key];Object.assign(record,{nombre:'Cliente eliminado',telefono:'',erasedAt:iso(now),erasedBy:actor.label});
       businessAudit(b,actor,'cliente_borrado',{documento:record.id,ventas:sales.length,servicios:services.length},now);auditExtra={ventas:sales.length};
     }

@@ -54,9 +54,9 @@ test('API: ficha con documento; el vendedor la selecciona y vende con precio mec
   const body=await f.act(S.seller,{type:'sale.create',form:{cliente:'Taller El Pistón',telefono:'3005550101',customerId:card.id,paymentMethod:'efectivo'},items:[{producto_id:S.product.id,cantidad:2,precio:30000,precio_unitario:30000}],labor:[]});
   const record=body.state.ventas[0],line=record.detalles[0];
   assert.equal(line.precio_lista,30000);assert.equal(line.descuento,0);assert.equal(record.total,60000);assert.equal(record.tipoCliente,'mecanico');
-  assert.equal(record.numeroDocumento,'900123456-1');assert.equal(record.descuentos,undefined);
+  assert.equal(record.numeroDocumento,'•••56-1','Ley 1581: el vendedor recibe el documento enmascarado');const stored=f.state.businesses[S.company.id].ventas[0];assert.equal(stored.numeroDocumento,'900123456-1','el servidor guarda el documento completo');assert.equal(record.descuentos,undefined);
   assert.equal(salesReport(f.state.businesses[S.company.id],{from:DAY_D,to:DAY_D}).totals.discounts,0);
-  assert.ok(receiptMarkup({sale:record,company:{name:'Clientes QA'}}).includes('NIT 900123456-1'));
+  assert.ok(receiptMarkup({sale:stored,company:{name:'Clientes QA'}}).includes('NIT 900123456-1'));
   // Con la ficha, el tope del vendedor se mide sobre el precio de mecánico.
   r=await action(f,S.seller,{type:'sale.create',form:{cliente:'Taller El Pistón',customerId:card.id,paymentMethod:'efectivo'},items:[{producto_id:S.product.id,cantidad:1,precio:30000,descuento:{tipo:'porcentaje',valor:11},precio_unitario:26700}],labor:[]});
   assert.equal(r.status,403);assert.equal(r.body.code,'DISCOUNT_LIMIT');

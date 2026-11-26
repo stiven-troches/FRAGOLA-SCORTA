@@ -88,7 +88,10 @@ export function offsiteConfig(env=process.env){
   const config={endpoint:env.SCORTA_S3_ENDPOINT,bucket:env.SCORTA_S3_BUCKET,region:env.SCORTA_S3_REGION||'auto',accessKeyId:env.SCORTA_S3_ACCESS_KEY_ID,secretAccessKey:env.SCORTA_S3_SECRET_ACCESS_KEY,prefix:env.SCORTA_S3_PREFIX||'',key:env.SCORTA_BACKUP_KEY,intervalMin:Number(env.SCORTA_BACKUP_INTERVAL_MIN)||60,pingUrl:env.SCORTA_BACKUP_PING_URL||''};
   const missing=['SCORTA_S3_ENDPOINT','SCORTA_S3_BUCKET','SCORTA_S3_ACCESS_KEY_ID','SCORTA_S3_SECRET_ACCESS_KEY','SCORTA_BACKUP_KEY'].filter(name=>!env[name]);
   if(!missing.length&&!/^https?:\/\//.test(config.endpoint))missing.push('SCORTA_S3_ENDPOINT (http/https)');
-  return {config,missing};
+  // SCORTA_OFFSITE_BACKUP=off: quien de verdad no quiere respaldo externo lo dice; sin eso, en producción
+  // un respaldo sin configurar es una falla operativa (warning en /healthz y alerta por correo).
+  const optOut=/^(?:off|0|false|no|disabled)$/i.test(String(env.SCORTA_OFFSITE_BACKUP||'').trim());
+  return {config,missing,optOut};
 }
 // OPS-03: Healthchecks.io style dead-man's switch. Never throws.
 export async function ping(url,ok,fetchImpl=fetch){
@@ -156,12 +159,20 @@ export async function runOffsiteBackup(store,config,{date=new Date(),fetchImpl=f
 }
 /** Starts the hourly loop. Disabled (logged once) when any variable is missing. */
 // mediaDir: DATA_DIR/media when product photos and logos live on disk (null when they are in R2).
-export function startOffsiteBackup(store,{env=process.env,onResult=()=>{},firstDelayMs=120000,fetchImpl=fetch,mediaDir=null}={}){
-  const {config,missing}=offsiteConfig(env);
-  if(!store||missing.length){log('warn','offsite-backup-disabled',{missing:store?missing:['platform.sqlite']});return {enabled:false,stop(){}};}
+// production: in production a disabled backup is an error and the result carries warning:true so the
+// server can show it in /healthz and email an alert; SCORTA_OFFSITE_BACKUP=off is the explicit opt-out.
+export function startOffsiteBackup(store,{env=process.env,onResult=()=>{},firstDelayMs=120000,fetchImpl=fetch,mediaDir=null,production=env.NODE_ENV==='production'}={}){
+  const {config,missing,optOut}=offsiteConfig(env);
+  if(optOut){log('notice','offsite-backup-opt-out',{message:'SCORTA_OFFSITE_BACKUP=off: no hay respaldo externo; solo existe la copia local al arrancar'});return {enabled:false,optOut:true,warning:false,missing:[],stop(){}};}
+  if(!store||missing.length){
+    const list=store?missing:['platform.sqlite'];
+    if(production)log('error','offsite-backup-disabled',{missing:list,message:'PRODUCCIÓN SIN RESPALDO EXTERNO: faltan variables. Defínelas o pon SCORTA_OFFSITE_BACKUP=off si de verdad no lo quieres'});
+    else log('warn','offsite-backup-disabled',{missing:list});
+    return {enabled:false,optOut:false,warning:production,missing:list,stop(){}};
+  }
   let timer=null,stopped=false;
   const loop=async()=>{if(stopped)return;onResult(await runOffsiteBackup(store,config,{fetchImpl,mediaDir}));if(!stopped)timer=setTimeout(loop,config.intervalMin*60000);};
   timer=setTimeout(loop,firstDelayMs);
   log('notice','offsite-backup-enabled',{intervalMin:config.intervalMin,bucket:config.bucket,prefix:config.prefix,ping:!!config.pingUrl,media:!!mediaDir});
-  return {enabled:true,config,stop(){stopped=true;clearTimeout(timer);}};
+  return {enabled:true,optOut:false,warning:false,missing:[],config,stop(){stopped=true;clearTimeout(timer);}};
 }

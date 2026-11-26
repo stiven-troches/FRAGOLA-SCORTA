@@ -7,8 +7,11 @@ import './touch.css';
 import {JE_TRIAL_PROFILE} from './je-trial-demo.mjs';
 import {installDetailsMenus} from './details-menus.mjs';
 import Dialog from './Dialog.jsx';
+import ErrorBoundary from './ErrorBoundary.jsx';
+import {installChunkErrorRecovery} from './chunk-reload.mjs';
 
 installDetailsMenus();
+installChunkErrorRecovery();
 // Vacío mientras el dueño no configure DEMO_CONTACT_WHATSAPP: entonces el botón no aparece.
 const trialLink=demoWhatsappLink();
 
@@ -78,4 +81,4 @@ function Demo() {
     {terms&&<DemoTerms onClose={()=>setTerms(false)}/>}
   </>;
 }
-createRoot(document.getElementById('root')).render(<Demo/>);
+createRoot(document.getElementById('root')).render(<ErrorBoundary><Demo/></ErrorBoundary>);

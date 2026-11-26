@@ -65,13 +65,7 @@ Cópialas desde Render → servicio → *Environment*. Las marcadas como secreto
 | `SCORTA_VERSION` | Opcional: el commit desplegado (fuera de Render no existe `RENDER_GIT_COMMIT`, así que `/healthz` mostraría `dev`). |
 | Cualquier variable nueva que exista en Render el día del corte (por ejemplo, las del almacenamiento de fotos en R2 cuando se activen) | Cópiala también. Compara la lista completa de Render antes de empezar. |
 
-**VPS con `compose.yaml`:** el archivo solo pasa al contenedor las variables del propietario y `SCORTA_PUBLIC_URL`. Para las demás crea junto a él un `compose.override.yaml` que no se sube al repositorio:
-
-```yaml
-services:
-  app:
-    env_file: .env
-```
+**VPS con `compose.yaml`:** el archivo ya pasa al contenedor todas las variables que lee el servidor (propietario, respaldo `SCORTA_S3_*` y `SCORTA_BACKUP_KEY`, correo, `SCORTA_HEALTH_TOKEN`, imágenes en R2, IP real del cliente con `x-forwarded-for` por defecto, etc.). Solo tienes que ponerlas en el `.env` junto al `compose.yaml` (copia `.env.example`); ya no hace falta un `compose.override.yaml` con `env_file`. `SCORTA_OWNER_PASSWORD` no es obligatoria: déjala vacía al restaurar.
 
 ## 5. Día del corte, paso a paso
 
